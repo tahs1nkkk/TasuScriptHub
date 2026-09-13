@@ -464,12 +464,27 @@ local function makeDraggable(frame, handle)
     local dragStart
     local dragOrigin
     local targetPosition
+    local controller = {
+        DidDrag = false,
+        SuppressUntil = 0
+    }
     handle.Active = true
-    trackConnection(handle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
+    local function containsPointer(pointer)
+        local position = handle.AbsolutePosition
+        local size = handle.AbsoluteSize
+        return pointer.X >= position.X and pointer.X <= position.X + size.X
+            and pointer.Y >= position.Y and pointer.Y <= position.Y + size.Y
+    end
+    trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and frame.Visible then
             local pointer = input.Position
-            dragStart = Vector2.new(pointer.X, pointer.Y)
+            local currentPointer = Vector2.new(pointer.X, pointer.Y)
+            if not containsPointer(currentPointer) then
+                return
+            end
+            dragging = true
+            controller.DidDrag = false
+            dragStart = currentPointer
             local absolute = frame.AbsolutePosition
             dragOrigin = Vector2.new(absolute.X, absolute.Y)
             targetPosition = dragOrigin
@@ -481,7 +496,12 @@ local function makeDraggable(frame, handle)
             local pointer = input.Position
             local currentPointer = Vector2.new(pointer.X, pointer.Y)
             local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-            local desired = dragOrigin + (currentPointer - dragStart)
+            local pointerDelta = currentPointer - dragStart
+            if pointerDelta.Magnitude >= 4 then
+                controller.DidDrag = true
+                controller.SuppressUntil = os.clock() + 0.2
+            end
+            local desired = dragOrigin + pointerDelta
             local x = math.clamp(desired.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
             local y = math.clamp(desired.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
             targetPosition = Vector2.new(x, y)
@@ -502,6 +522,10 @@ local function makeDraggable(frame, handle)
             frame.Position = UDim2.fromOffset(nextPosition.X, nextPosition.Y)
         end
     end))
+    function controller:ShouldSuppressClick()
+        return self.DidDrag or os.clock() < self.SuppressUntil
+    end
+    return controller
 end
 
 local TopBar = Instance.new("Frame")
@@ -600,7 +624,7 @@ PageHost.Size = UDim2.new(1, -16, 1, -50)
 PageHost.Position = UDim2.fromOffset(8, 44)
 PageHost.Parent = ContentWindow
 
-makeDraggable(TopBar, DragGrip)
+local TopBarDrag = makeDraggable(TopBar, TopBar)
 makeDraggable(ContentWindow, WindowDragZone)
 
 local pages = {}
@@ -1109,6 +1133,9 @@ end
 
 for name, item in pairs(categoryButtons) do
     item.Activated:Connect(function()
+        if TopBarDrag:ShouldSuppressClick() then
+            return
+        end
         if currentCategory == name and ContentWindow.Visible then
             closeContentWindow()
         else
