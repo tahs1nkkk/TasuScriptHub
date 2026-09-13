@@ -261,6 +261,37 @@ local function getCustomAsset(path)
     end
 end
 
+local function loadRemoteAsset(url, path)
+    if not capabilities.Files or not capabilities.CustomAsset then
+        return nil
+    end
+    local request = getRequest()
+    local ok, response
+    if request then
+        ok, response = pcall(request, {Url = url, Method = "GET"})
+    else
+        ok, response = pcall(function()
+            return {Body = game:HttpGet(url)}
+        end)
+    end
+    if not ok or type(response) ~= "table" then
+        return nil
+    end
+    local body = response.Body or response.body
+    if type(body) ~= "string" or body == "" then
+        return nil
+    end
+    local writefile = resolveGlobal("writefile")
+    if type(writefile) ~= "function" then
+        return nil
+    end
+    local saved = pcall(writefile, path, body)
+    if not saved then
+        return nil
+    end
+    return getCustomAsset(path)
+end
+
 local function ensureFolder(path)
     if not capabilities.Folders then
         return false
@@ -481,22 +512,16 @@ DragGrip.BackgroundTransparency = 1
 DragGrip.Size = UDim2.fromOffset(148, 58)
 DragGrip.Parent = TopBar
 
-local HubIcon = Instance.new("Frame")
+local HubIcon = Instance.new("ImageLabel")
 HubIcon.BackgroundColor3 = Theme.Accent
 HubIcon.Size = UDim2.fromOffset(30, 30)
 HubIcon.Position = UDim2.fromOffset(12, 14)
 HubIcon.Parent = DragGrip
+HubIcon.Image = loadRemoteAsset("https://i.imgur.com/1UBgp0L.png", "TasuHubIcon.png") or "https://i.imgur.com/1UBgp0L.png"
+HubIcon.ScaleType = Enum.ScaleType.Fit
+HubIcon.BackgroundTransparency = 1
 round(HubIcon, 10)
-gradient(HubIcon, Color3.fromRGB(128, 196, 255), Color3.fromRGB(87, 151, 247), 45)
 stroke(HubIcon, Color3.fromRGB(255, 255, 255), 1, 0.25)
-local HubMark = textLabel(HubIcon, "T", UDim2.fromScale(1, 1), nil, 16, Color3.fromRGB(255, 255, 255), Enum.TextXAlignment.Center)
-HubMark.Font = Enum.Font.GothamBold
-local HubDot = Instance.new("Frame")
-HubDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-HubDot.Size = UDim2.fromOffset(5, 5)
-HubDot.Position = UDim2.new(1, -7, 0, 3)
-HubDot.Parent = HubIcon
-round(HubDot, 5)
 
 local TopTitle = textLabel(DragGrip, Theme.Title, UDim2.new(1, -56, 1, 0), UDim2.fromOffset(50, 0), 14, Theme.Text)
 TopTitle.Font = Enum.Font.GothamSemibold
