@@ -68,6 +68,7 @@ local Defaults = {
         Freecam = false,
         FreecamSpeed = 1.5
     },
+    Keybinds = {},
     Catalog = {},
     Waypoints = {}
 }
@@ -129,6 +130,7 @@ State.World.CameraFOV = originalCameraFOV
 local selectedPlayer = nil
 local selectedWaypoint = 1
 local unloaded = false
+local unload
 
 local function trackConnection(connection)
     table.insert(connections, connection)
@@ -181,6 +183,26 @@ end
 local function getAlive(player)
     local character, humanoid, root = getCharacter(player)
     return character and humanoid and root and humanoid.Health > 0, character, humanoid, root
+end
+
+local function getTeamToken(player)
+    if player.Team then
+        return "team:" .. tostring(player.Team)
+    end
+    for _, attributeName in ipairs({"Team", "TeamId", "TeamName"}) do
+        local value = player:GetAttribute(attributeName)
+        if value ~= nil then return attributeName .. ":" .. tostring(value) end
+        if player.Character then
+            value = player.Character:GetAttribute(attributeName)
+            if value ~= nil then return attributeName .. ":" .. tostring(value) end
+        end
+    end
+end
+
+local function areTeammates(first, second)
+    local firstToken = getTeamToken(first)
+    local secondToken = getTeamToken(second)
+    return firstToken ~= nil and firstToken == secondToken
 end
 
 local function getMousePosition()
@@ -289,6 +311,40 @@ local function animate(object, properties, duration, style, direction)
     return tween
 end
 
+local Toast = Instance.new("TextLabel")
+Toast.AnchorPoint = Vector2.new(0.5, 0)
+Toast.BackgroundColor3 = Color3.fromRGB(30, 42, 56)
+Toast.BackgroundTransparency = 1
+Toast.Font = Enum.Font.Gotham
+Toast.Position = UDim2.new(0.5, 0, 0, 18)
+Toast.Size = UDim2.fromOffset(260, 30)
+Toast.TextColor3 = Color3.fromRGB(255, 255, 255)
+Toast.TextSize = 11
+Toast.TextTransparency = 1
+Toast.Visible = false
+Toast.ZIndex = 40
+Toast.Parent = ScreenGui
+round(Toast, 9)
+stroke(Toast, Color3.fromRGB(158, 207, 247), 1, 0.16)
+local toastRevision = 0
+local function showToast(message)
+    toastRevision = toastRevision + 1
+    local revision = toastRevision
+    Toast.Text = message
+    Toast.Visible = true
+    Toast.BackgroundTransparency = 1
+    Toast.TextTransparency = 1
+    animate(Toast, {BackgroundTransparency = 0.06, TextTransparency = 0}, 0.16)
+    task.delay(2.1, function()
+        if revision == toastRevision and Toast.Parent then
+            animate(Toast, {BackgroundTransparency = 1, TextTransparency = 1}, 0.18)
+            task.delay(0.18, function()
+                if revision == toastRevision and Toast.Parent then Toast.Visible = false end
+            end)
+        end
+    end)
+end
+
 local function textLabel(parent, text, size, position, textSize, color, alignment)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
@@ -357,33 +413,32 @@ end
 
 local function makeDraggable(frame, handle)
     local dragging = false
-    local grabOffset
     local targetPosition
     handle.Active = true
     trackConnection(handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             local framePosition = frame.AbsolutePosition
-            local mousePosition = UserInputService:GetMouseLocation()
-            grabOffset = mousePosition - framePosition
             targetPosition = framePosition
             frame.Position = UDim2.fromOffset(framePosition.X, framePosition.Y)
+        end
+    end))
+    trackConnection(UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and targetPosition then
+            local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+            local desired = targetPosition + input.Delta
+            local x = math.clamp(desired.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
+            local y = math.clamp(desired.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
+            targetPosition = Vector2.new(x, y)
         end
     end))
     trackConnection(UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
-            grabOffset = nil
         end
     end))
     trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
-        if dragging and grabOffset then
-            local mousePosition = UserInputService:GetMouseLocation()
-            local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-            local desired = mousePosition - grabOffset
-            local x = math.clamp(desired.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
-            local y = math.clamp(desired.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
-            targetPosition = Vector2.new(x, y)
+        if dragging and targetPosition then
             local current = Vector2.new(frame.Position.X.Offset, frame.Position.Y.Offset)
             local alpha = 1 - math.exp(-deltaTime * 24)
             local nextPosition = current:Lerp(targetPosition, alpha)
@@ -451,6 +506,7 @@ ContentWindow.BackgroundColor3 = Theme.Background
 ContentWindow.BackgroundTransparency = 0.08
 ContentWindow.Size = UDim2.fromOffset(680, 440)
 ContentWindow.Position = UDim2.new(0.5, -340, 0, 64)
+ContentWindow.Visible = false
 ContentWindow.Parent = ScreenGui
 round(ContentWindow, 16)
 stroke(ContentWindow, Color3.fromRGB(153, 204, 244), 1, 0.08)
@@ -499,6 +555,7 @@ makeDraggable(ContentWindow, WindowDragZone)
 local pages = {}
 local pageScales = {}
 local categoryButtons = {}
+local categoryOutlines = {}
 local controlRefreshers = {}
 local currentCategory = "Home"
 
@@ -539,6 +596,7 @@ end
 
 local function createCard(page, title)
     local card = Instance.new("Frame")
+    card.Name = string.gsub(title, "[^%w]", "")
     card.BackgroundColor3 = Theme.Surface
     card.BackgroundTransparency = 0.14
     card.Size = UDim2.new(1, -4, 0, 42)
@@ -615,12 +673,15 @@ local function addInput(card, placeholder, defaultText, callback, multiLine)
     return input
 end
 
+local pendingKeybind
+local keybindActions = {}
+
 local function addToggle(card, text, getter, setter)
     local row = Instance.new("Frame")
     row.BackgroundTransparency = 1
     row.Size = UDim2.new(1, 0, 0, 28)
     row.Parent = card
-    local label = textLabel(row, text, UDim2.new(1, -60, 1, 0), nil, 12, Theme.Text)
+    local label = textLabel(row, text, UDim2.new(1, -122, 1, 0), nil, 12, Theme.Text)
     local toggle = Instance.new("TextButton")
     toggle.AutoButtonColor = false
     toggle.Text = ""
@@ -628,6 +689,9 @@ local function addToggle(card, text, getter, setter)
     toggle.Position = UDim2.new(1, -44, 0.5, -11)
     toggle.Parent = row
     round(toggle, 11)
+    local bindId = card.Parent.Name .. "/" .. card.Name .. "/" .. text
+    local bindButton = button(row, State.Keybinds[bindId] or "Bind", UDim2.fromOffset(50, 22), UDim2.new(1, -102, 0.5, -11))
+    bindButton.TextSize = 10
     local knob = Instance.new("Frame")
     knob.Size = UDim2.fromOffset(16, 16)
     knob.Position = UDim2.fromOffset(3, 3)
@@ -639,13 +703,26 @@ local function addToggle(card, text, getter, setter)
         animate(toggle, {BackgroundColor3 = enabled and Theme.Accent or Color3.fromRGB(217, 231, 244)}, 0.14)
         animate(knob, {BackgroundColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(132, 158, 183), Position = enabled and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)}, 0.14)
     end
+    local function renderBind()
+        bindButton.Text = State.Keybinds[bindId] or "Bind"
+    end
     table.insert(controlRefreshers, render)
+    table.insert(controlRefreshers, renderBind)
+    keybindActions[bindId] = function()
+        setter(not getter())
+        refreshControls()
+    end
+    bindButton.Activated:Connect(function()
+        pendingKeybind = {Id = bindId, Button = bindButton}
+        bindButton.Text = "Press"
+        showToast("Press a key, or Backspace to clear")
+    end)
     toggle.Activated:Connect(function()
         setter(not getter())
         render()
     end)
     render()
-    return {Render = render, Row = row, Label = label}
+    return {Render = render, Row = row, Label = label, BindId = bindId}
 end
 
 local function addSlider(card, text, minimum, maximum, getter, setter, decimals)
@@ -728,8 +805,7 @@ local categoryMeta = {
     Players = {Hint = "Players"},
     Catalog = {Hint = "Catalog"},
     Explorer = {Hint = "Explorer"},
-    Configs = {Hint = "Configs"},
-    Settings = {Hint = "Settings"}
+    Configs = {Hint = "Configs"}
 }
 
 local function iconPart(parent, x, y, width, height, rotation, radius)
@@ -837,7 +913,7 @@ local function vectorIcon(parent, category)
     return canvas
 end
 
-local categories = {"Home", "Aim", "Visuals", "Movement", "World", "Players", "Catalog", "Explorer", "Configs", "Settings"}
+local categories = {"Home", "Catalog", "Players", "Visuals", "Aim", "Movement", "World", "Explorer", "Configs"}
 local CategoryTooltip = Instance.new("TextLabel")
 CategoryTooltip.BackgroundColor3 = Color3.fromRGB(44, 83, 120)
 CategoryTooltip.BackgroundTransparency = 1
@@ -888,6 +964,9 @@ for _, name in ipairs(categories) do
     categoryButton.Name = name .. "Button"
     categoryButton.LayoutOrder = #categoryButtons + 1
     categoryButtons[name] = categoryButton
+    local selectedOutline = stroke(categoryButton, Theme.Accent, 1.5, 0)
+    selectedOutline.Enabled = false
+    categoryOutlines[name] = selectedOutline
     vectorIcon(categoryButton, name)
     categoryButton.MouseEnter:Connect(function()
         showCategoryTooltip(categoryMeta[name].Hint)
@@ -904,6 +983,9 @@ local function placeContentWindow()
     local barPosition = TopBar.AbsolutePosition
     local barSize = TopBar.AbsoluteSize
     local windowSize = ContentWindow.AbsoluteSize
+    if windowSize.X <= 0 or windowSize.Y <= 0 then
+        windowSize = Vector2.new(ContentWindow.Size.X.Offset, ContentWindow.Size.Y.Offset)
+    end
     local opensBelow = barPosition.Y + barSize.Y * 0.5 < viewport.Y * 0.5
     local x = math.clamp(barPosition.X + barSize.X * 0.5 - windowSize.X * 0.5, 0, math.max(0, viewport.X - windowSize.X))
     local y = opensBelow and barPosition.Y + barSize.Y + 12 or barPosition.Y - windowSize.Y - 12
@@ -934,6 +1016,11 @@ local function closeContentWindow()
     if not ContentWindow.Visible then return end
     windowTransition = windowTransition + 1
     local transition = windowTransition
+    for buttonName, item in pairs(categoryButtons) do
+        item:SetAttribute("Selected", false)
+        animate(item, {BackgroundColor3 = Theme.Surface2, TextColor3 = Theme.Text}, 0.12)
+        if categoryOutlines[buttonName] then categoryOutlines[buttonName].Enabled = false end
+    end
     animate(ContentScale, {Scale = 0.95}, 0.16, Enum.EasingStyle.Quad)
     task.delay(0.16, function()
         if transition == windowTransition and ContentWindow and ContentWindow.Parent then
@@ -962,12 +1049,20 @@ local function showCategory(name)
         local selected = buttonName == name
         item:SetAttribute("Selected", selected)
         animate(item, {BackgroundColor3 = selected and Theme.AccentSoft or Theme.Surface2, TextColor3 = Theme.Text}, 0.16)
+        if categoryOutlines[buttonName] then
+            categoryOutlines[buttonName].Enabled = selected
+            if selected then animate(categoryOutlines[buttonName], {Thickness = 2.25, Transparency = 0}, 0.16) end
+        end
     end
 end
 
 for name, item in pairs(categoryButtons) do
     item.Activated:Connect(function()
-        showCategory(name)
+        if currentCategory == name and ContentWindow.Visible then
+            closeContentWindow()
+        else
+            showCategory(name)
+        end
     end)
 end
 
@@ -1019,7 +1114,7 @@ local function chooseTarget()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
             local alive, character, humanoid, root = getAlive(player)
-            if alive and (not State.Aim.TeamCheck or player.Team ~= LocalPlayer.Team or player.Team == nil) then
+            if alive and (not State.Aim.TeamCheck or not areTeammates(player, LocalPlayer)) then
                 local targetPart = character:FindFirstChild(State.Aim.TargetPart) or character:FindFirstChild("Head") or root
                 if targetPart then
                     local worldDistance = localRoot and (root.Position - localRoot.Position).Magnitude or math.huge
@@ -1096,6 +1191,36 @@ local function setLine(line, from, to, thickness)
     line.Size = UDim2.fromOffset(length, thickness or 1)
     line.Rotation = math.deg(math.atan2(difference.Y, difference.X))
     line.Visible = true
+end
+
+local function getBoundingScreenBox(character, camera)
+    local cframe, size = character:GetBoundingBox()
+    local minimumX, minimumY = math.huge, math.huge
+    local maximumX, maximumY = -math.huge, -math.huge
+    local visibleCorners = 0
+    for _, x in ipairs({-0.5, 0.5}) do
+        for _, y in ipairs({-0.5, 0.5}) do
+            for _, z in ipairs({-0.5, 0.5}) do
+                local point = cframe:PointToWorldSpace(Vector3.new(size.X * x, size.Y * y, size.Z * z))
+                local screen = camera:WorldToViewportPoint(point)
+                if screen.Z > 0 then
+                    visibleCorners = visibleCorners + 1
+                    minimumX = math.min(minimumX, screen.X)
+                    minimumY = math.min(minimumY, screen.Y)
+                    maximumX = math.max(maximumX, screen.X)
+                    maximumY = math.max(maximumY, screen.Y)
+                end
+            end
+        end
+    end
+    if visibleCorners == 0 then return nil end
+    local viewport = camera.ViewportSize
+    local left = math.clamp(minimumX, -viewport.X, viewport.X * 2)
+    local right = math.clamp(maximumX, -viewport.X, viewport.X * 2)
+    local top = math.clamp(minimumY, -viewport.Y, viewport.Y * 2)
+    local bottom = math.clamp(maximumY, -viewport.Y, viewport.Y * 2)
+    if right - left < 2 or bottom - top < 2 then return nil end
+    return left, right, top, bottom
 end
 
 local function destroyESP(player)
@@ -1230,17 +1355,13 @@ trackFeature("ESP", RunService.RenderStepped:Connect(function()
                 hideRecord(record)
             else
                 local alive, character, humanoid, root = getAlive(player)
-                local allowed = alive and (not State.Visuals.TeamCheck or player.Team ~= LocalPlayer.Team or player.Team == nil)
+                local allowed = alive and (not State.Visuals.TeamCheck or not areTeammates(player, LocalPlayer))
                 local distance = localAlive and localRoot and root and (root.Position - localRoot.Position).Magnitude or math.huge
                 if not allowed or distance > State.Visuals.MaxDistance then
                     hideRecord(record)
                 else
-                    local cframe, size = character:GetBoundingBox()
-                    local topWorld = cframe.Position + Vector3.new(0, size.Y * 0.55, 0)
-                    local bottomWorld = cframe.Position - Vector3.new(0, size.Y * 0.55, 0)
-                    local topScreen, topVisible = camera:WorldToViewportPoint(topWorld)
-                    local bottomScreen, bottomVisible = camera:WorldToViewportPoint(bottomWorld)
-                    if not topVisible and not bottomVisible or topScreen.Z <= 0 or bottomScreen.Z <= 0 then
+                    local left, right, top, bottom = getBoundingScreenBox(character, camera)
+                    if not left then
                         hideRecord(record)
                         if State.Visuals.Offscreen then
                             local rootScreen = camera:WorldToViewportPoint(root.Position)
@@ -1256,13 +1377,9 @@ trackFeature("ESP", RunService.RenderStepped:Connect(function()
                             end
                         end
                     else
-                        local height = math.abs(bottomScreen.Y - topScreen.Y)
-                        local width = math.max(16, height * 0.55)
-                        local centerX = (topScreen.X + bottomScreen.X) * 0.5
-                        local left = centerX - width * 0.5
-                        local right = centerX + width * 0.5
-                        local top = math.min(topScreen.Y, bottomScreen.Y)
-                        local bottom = math.max(topScreen.Y, bottomScreen.Y)
+                        local width = right - left
+                        local height = bottom - top
+                        local centerX = left + width * 0.5
                         local color = player.Team and player.Team.TeamColor.Color or Theme.Accent
                         record.Arrow.Visible = false
                         for _, line in ipairs({record.BoxTop, record.BoxBottom, record.BoxLeft, record.BoxRight, record.Tracer}) do
@@ -1285,7 +1402,7 @@ trackFeature("ESP", RunService.RenderStepped:Connect(function()
                         record.BoxFill.Visible = State.Visuals.Boxes and State.Visuals.BoxFilled
                         if State.Visuals.Health then
                             local ratio = math.clamp(humanoid.Health / math.max(1, humanoid.MaxHealth), 0, 1)
-                            local barX = left - 6
+                            local barX = right + 6
                             setLine(record.HealthBg, Vector2.new(barX, bottom), Vector2.new(barX, top), 4)
                             local healthTop = bottom - height * ratio
                             setLine(record.HealthBar, Vector2.new(barX, bottom), Vector2.new(barX, healthTop), 2)
@@ -1312,7 +1429,7 @@ trackFeature("ESP", RunService.RenderStepped:Connect(function()
                             record.SkeletonLayer.Visible = false
                         end
                         if State.Visuals.Tracers then
-                            setLine(record.Tracer, Vector2.new(camera.ViewportSize.X * 0.5, camera.ViewportSize.Y), Vector2.new(centerX, bottom), State.Visuals.Thickness)
+                            setLine(record.Tracer, Vector2.new(camera.ViewportSize.X * 0.5, camera.ViewportSize.Y - 4), Vector2.new(centerX, bottom), State.Visuals.Thickness)
                         else
                             record.Tracer.Visible = false
                         end
@@ -1330,11 +1447,43 @@ trackConnection(Players.PlayerRemoving:Connect(destroyESP))
 
 local freecamState
 local flyApplied = false
+local flyVelocity
+local flyGyro
+local flyRoot
 local movementClock = 0
+
+local function clearFlyController()
+    if flyVelocity then pcall(function() flyVelocity:Destroy() end) end
+    if flyGyro then pcall(function() flyGyro:Destroy() end) end
+    flyVelocity = nil
+    flyGyro = nil
+    flyRoot = nil
+end
+
+local function ensureFlyController(root)
+    if flyRoot == root and flyVelocity and flyVelocity.Parent and flyGyro and flyGyro.Parent then
+        return
+    end
+    clearFlyController()
+    flyRoot = root
+    flyVelocity = Instance.new("BodyVelocity")
+    flyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
+    flyVelocity.P = 3000
+    flyVelocity.Velocity = Vector3.zero
+    flyVelocity.Parent = root
+    flyGyro = Instance.new("BodyGyro")
+    flyGyro.MaxTorque = Vector3.new(100000, 100000, 100000)
+    flyGyro.P = 3000
+    flyGyro.D = 250
+    flyGyro.Parent = root
+end
+
 trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
     movementClock = movementClock + deltaTime
     local alive, character, humanoid, root = getAlive(LocalPlayer)
     if not alive then
+        clearFlyController()
+        flyApplied = false
         return
     end
     if State.Movement.Speed then
@@ -1353,28 +1502,31 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
     end
     if State.Movement.BunnyHop and humanoid.MoveDirection.Magnitude > 0 and humanoid.FloorMaterial ~= Enum.Material.Air then
         humanoid.Jump = true
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
     end
     if State.Movement.Fly then
         local camera = Workspace.CurrentCamera
         if camera then
+            ensureFlyController(root)
             local direction = Vector3.zero
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - camera.CFrame.RightVector end
+            local forward = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+            local right = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)
+            if forward.Magnitude > 0 then forward = forward.Unit end
+            if right.Magnitude > 0 then right = right.Unit end
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + forward end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - forward end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + right end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - right end
             if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.yAxis end
             if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then direction = direction - Vector3.yAxis end
             if direction.Magnitude > 0 then direction = direction.Unit end
             humanoid.PlatformStand = true
             flyApplied = true
-            if State.Movement.FlyMethod == "CFrame" then
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.CFrame = root.CFrame + direction * State.Movement.FlySpeed * deltaTime
-            else
-                root.AssemblyLinearVelocity = direction * State.Movement.FlySpeed
-            end
+            flyVelocity.Velocity = direction * State.Movement.FlySpeed
+            flyGyro.CFrame = CFrame.lookAt(root.Position, root.Position + camera.CFrame.LookVector)
         end
     elseif flyApplied then
+        clearFlyController()
         humanoid.PlatformStand = humanoidDefaults[humanoid] and humanoidDefaults[humanoid].PlatformStand or false
         flyApplied = false
     end
@@ -1456,6 +1608,42 @@ trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
     if processed then
         return
     end
+    if pendingKeybind then
+        if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+        local bind = pendingKeybind
+        pendingKeybind = nil
+        if input.KeyCode == Enum.KeyCode.Backspace then
+            State.Keybinds[bind.Id] = nil
+            bind.Button.Text = "Bind"
+            showToast("Keybind cleared")
+            return
+        end
+        if input.KeyCode == Enum.KeyCode.RightShift or input.KeyCode == Enum.KeyCode.Unknown then
+            bind.Button.Text = State.Keybinds[bind.Id] or "Bind"
+            showToast("That key is reserved or unavailable")
+            return
+        end
+        local keyName = input.KeyCode.Name
+        for id, assignedKey in pairs(State.Keybinds) do
+            if id ~= bind.Id and assignedKey == keyName then
+                bind.Button.Text = State.Keybinds[bind.Id] or "Bind"
+                showToast("Key is already assigned; clear it first")
+                return
+            end
+        end
+        State.Keybinds[bind.Id] = keyName
+        bind.Button.Text = keyName
+        showToast("Bound to " .. keyName)
+        return
+    end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        for id, assignedKey in pairs(State.Keybinds) do
+            if assignedKey == input.KeyCode.Name and keybindActions[id] then
+                keybindActions[id]()
+                return
+            end
+        end
+    end
     if input.UserInputType == Enum.UserInputType.MouseButton1 and State.Movement.ClickTP and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
         local camera = Workspace.CurrentCamera
         local _, _, root = getCharacter(LocalPlayer)
@@ -1492,6 +1680,8 @@ local function restoreCollision()
 end
 
 local function restoreMovement()
+    clearFlyController()
+    flyApplied = false
     local character, humanoid, root = getCharacter(LocalPlayer)
     if humanoid then
         local defaults = humanoidDefaults[humanoid]
@@ -1579,6 +1769,9 @@ addHomeCategory("Movement", "Movement and world-physics test controls", "Movemen
 addHomeCategory("World", "Camera, lighting and waypoint controls", "World")
 addHomeCategory("Players", "Select, inspect and observe live players", "Players")
 addHomeCategory("Catalog", "Your custom game-script collection", "Catalog")
+addAction(HomeCard, "Unload TasuHub", function()
+    if unload then unload() end
+end)
 
 local statusClock = 0
 trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
@@ -1713,61 +1906,122 @@ end)
 
 local PlayersPage = pages.Players
 local PlayerCard = createCard(PlayersPage, "Live Players")
-local PlayerStatus = addNote(PlayerCard, "No player selected")
 local playerSearch = addInput(PlayerCard, "Search username or display name", "")
-local playerIndex = 0
-local function matchingPlayers()
+local PlayerList = Instance.new("ScrollingFrame")
+PlayerList.BackgroundColor3 = Theme.Surface2
+PlayerList.BackgroundTransparency = 0.2
+PlayerList.BorderSizePixel = 0
+PlayerList.CanvasSize = UDim2.new()
+PlayerList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+PlayerList.ScrollBarImageColor3 = Theme.Accent
+PlayerList.ScrollBarThickness = 3
+PlayerList.Size = UDim2.new(1, 0, 0, 340)
+PlayerList.Parent = PlayerCard
+round(PlayerList, 10)
+stroke(PlayerList, Color3.fromRGB(188, 220, 246), 1, 0.16)
+local PlayerListLayout = Instance.new("UIListLayout")
+PlayerListLayout.Padding = UDim.new(0, 5)
+PlayerListLayout.Parent = PlayerList
+local PlayerListPadding = Instance.new("UIPadding")
+PlayerListPadding.PaddingLeft = UDim.new(0, 6)
+PlayerListPadding.PaddingRight = UDim.new(0, 6)
+PlayerListPadding.PaddingTop = UDim.new(0, 6)
+PlayerListPadding.PaddingBottom = UDim.new(0, 6)
+PlayerListPadding.Parent = PlayerList
+local playerRows = {}
+
+local function createPlayerRow(player)
+    local row = Instance.new("Frame")
+    row.Name = tostring(player.UserId)
+    row.BackgroundColor3 = Theme.Surface
+    row.BackgroundTransparency = 0.06
+    row.Size = UDim2.new(1, 0, 0, 58)
+    row.Parent = PlayerList
+    round(row, 9)
+    stroke(row, Color3.fromRGB(198, 226, 248), 1, 0.2)
+    local avatar = Instance.new("ImageLabel")
+    avatar.BackgroundColor3 = Theme.AccentSoft
+    avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=150&h=150"
+    avatar.Size = UDim2.fromOffset(42, 42)
+    avatar.Position = UDim2.fromOffset(8, 8)
+    avatar.Parent = row
+    round(avatar, 21)
+    local name = textLabel(row, player.DisplayName, UDim2.new(1, -252, 0, 21), UDim2.fromOffset(60, 7), 13, Theme.Text)
+    name.Font = Enum.Font.GothamSemibold
+    local details = textLabel(row, "", UDim2.new(1, -252, 0, 18), UDim2.fromOffset(60, 31), 10, Theme.Muted)
+    local healthTrack = Instance.new("Frame")
+    healthTrack.BackgroundColor3 = Color3.fromRGB(220, 234, 244)
+    healthTrack.Size = UDim2.fromOffset(94, 5)
+    healthTrack.Position = UDim2.new(1, -185, 0, 12)
+    healthTrack.Parent = row
+    round(healthTrack, 5)
+    local healthFill = Instance.new("Frame")
+    healthFill.BackgroundColor3 = Color3.fromRGB(93, 202, 133)
+    healthFill.Size = UDim2.fromScale(1, 1)
+    healthFill.Parent = healthTrack
+    round(healthFill, 5)
+    local healthText = textLabel(row, "", UDim2.fromOffset(94, 18), UDim2.new(1, -185, 0, 21), 10, Theme.Muted, Enum.TextXAlignment.Center)
+    local view = button(row, "View", UDim2.fromOffset(48, 30), UDim2.new(1, -82, 0.5, -15))
+    local teleport = button(row, "TP", UDim2.fromOffset(30, 30), UDim2.new(1, -34, 0.5, -15))
+    view.TextSize = 10
+    teleport.TextSize = 10
+    view.Activated:Connect(function()
+        local alive, _, humanoid = getAlive(player)
+        local camera = Workspace.CurrentCamera
+        if alive and camera then
+            if camera.CameraSubject == humanoid then
+                local _, localHumanoid = getCharacter(LocalPlayer)
+                if localHumanoid then camera.CameraSubject = localHumanoid end
+            else
+                selectedPlayer = player
+                camera.CameraSubject = humanoid
+            end
+        end
+    end)
+    teleport.Activated:Connect(function()
+        local alive, _, _, targetRoot = getAlive(player)
+        local _, _, root = getCharacter(LocalPlayer)
+        if alive and root then root.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 4) end
+    end)
+    playerRows[player] = {Row = row, Name = name, Details = details, HealthFill = healthFill, HealthText = healthText, View = view}
+end
+
+local function refreshPlayerRows()
     local query = string.lower(playerSearch.Text)
-    local result = {}
+    local _, _, localRoot = getCharacter(LocalPlayer)
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and (query == "" or string.find(string.lower(player.Name), query, 1, true) or string.find(string.lower(player.DisplayName), query, 1, true)) then
-            table.insert(result, player)
+        if player ~= LocalPlayer then
+            if not playerRows[player] then createPlayerRow(player) end
+            local record = playerRows[player]
+            local matches = query == "" or string.find(string.lower(player.Name), query, 1, true) or string.find(string.lower(player.DisplayName), query, 1, true)
+            record.Row.Visible = matches
+            if matches then
+                local alive, _, humanoid, root = getAlive(player)
+                local distance = root and localRoot and (root.Position - localRoot.Position).Magnitude or math.huge
+                local ratio = alive and math.clamp(humanoid.Health / math.max(1, humanoid.MaxHealth), 0, 1) or 0
+                record.Name.Text = player.DisplayName .. "  @" .. player.Name
+                record.Details.Text = string.format("%s  •  %.0f studs", areTeammates(player, LocalPlayer) and "Teammate" or "Other", distance)
+                record.HealthFill.Size = UDim2.fromScale(ratio, 1)
+                record.HealthText.Text = string.format("%.0f%%", ratio * 100)
+                local camera = Workspace.CurrentCamera
+                record.View.Text = camera and camera.CameraSubject == humanoid and "Stop" or "View"
+            end
         end
     end
-    table.sort(result, function(a, b) return a.Name < b.Name end)
-    return result
-end
-local function refreshPlayerStatus()
-    if not selectedPlayer or selectedPlayer.Parent ~= Players then
-        PlayerStatus.Text = "No player selected"
-        return
+    for player, record in pairs(playerRows) do
+        if player.Parent ~= Players then
+            record.Row:Destroy()
+            playerRows[player] = nil
+        end
     end
-    local alive, _, humanoid, root = getAlive(selectedPlayer)
-    local _, _, localRoot = getCharacter(LocalPlayer)
-    local distance = root and localRoot and (root.Position - localRoot.Position).Magnitude or math.huge
-    PlayerStatus.Text = string.format("%s (@%s)   •   UserId %s   •   Health %.0f   •   Distance %.0f", selectedPlayer.DisplayName, selectedPlayer.Name, tostring(selectedPlayer.UserId), alive and humanoid.Health or 0, distance)
 end
-addAction(PlayerCard, "Next Matching Player", function()
-    local list = matchingPlayers()
-    if #list == 0 then selectedPlayer = nil refreshPlayerStatus() return end
-    playerIndex = playerIndex % #list + 1
-    selectedPlayer = list[playerIndex]
-    refreshPlayerStatus()
-end)
-addAction(PlayerCard, "Spectate Selected", function(item)
-    local alive, _, humanoid = selectedPlayer and getAlive(selectedPlayer)
-    local camera = Workspace.CurrentCamera
-    if alive and camera then
-        camera.CameraSubject = humanoid
-        item.Text = "Spectating " .. selectedPlayer.Name
-    end
-end)
-addAction(PlayerCard, "Stop Spectating", function()
-    local _, humanoid = getCharacter(LocalPlayer)
-    local camera = Workspace.CurrentCamera
-    if humanoid and camera then camera.CameraSubject = humanoid end
-end)
-addAction(PlayerCard, "Teleport to Selected", function()
-    local alive, _, _, targetRoot = selectedPlayer and getAlive(selectedPlayer)
-    local _, _, root = getCharacter(LocalPlayer)
-    if alive and root then root.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 4) end
-end)
+playerSearch.FocusLost:Connect(refreshPlayerRows)
 local playerStatusClock = 0
 trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
     playerStatusClock = playerStatusClock + deltaTime
-    if playerStatusClock < 0.25 then return end
+    if playerStatusClock < 0.5 then return end
     playerStatusClock = 0
-    refreshPlayerStatus()
+    refreshPlayerRows()
 end))
 
 local function sanitizeName(value)
@@ -2076,19 +2330,7 @@ addAction(ConfigCard, "Reset to Defaults", function()
     configStatus.Text = "Defaults restored"
 end)
 
-local SettingsPage = pages.Settings
-local InterfaceCard = createCard(SettingsPage, "Interface")
-local titleInput = addInput(InterfaceCard, "Window title", Theme.Title)
-addAction(InterfaceCard, "Apply Title", function()
-    if titleInput.Text ~= "" then
-        State.Interface.Title = titleInput.Text
-        TopTitle.Text = titleInput.Text
-    end
-end)
-addNote(InterfaceCard, "Right Shift toggles the content window. The category bar always remains visible unless Unload is used.")
-local RuntimeCard = createCard(SettingsPage, "Runtime")
-
-local function unload()
+unload = function()
     if unloaded then return end
     unloaded = true
     State.Aim.Enabled = false
@@ -2126,10 +2368,8 @@ local function unload()
     end
 end
 
-addAction(RuntimeCard, "Unload Hub", unload)
-
 env.TasuHub = {
-    Version = "1.0.0",
+    Version = "1.2.0",
     State = State,
     Capabilities = capabilities,
     Open = function() ContentWindow.Visible = true end,
