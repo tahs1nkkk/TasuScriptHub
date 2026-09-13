@@ -443,7 +443,8 @@ local function makeDraggable(frame, handle)
     trackConnection(UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and targetPosition then
             local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-            local desired = targetPosition + input.Delta
+			local mouseDelta = Vector2.new(input.Delta.X, input.Delta.Y)
+			local desired = targetPosition + mouseDelta
             local x = math.clamp(desired.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
             local y = math.clamp(desired.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
             targetPosition = Vector2.new(x, y)
