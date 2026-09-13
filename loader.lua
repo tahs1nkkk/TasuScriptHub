@@ -459,6 +459,32 @@ local function button(parent, text, size, position)
     return item
 end
 
+local function getViewportSize()
+    local camera = Workspace.CurrentCamera
+    return camera and camera.ViewportSize or Vector2.new(1920, 1080)
+end
+
+local function clampGuiPosition(frame, desired)
+    local viewport = getViewportSize()
+    local size = frame.AbsoluteSize
+    if size.X <= 0 or size.Y <= 0 then
+        size = Vector2.new(frame.Size.X.Offset, frame.Size.Y.Offset)
+    end
+    return Vector2.new(
+        math.clamp(desired.X, 0, math.max(0, viewport.X - size.X)),
+        math.clamp(desired.Y, 0, math.max(0, viewport.Y - size.Y))
+    )
+end
+
+local function keepGuiOnScreen(frame)
+    local absolute = frame.AbsolutePosition
+    local desired = Vector2.new(absolute.X, absolute.Y)
+    local clamped = clampGuiPosition(frame, desired)
+    if (clamped - desired).Magnitude > 0.5 then
+        frame.Position = UDim2.fromOffset(clamped.X, clamped.Y)
+    end
+end
+
 local function makeDraggable(frame, handle)
     local dragging = false
     local dragStart
@@ -495,16 +521,14 @@ local function makeDraggable(frame, handle)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and dragOrigin then
             local pointer = input.Position
             local currentPointer = Vector2.new(pointer.X, pointer.Y)
-            local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
             local pointerDelta = currentPointer - dragStart
             if pointerDelta.Magnitude >= 4 then
                 controller.DidDrag = true
                 controller.SuppressUntil = os.clock() + 0.2
             end
             local desired = dragOrigin + pointerDelta
-            local x = math.clamp(desired.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
-            local y = math.clamp(desired.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
-            targetPosition = Vector2.new(x, y)
+            targetPosition = clampGuiPosition(frame, desired)
+            frame.Position = UDim2.fromOffset(targetPosition.X, targetPosition.Y)
         end
     end))
     trackConnection(UserInputService.InputEnded:Connect(function(input)
@@ -512,14 +536,6 @@ local function makeDraggable(frame, handle)
             dragging = false
             dragStart = nil
             dragOrigin = nil
-        end
-    end))
-    trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
-        if dragging and targetPosition then
-            local current = Vector2.new(frame.Position.X.Offset, frame.Position.Y.Offset)
-            local alpha = 1 - math.exp(-deltaTime * 24)
-            local nextPosition = current:Lerp(targetPosition, alpha)
-            frame.Position = UDim2.fromOffset(nextPosition.X, nextPosition.Y)
         end
     end))
     function controller:ShouldSuppressClick()
@@ -573,6 +589,7 @@ local CategoryLayout = Instance.new("UIListLayout")
 CategoryLayout.FillDirection = Enum.FillDirection.Horizontal
 CategoryLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 CategoryLayout.Padding = UDim.new(0, 7)
+CategoryLayout.SortOrder = Enum.SortOrder.LayoutOrder
 CategoryLayout.Parent = CategoryScroller
 
 local ContentWindow = Instance.new("Frame")
@@ -1033,11 +1050,11 @@ local function hideCategoryTooltip()
         end
     end)
 end
-for _, name in ipairs(categories) do
+for index, name in ipairs(categories) do
     createPage(name)
     local categoryButton = button(CategoryScroller, "", UDim2.fromOffset(48, 48))
     categoryButton.Name = name .. "Button"
-    categoryButton.LayoutOrder = #categoryButtons + 1
+    categoryButton.LayoutOrder = index
     categoryButtons[name] = categoryButton
     local selectedOutline = stroke(categoryButton, Theme.Accent, 1.5, 0)
     selectedOutline.Enabled = false
@@ -1151,6 +1168,10 @@ end)
 trackConnection(RunService.RenderStepped:Connect(function()
     if not TopBar.Visible then TopBar.Visible = true end
     if not ScreenGui.Enabled then ScreenGui.Enabled = true end
+    keepGuiOnScreen(TopBar)
+    if ContentWindow.Visible then
+        keepGuiOnScreen(ContentWindow)
+    end
 end))
 
 local FOVCircle = Instance.new("Frame")
@@ -1934,7 +1955,7 @@ local FlyCard = createCard(MovementPage, "Flight and Collision")
 addToggle(FlyCard, "Fly", function() return State.Movement.Fly end, function(value) State.Movement.Fly = value end)
 addCycle(FlyCard, "Fly Method", {"Velocity", "CFrame"}, function() return State.Movement.FlyMethod end, function(value) State.Movement.FlyMethod = value end)
 addSlider(FlyCard, "Fly Speed", 10, 250, function() return State.Movement.FlySpeed end, function(value) State.Movement.FlySpeed = value end)
-addParagraph(FlyCard, "WASD follows the camera. Space or E moves up; Ctrl, Q or C moves down.")
+addNote(FlyCard, "WASD follows the camera. Space or E moves up; Ctrl, Q or C moves down.")
 addToggle(FlyCard, "Noclip", function() return State.Movement.Noclip end, function(value)
     State.Movement.Noclip = value
     if not value then restoreCollision() end
