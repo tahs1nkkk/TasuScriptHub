@@ -1,12 +1,13 @@
 local Defaults = {
     Interface = {
-        Title = "Tasu Anticheat Test",
-        Accent = Color3.fromRGB(198, 202, 210),
-        Background = Color3.fromRGB(30, 31, 34),
-        Surface = Color3.fromRGB(40, 42, 46),
-        Surface2 = Color3.fromRGB(51, 53, 58),
-        Text = Color3.fromRGB(239, 241, 245),
-        Muted = Color3.fromRGB(157, 161, 170)
+        Title = "TasuHub",
+        Accent = Color3.fromRGB(113, 180, 255),
+        AccentSoft = Color3.fromRGB(218, 239, 255),
+        Background = Color3.fromRGB(242, 248, 255),
+        Surface = Color3.fromRGB(255, 255, 255),
+        Surface2 = Color3.fromRGB(235, 245, 255),
+        Text = Color3.fromRGB(32, 54, 78),
+        Muted = Color3.fromRGB(105, 132, 161)
     },
     Aim = {
         Enabled = false,
@@ -87,7 +88,9 @@ if not LocalPlayer then
 end
 
 local env = getgenv and getgenv() or _G
-if env.TasuAnticheatTest and type(env.TasuAnticheatTest.Unload) == "function" then
+if env.TasuHub and type(env.TasuHub.Unload) == "function" then
+    pcall(env.TasuHub.Unload)
+elseif env.TasuAnticheatTest and type(env.TasuAnticheatTest.Unload) == "function" then
     pcall(env.TasuAnticheatTest.Unload)
 end
 
@@ -250,7 +253,7 @@ guiParent = guiParent or CoreGui
 
 local Theme = State.Interface
 local ScreenGui = trackInstance(Instance.new("ScreenGui"))
-ScreenGui.Name = "TasuAnticheatTest"
+ScreenGui.Name = "TasuHub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -272,6 +275,20 @@ local function stroke(object, color, thickness, transparency)
     return item
 end
 
+local function gradient(object, topColor, bottomColor, rotation)
+    local item = Instance.new("UIGradient")
+    item.Color = ColorSequence.new(topColor or Theme.Surface, bottomColor or Theme.Surface2)
+    item.Rotation = rotation or 90
+    item.Parent = object
+    return item
+end
+
+local function animate(object, properties, duration, style, direction)
+    local tween = TweenService:Create(object, TweenInfo.new(duration or 0.16, style or Enum.EasingStyle.Quint, direction or Enum.EasingDirection.Out), properties)
+    tween:Play()
+    return tween
+end
+
 local function textLabel(parent, text, size, position, textSize, color, alignment)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
@@ -290,19 +307,40 @@ local function button(parent, text, size, position)
     local item = Instance.new("TextButton")
     item.AutoButtonColor = false
     item.BackgroundColor3 = Theme.Surface2
+    item.BackgroundTransparency = 0.08
     item.Text = text
     item.TextColor3 = Theme.Text
     item.TextSize = 12
     item.Font = Enum.Font.GothamMedium
     item.Size = size or UDim2.new(0, 100, 0, 28)
     item.Position = position or UDim2.new()
-    round(item, 5)
-    stroke(item, Color3.fromRGB(77, 80, 87), 1, 0.25)
+    round(item, 8)
+    local itemStroke = stroke(item, Color3.fromRGB(177, 212, 244), 1, 0.18)
+    gradient(item, Color3.fromRGB(255, 255, 255), Theme.Surface2)
+    local scale = Instance.new("UIScale")
+    scale.Parent = item
+    local function restingColor()
+        return item:GetAttribute("Selected") and Theme.AccentSoft or Theme.Surface2
+    end
     item.MouseEnter:Connect(function()
-        TweenService:Create(item, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(62, 65, 71)}):Play()
+        animate(item, {BackgroundColor3 = item:GetAttribute("Selected") and Color3.fromRGB(200, 229, 255) or Color3.fromRGB(224, 241, 255)}, 0.14)
+        animate(itemStroke, {Color = Theme.Accent, Transparency = 0.04}, 0.14)
+        animate(scale, {Scale = 1.035}, 0.14)
     end)
     item.MouseLeave:Connect(function()
-        TweenService:Create(item, TweenInfo.new(0.12), {BackgroundColor3 = Theme.Surface2}):Play()
+        animate(item, {BackgroundColor3 = restingColor()}, 0.16)
+        animate(itemStroke, {Color = Color3.fromRGB(177, 212, 244), Transparency = 0.18}, 0.16)
+        animate(scale, {Scale = 1}, 0.16)
+    end)
+    item.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            animate(scale, {Scale = 0.96}, 0.08, Enum.EasingStyle.Quad)
+        end
+    end)
+    item.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            animate(scale, {Scale = 1.035}, 0.1, Enum.EasingStyle.Quad)
+        end
     end)
     item.Parent = parent
     return item
@@ -312,11 +350,13 @@ local function makeDraggable(frame, handle)
     local dragging = false
     local dragStart
     local startPosition
+    local targetPosition
     trackConnection(handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
             startPosition = frame.AbsolutePosition
+            targetPosition = startPosition
         end
     end))
     trackConnection(UserInputService.InputChanged:Connect(function(input)
@@ -325,7 +365,7 @@ local function makeDraggable(frame, handle)
             local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
             local x = math.clamp(startPosition.X + delta.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
             local y = math.clamp(startPosition.Y + delta.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
-            frame.Position = UDim2.fromOffset(x, y)
+            targetPosition = Vector2.new(x, y)
         end
     end))
     trackConnection(UserInputService.InputEnded:Connect(function(input)
@@ -333,60 +373,94 @@ local function makeDraggable(frame, handle)
             dragging = false
         end
     end))
+    trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
+        if dragging and targetPosition then
+            local current = frame.AbsolutePosition
+            local alpha = math.clamp(deltaTime * 20, 0, 1)
+            local nextPosition = current:Lerp(targetPosition, alpha)
+            frame.Position = UDim2.fromOffset(nextPosition.X, nextPosition.Y)
+        end
+    end))
 end
 
 local TopBar = Instance.new("Frame")
 TopBar.Name = "CategoryBar"
 TopBar.BackgroundColor3 = Theme.Background
-TopBar.Size = UDim2.fromOffset(920, 42)
-TopBar.Position = UDim2.new(0.5, -460, 0, 12)
+TopBar.BackgroundTransparency = 0.1
+TopBar.Size = UDim2.fromOffset(660, 52)
+TopBar.Position = UDim2.new(0.5, -330, 0, 12)
 TopBar.Parent = ScreenGui
-round(TopBar, 8)
-stroke(TopBar, Theme.Accent, 1, 0.45)
+round(TopBar, 14)
+stroke(TopBar, Color3.fromRGB(167, 210, 247), 1, 0.08)
+gradient(TopBar, Color3.fromRGB(255, 255, 255), Color3.fromRGB(226, 243, 255), 75)
 
 local DragGrip = Instance.new("Frame")
 DragGrip.BackgroundTransparency = 1
-DragGrip.Size = UDim2.fromOffset(150, 42)
+DragGrip.Size = UDim2.fromOffset(142, 52)
 DragGrip.Parent = TopBar
 
-local TopTitle = textLabel(DragGrip, Theme.Title, UDim2.new(1, -8, 1, 0), UDim2.fromOffset(10, 0), 12, Theme.Text)
+local HubIcon = Instance.new("Frame")
+HubIcon.BackgroundColor3 = Theme.Accent
+HubIcon.Size = UDim2.fromOffset(30, 30)
+HubIcon.Position = UDim2.fromOffset(12, 11)
+HubIcon.Parent = DragGrip
+round(HubIcon, 10)
+gradient(HubIcon, Color3.fromRGB(128, 196, 255), Color3.fromRGB(87, 151, 247), 45)
+stroke(HubIcon, Color3.fromRGB(255, 255, 255), 1, 0.25)
+local HubMark = textLabel(HubIcon, "T", UDim2.fromScale(1, 1), nil, 16, Color3.fromRGB(255, 255, 255), Enum.TextXAlignment.Center)
+HubMark.Font = Enum.Font.GothamBold
+local HubDot = Instance.new("Frame")
+HubDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+HubDot.Size = UDim2.fromOffset(5, 5)
+HubDot.Position = UDim2.new(1, -7, 0, 3)
+HubDot.Parent = HubIcon
+round(HubDot, 5)
+
+local TopTitle = textLabel(DragGrip, Theme.Title, UDim2.new(1, -56, 1, 0), UDim2.fromOffset(50, 0), 14, Theme.Text)
 TopTitle.Font = Enum.Font.GothamSemibold
 
 local CategoryScroller = Instance.new("ScrollingFrame")
 CategoryScroller.BackgroundTransparency = 1
 CategoryScroller.BorderSizePixel = 0
-CategoryScroller.ScrollBarThickness = 2
+CategoryScroller.ScrollBarThickness = 0
 CategoryScroller.ScrollBarImageColor3 = Theme.Accent
 CategoryScroller.ScrollingDirection = Enum.ScrollingDirection.X
-CategoryScroller.Size = UDim2.new(1, -160, 1, 0)
-CategoryScroller.Position = UDim2.fromOffset(155, 0)
-CategoryScroller.CanvasSize = UDim2.fromOffset(850, 0)
+CategoryScroller.Size = UDim2.new(1, -154, 1, 0)
+CategoryScroller.Position = UDim2.fromOffset(148, 0)
+CategoryScroller.CanvasSize = UDim2.fromOffset(454, 0)
 CategoryScroller.Parent = TopBar
 
 local CategoryLayout = Instance.new("UIListLayout")
 CategoryLayout.FillDirection = Enum.FillDirection.Horizontal
 CategoryLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-CategoryLayout.Padding = UDim.new(0, 5)
+CategoryLayout.Padding = UDim.new(0, 7)
 CategoryLayout.Parent = CategoryScroller
 
 local ContentWindow = Instance.new("Frame")
 ContentWindow.Name = "ContentWindow"
 ContentWindow.BackgroundColor3 = Theme.Background
+ContentWindow.BackgroundTransparency = 0.08
 ContentWindow.Size = UDim2.fromOffset(680, 440)
 ContentWindow.Position = UDim2.new(0.5, -340, 0, 64)
 ContentWindow.Parent = ScreenGui
-round(ContentWindow, 8)
-stroke(ContentWindow, Theme.Accent, 1, 0.45)
+round(ContentWindow, 16)
+stroke(ContentWindow, Color3.fromRGB(153, 204, 244), 1, 0.08)
+gradient(ContentWindow, Color3.fromRGB(255, 255, 255), Color3.fromRGB(229, 244, 255), 80)
+local ContentScale = Instance.new("UIScale")
+ContentScale.Parent = ContentWindow
 
 local WindowHeader = Instance.new("Frame")
 WindowHeader.BackgroundColor3 = Theme.Surface
+WindowHeader.BackgroundTransparency = 0.04
 WindowHeader.Size = UDim2.new(1, 0, 0, 38)
 WindowHeader.Parent = ContentWindow
-round(WindowHeader, 8)
+round(WindowHeader, 16)
+gradient(WindowHeader, Color3.fromRGB(255, 255, 255), Color3.fromRGB(237, 248, 255), 75)
 
 local HeaderMask = Instance.new("Frame")
 HeaderMask.BorderSizePixel = 0
 HeaderMask.BackgroundColor3 = Theme.Surface
+HeaderMask.BackgroundTransparency = 0.04
 HeaderMask.Position = UDim2.new(0, 0, 1, -8)
 HeaderMask.Size = UDim2.new(1, 0, 0, 8)
 HeaderMask.Parent = WindowHeader
@@ -396,6 +470,12 @@ WindowTitle.Font = Enum.Font.GothamSemibold
 
 local CloseButton = button(WindowHeader, "×", UDim2.fromOffset(30, 26), UDim2.new(1, -36, 0, 6))
 CloseButton.TextSize = 18
+CloseButton.Font = Enum.Font.GothamBold
+
+local WindowDragZone = Instance.new("Frame")
+WindowDragZone.BackgroundTransparency = 1
+WindowDragZone.Size = UDim2.new(1, -50, 1, 0)
+WindowDragZone.Parent = WindowHeader
 
 local PageHost = Instance.new("Frame")
 PageHost.BackgroundTransparency = 1
@@ -405,9 +485,10 @@ PageHost.Position = UDim2.fromOffset(8, 44)
 PageHost.Parent = ContentWindow
 
 makeDraggable(TopBar, DragGrip)
-makeDraggable(ContentWindow, WindowHeader)
+makeDraggable(ContentWindow, WindowDragZone)
 
 local pages = {}
+local pageScales = {}
 local categoryButtons = {}
 local controlRefreshers = {}
 local currentCategory = "Home"
@@ -430,6 +511,9 @@ local function createPage(name)
     page.Size = UDim2.fromScale(1, 1)
     page.Visible = false
     page.Parent = PageHost
+    local pageScale = Instance.new("UIScale")
+    pageScale.Parent = page
+    pageScales[name] = pageScale
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 7)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -447,11 +531,13 @@ end
 local function createCard(page, title)
     local card = Instance.new("Frame")
     card.BackgroundColor3 = Theme.Surface
+    card.BackgroundTransparency = 0.14
     card.Size = UDim2.new(1, -4, 0, 42)
     card.AutomaticSize = Enum.AutomaticSize.Y
     card.Parent = page
-    round(card, 7)
-    stroke(card, Color3.fromRGB(71, 74, 80), 1, 0.35)
+    round(card, 12)
+    stroke(card, Color3.fromRGB(180, 218, 248), 1, 0.12)
+    gradient(card, Color3.fromRGB(255, 255, 255), Color3.fromRGB(239, 248, 255), 90)
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 6)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -462,7 +548,7 @@ local function createCard(page, title)
     padding.PaddingTop = UDim.new(0, 9)
     padding.PaddingBottom = UDim.new(0, 10)
     padding.Parent = card
-    local heading = textLabel(card, title, UDim2.new(1, 0, 0, 22), nil, 13, Theme.Accent)
+    local heading = textLabel(card, title, UDim2.new(1, 0, 0, 22), nil, 13, Theme.Text)
     heading.Font = Enum.Font.GothamSemibold
     heading.LayoutOrder = 0
     return card
@@ -486,6 +572,7 @@ end
 local function addInput(card, placeholder, defaultText, callback, multiLine)
     local input = Instance.new("TextBox")
     input.BackgroundColor3 = Theme.Surface2
+    input.BackgroundTransparency = 0.06
     input.ClearTextOnFocus = false
     input.PlaceholderText = placeholder
     input.PlaceholderColor3 = Theme.Muted
@@ -498,12 +585,19 @@ local function addInput(card, placeholder, defaultText, callback, multiLine)
     input.TextWrapped = multiLine or false
     input.Size = UDim2.new(1, 0, 0, multiLine and 70 or 30)
     input.Parent = card
-    round(input, 5)
-    stroke(input, Color3.fromRGB(75, 78, 84), 1, 0.35)
+    round(input, 8)
+    local inputStroke = stroke(input, Color3.fromRGB(184, 218, 245), 1, 0.12)
+    gradient(input, Color3.fromRGB(255, 255, 255), Color3.fromRGB(235, 246, 255), 90)
     local padding = Instance.new("UIPadding")
     padding.PaddingLeft = UDim.new(0, 8)
     padding.PaddingRight = UDim.new(0, 8)
     padding.Parent = input
+    input.Focused:Connect(function()
+        animate(inputStroke, {Color = Theme.Accent, Thickness = 1.5, Transparency = 0}, 0.14)
+    end)
+    input.FocusLost:Connect(function()
+        animate(inputStroke, {Color = Color3.fromRGB(184, 218, 245), Thickness = 1, Transparency = 0.12}, 0.16)
+    end)
     if callback then
         input.FocusLost:Connect(function(enterPressed)
             pcall(callback, input.Text, enterPressed, input)
@@ -533,9 +627,8 @@ local function addToggle(card, text, getter, setter)
     round(knob, 8)
     local function render()
         local enabled = getter()
-        toggle.BackgroundColor3 = enabled and Theme.Accent or Color3.fromRGB(72, 75, 82)
-        knob.BackgroundColor3 = enabled and Theme.Background or Theme.Text
-        TweenService:Create(knob, TweenInfo.new(0.12), {Position = enabled and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)}):Play()
+        animate(toggle, {BackgroundColor3 = enabled and Theme.Accent or Color3.fromRGB(217, 231, 244)}, 0.14)
+        animate(knob, {BackgroundColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(132, 158, 183), Position = enabled and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)}, 0.14)
     end
     table.insert(controlRefreshers, render)
     toggle.Activated:Connect(function()
@@ -554,7 +647,7 @@ local function addSlider(card, text, minimum, maximum, getter, setter, decimals)
     local title = textLabel(holder, text, UDim2.new(1, -70, 0, 22), nil, 12, Theme.Text)
     local valueLabel = textLabel(holder, "", UDim2.fromOffset(65, 22), UDim2.new(1, -65, 0, 0), 11, Theme.Muted, Enum.TextXAlignment.Right)
     local bar = Instance.new("Frame")
-    bar.BackgroundColor3 = Color3.fromRGB(69, 72, 78)
+    bar.BackgroundColor3 = Color3.fromRGB(217, 231, 244)
     bar.Size = UDim2.new(1, 0, 0, 6)
     bar.Position = UDim2.new(0, 0, 1, -11)
     bar.Parent = holder
@@ -564,6 +657,7 @@ local function addSlider(card, text, minimum, maximum, getter, setter, decimals)
     fill.Size = UDim2.fromScale(0, 1)
     fill.Parent = bar
     round(fill, 3)
+    gradient(fill, Color3.fromRGB(133, 204, 255), Color3.fromRGB(95, 155, 247), 0)
     local dragging = false
     local precision = decimals or 0
     local function render()
@@ -616,12 +710,70 @@ local function addCycle(card, text, values, getter, setter)
     return item
 end
 
+local categoryMeta = {
+    Home = {Icon = "⌂", Hint = "Home"},
+    Aim = {Icon = "◎", Hint = "Aim"},
+    Visuals = {Icon = "◉", Hint = "Visuals"},
+    Movement = {Icon = "↯", Hint = "Movement"},
+    World = {Icon = "◌", Hint = "World"},
+    Players = {Icon = "♙", Hint = "Players"},
+    Catalog = {Icon = "▦", Hint = "Catalog"},
+    Explorer = {Icon = "⌘", Hint = "Explorer"},
+    Configs = {Icon = "◫", Hint = "Configs"},
+    Settings = {Icon = "⚙", Hint = "Settings"}
+}
 local categories = {"Home", "Aim", "Visuals", "Movement", "World", "Players", "Catalog", "Explorer", "Configs", "Settings"}
+local CategoryTooltip = Instance.new("TextLabel")
+CategoryTooltip.BackgroundColor3 = Color3.fromRGB(44, 83, 120)
+CategoryTooltip.BackgroundTransparency = 0.04
+CategoryTooltip.TextColor3 = Color3.fromRGB(255, 255, 255)
+CategoryTooltip.TextSize = 11
+CategoryTooltip.Font = Enum.Font.GothamMedium
+CategoryTooltip.Visible = false
+CategoryTooltip.ZIndex = 20
+CategoryTooltip.Size = UDim2.fromOffset(92, 24)
+CategoryTooltip.Parent = ScreenGui
+round(CategoryTooltip, 7)
+stroke(CategoryTooltip, Color3.fromRGB(178, 220, 255), 1, 0.12)
 for _, name in ipairs(categories) do
     createPage(name)
-    local categoryButton = button(CategoryScroller, name, UDim2.fromOffset(78, 28))
+    local categoryButton = button(CategoryScroller, categoryMeta[name].Icon, UDim2.fromOffset(38, 38))
+    categoryButton.Name = name .. "Button"
+    categoryButton.TextSize = 18
+    categoryButton.Font = Enum.Font.GothamBold
     categoryButton.LayoutOrder = #categoryButtons + 1
     categoryButtons[name] = categoryButton
+    categoryButton.MouseEnter:Connect(function()
+        local mouse = UserInputService:GetMouseLocation()
+        CategoryTooltip.Text = categoryMeta[name].Hint
+        CategoryTooltip.Position = UDim2.fromOffset(mouse.X - 46, mouse.Y + 28)
+        CategoryTooltip.Visible = true
+        animate(CategoryTooltip, {BackgroundTransparency = 0.04}, 0.12)
+    end)
+    categoryButton.MouseLeave:Connect(function()
+        CategoryTooltip.Visible = false
+    end)
+end
+
+local function openContentWindow()
+    if not ContentWindow.Visible then
+        ContentWindow.Visible = true
+        ContentScale.Scale = 0.94
+        animate(ContentScale, {Scale = 1}, 0.24, Enum.EasingStyle.Back)
+    else
+        animate(ContentScale, {Scale = 1}, 0.16)
+    end
+end
+
+local function closeContentWindow()
+    if not ContentWindow.Visible then return end
+    animate(ContentScale, {Scale = 0.95}, 0.16, Enum.EasingStyle.Quad)
+    task.delay(0.16, function()
+        if ContentWindow and ContentWindow.Parent then
+            ContentWindow.Visible = false
+            ContentScale.Scale = 1
+        end
+    end)
 end
 
 local function showCategory(name)
@@ -629,14 +781,20 @@ local function showCategory(name)
         return
     end
     currentCategory = name
-    ContentWindow.Visible = true
+    openContentWindow()
     WindowTitle.Text = name
     for pageName, page in pairs(pages) do
-        page.Visible = pageName == name
+        local selected = pageName == name
+        page.Visible = selected
+        if selected and pageScales[pageName] then
+            pageScales[pageName].Scale = 0.975
+            animate(pageScales[pageName], {Scale = 1}, 0.18, Enum.EasingStyle.Quint)
+        end
     end
     for buttonName, item in pairs(categoryButtons) do
-        item.BackgroundColor3 = buttonName == name and Theme.Accent or Theme.Surface2
-        item.TextColor3 = buttonName == name and Theme.Background or Theme.Text
+        local selected = buttonName == name
+        item:SetAttribute("Selected", selected)
+        animate(item, {BackgroundColor3 = selected and Theme.AccentSoft or Theme.Surface2, TextColor3 = Theme.Text}, 0.16)
     end
 end
 
@@ -647,7 +805,7 @@ for name, item in pairs(categoryButtons) do
 end
 
 CloseButton.Activated:Connect(function()
-    ContentWindow.Visible = false
+    closeContentWindow()
 end)
 
 local FOVCircle = Instance.new("Frame")
@@ -1142,7 +1300,11 @@ trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
         end
     end
     if input.KeyCode == Enum.KeyCode.RightShift then
-        ContentWindow.Visible = not ContentWindow.Visible
+        if ContentWindow.Visible then
+            closeContentWindow()
+        else
+            openContentWindow()
+        end
     end
 end))
 
@@ -1198,32 +1360,65 @@ local function applyWorld()
 end
 
 local HomePage = pages.Home
+local HomeCard = createCard(HomePage, "TasuHub")
+local HomeBrand = textLabel(HomeCard, "TasuHub", UDim2.new(1, 0, 0, 32), nil, 24, Theme.Text)
+HomeBrand.Font = Enum.Font.GothamBold
+local HomeSubtitle = addNote(HomeCard, "Live client test workspace")
+HomeSubtitle.TextSize = 12
 local StatusCard = createCard(HomePage, "Live Session")
 local StatusText = addNote(StatusCard, "")
-local CapabilityCard = createCard(HomePage, "Executor Capabilities")
+local NavigationCard = createCard(HomePage, "Categories")
+local function addHomeCategory(icon, title, description, category)
+    local tile = Instance.new("TextButton")
+    tile.AutoButtonColor = false
+    tile.Text = ""
+    tile.BackgroundColor3 = Theme.Surface2
+    tile.BackgroundTransparency = 0.08
+    tile.Size = UDim2.new(1, 0, 0, 62)
+    tile.Parent = NavigationCard
+    round(tile, 10)
+    local tileStroke = stroke(tile, Color3.fromRGB(188, 220, 246), 1, 0.14)
+    gradient(tile, Color3.fromRGB(255, 255, 255), Color3.fromRGB(232, 246, 255), 0)
+    local tileScale = Instance.new("UIScale")
+    tileScale.Parent = tile
+    local iconFrame = Instance.new("Frame")
+    iconFrame.BackgroundColor3 = Theme.AccentSoft
+    iconFrame.Size = UDim2.fromOffset(42, 42)
+    iconFrame.Position = UDim2.fromOffset(10, 10)
+    iconFrame.Parent = tile
+    round(iconFrame, 12)
+    local iconLabel = textLabel(iconFrame, icon, UDim2.fromScale(1, 1), nil, 20, Theme.Accent, Enum.TextXAlignment.Center)
+    iconLabel.Font = Enum.Font.GothamBold
+    local titleLabel = textLabel(tile, title, UDim2.new(1, -72, 0, 26), UDim2.fromOffset(64, 7), 16, Theme.Text)
+    titleLabel.Font = Enum.Font.GothamSemibold
+    local detailLabel = textLabel(tile, description, UDim2.new(1, -72, 0, 20), UDim2.fromOffset(64, 32), 11, Theme.Muted)
+    tile.MouseEnter:Connect(function()
+        animate(tile, {BackgroundColor3 = Color3.fromRGB(224, 241, 255)}, 0.14)
+        animate(tileStroke, {Color = Theme.Accent, Transparency = 0.02}, 0.14)
+        animate(tileScale, {Scale = 1.015}, 0.14)
+    end)
+    tile.MouseLeave:Connect(function()
+        animate(tile, {BackgroundColor3 = Theme.Surface2}, 0.16)
+        animate(tileStroke, {Color = Color3.fromRGB(188, 220, 246), Transparency = 0.14}, 0.16)
+        animate(tileScale, {Scale = 1}, 0.16)
+    end)
+    tile.Activated:Connect(function()
+        showCategory(category)
+    end)
+end
+addHomeCategory("◎", "Aim", "Targeting, field of view and prediction", "Aim")
+addHomeCategory("◉", "Visuals", "Live player overlays and visual telemetry", "Visuals")
+addHomeCategory("↯", "Movement", "Movement and world-physics test controls", "Movement")
+addHomeCategory("◌", "World", "Camera, lighting and waypoint controls", "World")
+addHomeCategory("♙", "Players", "Select, inspect and observe live players", "Players")
+addHomeCategory("▦", "Catalog", "Your custom game-script collection", "Catalog")
+local CapabilityCard = createCard(HomePage, "Runtime")
 local capabilityLines = {}
 for key, value in pairs(capabilities) do
     table.insert(capabilityLines, key .. ": " .. (value and "Supported" or "Unsupported"))
 end
 table.sort(capabilityLines)
 addNote(CapabilityCard, table.concat(capabilityLines, "   •   "))
-local QuickCard = createCard(HomePage, "Quick Controls")
-addAction(QuickCard, "Emergency Reset", function(item)
-    State.Aim.Enabled = false
-    State.Visuals.Enabled = false
-    State.Movement.Speed = false
-    State.Movement.Jump = false
-    State.Movement.Fly = false
-    State.Movement.Noclip = false
-    State.Movement.Orbit = false
-    State.World.Freecam = false
-    restoreMovement()
-    applyWorld()
-    item.Text = "Reset Complete"
-    task.delay(1, function()
-        if item.Parent then item.Text = "Emergency Reset" end
-    end)
-end)
 
 local statusClock = 0
 trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
@@ -1516,8 +1711,8 @@ local function fetchBanner(entry)
         catalogStatus.Text = imageError
         return false
     end
-    ensureFolder("TasuAnticheatTest/Catalog/Banners")
-    local path = "TasuAnticheatTest/Catalog/Banners/" .. sanitizeName(entry.PlaceId) .. ".png"
+    ensureFolder("TasuHub/Catalog/Banners")
+    local path = "TasuHub/Catalog/Banners/" .. sanitizeName(entry.PlaceId) .. ".png"
     local writefile = resolveGlobal("writefile")
     local saved = pcall(writefile, path, imageBody)
     if not saved then
@@ -1663,8 +1858,8 @@ local function saveConfig(name)
     if not capabilities.Files or not capabilities.Folders then
         return false, "Filesystem unsupported"
     end
-    ensureFolder("TasuAnticheatTest/Configs")
-    local path = "TasuAnticheatTest/Configs/" .. sanitizeName(name) .. ".json"
+    ensureFolder("TasuHub/Configs")
+    local path = "TasuHub/Configs/" .. sanitizeName(name) .. ".json"
     local ok, encoded = pcall(HttpService.JSONEncode, HttpService, configPayload())
     if not ok then return false, encoded end
     local writefile = resolveGlobal("writefile")
@@ -1676,7 +1871,7 @@ local function loadConfig(name)
     if not capabilities.Files then
         return false, "Filesystem unsupported"
     end
-    local path = "TasuAnticheatTest/Configs/" .. sanitizeName(name) .. ".json"
+    local path = "TasuHub/Configs/" .. sanitizeName(name) .. ".json"
     local isfile = resolveGlobal("isfile")
     if type(isfile) == "function" and not isfile(path) then
         return false, "Config not found"
@@ -1715,7 +1910,7 @@ addAction(ConfigCard, "Reset to Defaults", function()
     restoreMovement()
     applyWorld()
     TopTitle.Text = State.Interface.Title
-    if env.TasuAnticheatTest then env.TasuAnticheatTest.State = State end
+    if env.TasuHub then env.TasuHub.State = State end
     refreshControls()
     updateCatalogStatus()
     configStatus.Text = "Defaults restored"
@@ -1766,14 +1961,14 @@ local function unload()
     for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
     for _, instance in ipairs(instances) do pcall(function() instance:Destroy() end) end
     if ScreenGui then pcall(function() ScreenGui:Destroy() end) end
-    if env.TasuAnticheatTest and env.TasuAnticheatTest.Unload == unload then
-        env.TasuAnticheatTest = nil
+    if env.TasuHub and env.TasuHub.Unload == unload then
+        env.TasuHub = nil
     end
 end
 
 addAction(RuntimeCard, "Unload Hub", unload)
 
-env.TasuAnticheatTest = {
+env.TasuHub = {
     Version = "1.0.0",
     State = State,
     Capabilities = capabilities,
