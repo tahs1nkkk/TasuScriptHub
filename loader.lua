@@ -219,7 +219,7 @@ local function getPlayerVisualColor(player)
             if typeof(attributeColor) == "Color3" then return attributeColor end
         end
     end
-    return Theme.Accent
+    return State.Interface.Accent
 end
 
 local function getMousePosition()
@@ -1587,21 +1587,30 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
         if camera then
             ensureFlyController(root)
             local direction = Vector3.zero
-            local forward = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
-            local right = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)
+            local forward = camera.CFrame.LookVector
+            local right = camera.CFrame.RightVector
             if forward.Magnitude > 0 then forward = forward.Unit end
             if right.Magnitude > 0 then right = right.Unit end
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + forward end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - forward end
             if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + right end
             if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - right end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.yAxis end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then direction = direction - Vector3.yAxis end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then
+                direction = direction + Vector3.yAxis
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.Q) or UserInputService:IsKeyDown(Enum.KeyCode.C) then
+                direction = direction - Vector3.yAxis
+            end
             if direction.Magnitude > 0 then direction = direction.Unit end
             humanoid.PlatformStand = true
             flyApplied = true
-            flyVelocity.Velocity = direction * State.Movement.FlySpeed
             flyGyro.CFrame = CFrame.lookAt(root.Position, root.Position + camera.CFrame.LookVector)
+            if State.Movement.FlyMethod == "CFrame" then
+                flyVelocity.Velocity = Vector3.zero
+                root.CFrame = root.CFrame + direction * State.Movement.FlySpeed * deltaTime
+            else
+                flyVelocity.Velocity = direction * State.Movement.FlySpeed
+            end
         end
     elseif flyApplied then
         clearFlyController()
@@ -1925,6 +1934,7 @@ local FlyCard = createCard(MovementPage, "Flight and Collision")
 addToggle(FlyCard, "Fly", function() return State.Movement.Fly end, function(value) State.Movement.Fly = value end)
 addCycle(FlyCard, "Fly Method", {"Velocity", "CFrame"}, function() return State.Movement.FlyMethod end, function(value) State.Movement.FlyMethod = value end)
 addSlider(FlyCard, "Fly Speed", 10, 250, function() return State.Movement.FlySpeed end, function(value) State.Movement.FlySpeed = value end)
+addParagraph(FlyCard, "WASD follows the camera. Space or E moves up; Ctrl, Q or C moves down.")
 addToggle(FlyCard, "Noclip", function() return State.Movement.Noclip end, function(value)
     State.Movement.Noclip = value
     if not value then restoreCollision() end
