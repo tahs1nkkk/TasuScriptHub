@@ -461,21 +461,27 @@ end
 
 local function makeDraggable(frame, handle)
     local dragging = false
+    local dragStart
+    local dragOrigin
     local targetPosition
     handle.Active = true
     trackConnection(handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            local framePosition = frame.AbsolutePosition
-            targetPosition = framePosition
-            frame.Position = UDim2.fromOffset(framePosition.X, framePosition.Y)
+            local pointer = input.Position
+            dragStart = Vector2.new(pointer.X, pointer.Y)
+            local absolute = frame.AbsolutePosition
+            dragOrigin = Vector2.new(absolute.X, absolute.Y)
+            targetPosition = dragOrigin
+            frame.Position = UDim2.fromOffset(dragOrigin.X, dragOrigin.Y)
         end
     end))
     trackConnection(UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and targetPosition then
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and dragOrigin then
+            local pointer = input.Position
+            local currentPointer = Vector2.new(pointer.X, pointer.Y)
             local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-			local mouseDelta = Vector2.new(input.Delta.X, input.Delta.Y)
-			local desired = targetPosition + mouseDelta
+            local desired = dragOrigin + (currentPointer - dragStart)
             local x = math.clamp(desired.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
             local y = math.clamp(desired.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
             targetPosition = Vector2.new(x, y)
@@ -484,6 +490,8 @@ local function makeDraggable(frame, handle)
     trackConnection(UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
+            dragStart = nil
+            dragOrigin = nil
         end
     end))
     trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
