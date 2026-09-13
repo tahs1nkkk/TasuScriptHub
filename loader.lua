@@ -1,0 +1,1789 @@
+local Defaults = {
+    Interface = {
+        Title = "Tasu Anticheat Test",
+        Accent = Color3.fromRGB(198, 202, 210),
+        Background = Color3.fromRGB(30, 31, 34),
+        Surface = Color3.fromRGB(40, 42, 46),
+        Surface2 = Color3.fromRGB(51, 53, 58),
+        Text = Color3.fromRGB(239, 241, 245),
+        Muted = Color3.fromRGB(157, 161, 170)
+    },
+    Aim = {
+        Enabled = false,
+        HoldRightMouse = true,
+        Method = "Camera",
+        TargetPart = "Head",
+        TeamCheck = false,
+        WallCheck = true,
+        AliveCheck = true,
+        Prediction = true,
+        PredictionTime = 0.12,
+        Smoothing = 0.18,
+        FOV = 180,
+        MaxDistance = 2000,
+        ShowFOV = true
+    },
+    Visuals = {
+        Enabled = false,
+        Boxes = true,
+        BoxFilled = false,
+        Names = true,
+        Distance = true,
+        Health = true,
+        HeadDot = false,
+        Tracers = false,
+        Chams = true,
+        Skeleton = false,
+        Offscreen = false,
+        TeamCheck = false,
+        MaxDistance = 2500,
+        Thickness = 1
+    },
+    Movement = {
+        Speed = false,
+        SpeedMethod = "WalkSpeed",
+        SpeedValue = 32,
+        Jump = false,
+        JumpValue = 80,
+        InfiniteJump = false,
+        BunnyHop = false,
+        Fly = false,
+        FlyMethod = "Velocity",
+        FlySpeed = 70,
+        Noclip = false,
+        ClickTP = false,
+        AntiFling = false,
+        Gravity = false,
+        GravityValue = 196.2,
+        Orbit = false,
+        OrbitRadius = 8,
+        OrbitSpeed = 2
+    },
+    World = {
+        Fullbright = false,
+        NoFog = false,
+        CameraFOV = 70,
+        ThirdPerson = false,
+        Freecam = false,
+        FreecamSpeed = 1.5
+    },
+    Catalog = {},
+    Waypoints = {}
+}
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+if not LocalPlayer then
+    return
+end
+
+local env = getgenv and getgenv() or _G
+if env.TasuAnticheatTest and type(env.TasuAnticheatTest.Unload) == "function" then
+    pcall(env.TasuAnticheatTest.Unload)
+end
+
+local function deepCopy(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local result = {}
+    for key, item in pairs(value) do
+        result[deepCopy(key)] = deepCopy(item)
+    end
+    return result
+end
+
+local State = deepCopy(Defaults)
+local connections = {}
+local featureConnections = {}
+local instances = {}
+local originalCollision = setmetatable({}, {__mode = "k"})
+local humanoidDefaults = setmetatable({}, {__mode = "k"})
+local originalLighting = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    FogEnd = Lighting.FogEnd,
+    FogStart = Lighting.FogStart,
+    GlobalShadows = Lighting.GlobalShadows,
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient
+}
+local originalGravity = Workspace.Gravity
+local originalCameraFOV = Workspace.CurrentCamera and Workspace.CurrentCamera.FieldOfView or 70
+local originalCameraMinZoom = LocalPlayer.CameraMinZoomDistance
+local originalCameraMaxZoom = LocalPlayer.CameraMaxZoomDistance
+Defaults.World.CameraFOV = originalCameraFOV
+State.World.CameraFOV = originalCameraFOV
+local selectedPlayer = nil
+local selectedWaypoint = 1
+local unloaded = false
+
+local function trackConnection(connection)
+    table.insert(connections, connection)
+    return connection
+end
+
+local function disconnectFeature(name)
+    local list = featureConnections[name]
+    if not list then
+        return
+    end
+    for _, connection in ipairs(list) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    featureConnections[name] = nil
+end
+
+local function trackFeature(name, connection)
+    featureConnections[name] = featureConnections[name] or {}
+    table.insert(featureConnections[name], connection)
+    return connection
+end
+
+local function trackInstance(instance)
+    table.insert(instances, instance)
+    return instance
+end
+
+local function getCharacter(player)
+    player = player or LocalPlayer
+    local character = player.Character
+    if not character then
+        return nil, nil, nil
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid and not humanoidDefaults[humanoid] then
+        humanoidDefaults[humanoid] = {
+            WalkSpeed = humanoid.WalkSpeed,
+            JumpPower = humanoid.JumpPower,
+            UseJumpPower = humanoid.UseJumpPower,
+            PlatformStand = humanoid.PlatformStand
+        }
+    end
+    local root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+    return character, humanoid, root
+end
+
+local function getAlive(player)
+    local character, humanoid, root = getCharacter(player)
+    return character and humanoid and root and humanoid.Health > 0, character, humanoid, root
+end
+
+local function getMousePosition()
+    local location = UserInputService:GetMouseLocation()
+    return Vector2.new(location.X, location.Y)
+end
+
+local function resolveGlobal(name)
+    local ok, value = pcall(function()
+        return env[name] or _G[name]
+    end)
+    if ok then
+        return value
+    end
+end
+
+local capabilities = {
+    Drawing = type(Drawing) == "table" and type(Drawing.new) == "function",
+    GetHui = type(resolveGlobal("gethui")) == "function",
+    MouseMove = type(resolveGlobal("mousemoverel")) == "function",
+    Files = type(resolveGlobal("writefile")) == "function" and type(resolveGlobal("readfile")) == "function",
+    Folders = type(resolveGlobal("makefolder")) == "function" and type(resolveGlobal("isfolder")) == "function",
+    Http = type(resolveGlobal("request")) == "function" or type(resolveGlobal("http_request")) == "function" or type(syn) == "table" and type(syn.request) == "function" or type(game.HttpGet) == "function",
+    CustomAsset = type(resolveGlobal("getcustomasset")) == "function" or type(resolveGlobal("getsynasset")) == "function",
+    LoadString = type(loadstring) == "function"
+}
+
+local function getRequest()
+    return resolveGlobal("request") or resolveGlobal("http_request") or type(syn) == "table" and syn.request
+end
+
+local function getCustomAsset(path)
+    local fn = resolveGlobal("getcustomasset") or resolveGlobal("getsynasset")
+    if fn then
+        local ok, value = pcall(fn, path)
+        if ok then
+            return value
+        end
+    end
+end
+
+local function ensureFolder(path)
+    if not capabilities.Folders then
+        return false
+    end
+    local isfolder = resolveGlobal("isfolder")
+    local makefolder = resolveGlobal("makefolder")
+    local current = ""
+    for part in string.gmatch(path, "[^/]+") do
+        current = current == "" and part or current .. "/" .. part
+        if not isfolder(current) then
+            local ok = pcall(makefolder, current)
+            if not ok then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+local guiParent
+local gethui = resolveGlobal("gethui")
+if type(gethui) == "function" then
+    local ok, value = pcall(gethui)
+    if ok and value then
+        guiParent = value
+    end
+end
+guiParent = guiParent or CoreGui
+
+local Theme = State.Interface
+local ScreenGui = trackInstance(Instance.new("ScreenGui"))
+ScreenGui.Name = "TasuAnticheatTest"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = guiParent
+
+local function round(object, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius or 6)
+    corner.Parent = object
+    return corner
+end
+
+local function stroke(object, color, thickness, transparency)
+    local item = Instance.new("UIStroke")
+    item.Color = color or Theme.Accent
+    item.Thickness = thickness or 1
+    item.Transparency = transparency or 0
+    item.Parent = object
+    return item
+end
+
+local function textLabel(parent, text, size, position, textSize, color, alignment)
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Text = text or ""
+    label.TextColor3 = color or Theme.Text
+    label.TextSize = textSize or 13
+    label.Font = Enum.Font.Gotham
+    label.TextXAlignment = alignment or Enum.TextXAlignment.Left
+    label.Size = size or UDim2.new(1, 0, 0, 24)
+    label.Position = position or UDim2.new()
+    label.Parent = parent
+    return label
+end
+
+local function button(parent, text, size, position)
+    local item = Instance.new("TextButton")
+    item.AutoButtonColor = false
+    item.BackgroundColor3 = Theme.Surface2
+    item.Text = text
+    item.TextColor3 = Theme.Text
+    item.TextSize = 12
+    item.Font = Enum.Font.GothamMedium
+    item.Size = size or UDim2.new(0, 100, 0, 28)
+    item.Position = position or UDim2.new()
+    round(item, 5)
+    stroke(item, Color3.fromRGB(77, 80, 87), 1, 0.25)
+    item.MouseEnter:Connect(function()
+        TweenService:Create(item, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(62, 65, 71)}):Play()
+    end)
+    item.MouseLeave:Connect(function()
+        TweenService:Create(item, TweenInfo.new(0.12), {BackgroundColor3 = Theme.Surface2}):Play()
+    end)
+    item.Parent = parent
+    return item
+end
+
+local function makeDraggable(frame, handle)
+    local dragging = false
+    local dragStart
+    local startPosition
+    trackConnection(handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPosition = frame.AbsolutePosition
+        end
+    end))
+    trackConnection(UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+            local x = math.clamp(startPosition.X + delta.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
+            local y = math.clamp(startPosition.Y + delta.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
+            frame.Position = UDim2.fromOffset(x, y)
+        end
+    end))
+    trackConnection(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end))
+end
+
+local TopBar = Instance.new("Frame")
+TopBar.Name = "CategoryBar"
+TopBar.BackgroundColor3 = Theme.Background
+TopBar.Size = UDim2.fromOffset(920, 42)
+TopBar.Position = UDim2.new(0.5, -460, 0, 12)
+TopBar.Parent = ScreenGui
+round(TopBar, 8)
+stroke(TopBar, Theme.Accent, 1, 0.45)
+
+local DragGrip = Instance.new("Frame")
+DragGrip.BackgroundTransparency = 1
+DragGrip.Size = UDim2.fromOffset(150, 42)
+DragGrip.Parent = TopBar
+
+local TopTitle = textLabel(DragGrip, Theme.Title, UDim2.new(1, -8, 1, 0), UDim2.fromOffset(10, 0), 12, Theme.Text)
+TopTitle.Font = Enum.Font.GothamSemibold
+
+local CategoryScroller = Instance.new("ScrollingFrame")
+CategoryScroller.BackgroundTransparency = 1
+CategoryScroller.BorderSizePixel = 0
+CategoryScroller.ScrollBarThickness = 2
+CategoryScroller.ScrollBarImageColor3 = Theme.Accent
+CategoryScroller.ScrollingDirection = Enum.ScrollingDirection.X
+CategoryScroller.Size = UDim2.new(1, -160, 1, 0)
+CategoryScroller.Position = UDim2.fromOffset(155, 0)
+CategoryScroller.CanvasSize = UDim2.fromOffset(850, 0)
+CategoryScroller.Parent = TopBar
+
+local CategoryLayout = Instance.new("UIListLayout")
+CategoryLayout.FillDirection = Enum.FillDirection.Horizontal
+CategoryLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+CategoryLayout.Padding = UDim.new(0, 5)
+CategoryLayout.Parent = CategoryScroller
+
+local ContentWindow = Instance.new("Frame")
+ContentWindow.Name = "ContentWindow"
+ContentWindow.BackgroundColor3 = Theme.Background
+ContentWindow.Size = UDim2.fromOffset(680, 440)
+ContentWindow.Position = UDim2.new(0.5, -340, 0, 64)
+ContentWindow.Parent = ScreenGui
+round(ContentWindow, 8)
+stroke(ContentWindow, Theme.Accent, 1, 0.45)
+
+local WindowHeader = Instance.new("Frame")
+WindowHeader.BackgroundColor3 = Theme.Surface
+WindowHeader.Size = UDim2.new(1, 0, 0, 38)
+WindowHeader.Parent = ContentWindow
+round(WindowHeader, 8)
+
+local HeaderMask = Instance.new("Frame")
+HeaderMask.BorderSizePixel = 0
+HeaderMask.BackgroundColor3 = Theme.Surface
+HeaderMask.Position = UDim2.new(0, 0, 1, -8)
+HeaderMask.Size = UDim2.new(1, 0, 0, 8)
+HeaderMask.Parent = WindowHeader
+
+local WindowTitle = textLabel(WindowHeader, "Home", UDim2.new(1, -50, 1, 0), UDim2.fromOffset(14, 0), 14, Theme.Text)
+WindowTitle.Font = Enum.Font.GothamSemibold
+
+local CloseButton = button(WindowHeader, "×", UDim2.fromOffset(30, 26), UDim2.new(1, -36, 0, 6))
+CloseButton.TextSize = 18
+
+local PageHost = Instance.new("Frame")
+PageHost.BackgroundTransparency = 1
+PageHost.ClipsDescendants = true
+PageHost.Size = UDim2.new(1, -16, 1, -50)
+PageHost.Position = UDim2.fromOffset(8, 44)
+PageHost.Parent = ContentWindow
+
+makeDraggable(TopBar, DragGrip)
+makeDraggable(ContentWindow, WindowHeader)
+
+local pages = {}
+local categoryButtons = {}
+local controlRefreshers = {}
+local currentCategory = "Home"
+
+local function refreshControls()
+    for _, refresh in ipairs(controlRefreshers) do
+        pcall(refresh)
+    end
+end
+
+local function createPage(name)
+    local page = Instance.new("ScrollingFrame")
+    page.Name = name
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 4
+    page.ScrollBarImageColor3 = Theme.Accent
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Size = UDim2.fromScale(1, 1)
+    page.Visible = false
+    page.Parent = PageHost
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 7)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = page
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 4)
+    padding.PaddingRight = UDim.new(0, 8)
+    padding.PaddingTop = UDim.new(0, 4)
+    padding.PaddingBottom = UDim.new(0, 8)
+    padding.Parent = page
+    pages[name] = page
+    return page
+end
+
+local function createCard(page, title)
+    local card = Instance.new("Frame")
+    card.BackgroundColor3 = Theme.Surface
+    card.Size = UDim2.new(1, -4, 0, 42)
+    card.AutomaticSize = Enum.AutomaticSize.Y
+    card.Parent = page
+    round(card, 7)
+    stroke(card, Color3.fromRGB(71, 74, 80), 1, 0.35)
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 6)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = card
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 10)
+    padding.PaddingRight = UDim.new(0, 10)
+    padding.PaddingTop = UDim.new(0, 9)
+    padding.PaddingBottom = UDim.new(0, 10)
+    padding.Parent = card
+    local heading = textLabel(card, title, UDim2.new(1, 0, 0, 22), nil, 13, Theme.Accent)
+    heading.Font = Enum.Font.GothamSemibold
+    heading.LayoutOrder = 0
+    return card
+end
+
+local function addNote(card, text)
+    local label = textLabel(card, text, UDim2.new(1, 0, 0, 34), nil, 11, Theme.Muted)
+    label.TextWrapped = true
+    label.AutomaticSize = Enum.AutomaticSize.Y
+    return label
+end
+
+local function addAction(card, text, callback)
+    local item = button(card, text, UDim2.new(1, 0, 0, 30))
+    item.Activated:Connect(function()
+        pcall(callback, item)
+    end)
+    return item
+end
+
+local function addInput(card, placeholder, defaultText, callback, multiLine)
+    local input = Instance.new("TextBox")
+    input.BackgroundColor3 = Theme.Surface2
+    input.ClearTextOnFocus = false
+    input.PlaceholderText = placeholder
+    input.PlaceholderColor3 = Theme.Muted
+    input.Text = defaultText or ""
+    input.TextColor3 = Theme.Text
+    input.TextSize = 12
+    input.Font = Enum.Font.Gotham
+    input.TextXAlignment = Enum.TextXAlignment.Left
+    input.MultiLine = multiLine or false
+    input.TextWrapped = multiLine or false
+    input.Size = UDim2.new(1, 0, 0, multiLine and 70 or 30)
+    input.Parent = card
+    round(input, 5)
+    stroke(input, Color3.fromRGB(75, 78, 84), 1, 0.35)
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 8)
+    padding.PaddingRight = UDim.new(0, 8)
+    padding.Parent = input
+    if callback then
+        input.FocusLost:Connect(function(enterPressed)
+            pcall(callback, input.Text, enterPressed, input)
+        end)
+    end
+    return input
+end
+
+local function addToggle(card, text, getter, setter)
+    local row = Instance.new("Frame")
+    row.BackgroundTransparency = 1
+    row.Size = UDim2.new(1, 0, 0, 28)
+    row.Parent = card
+    local label = textLabel(row, text, UDim2.new(1, -60, 1, 0), nil, 12, Theme.Text)
+    local toggle = Instance.new("TextButton")
+    toggle.AutoButtonColor = false
+    toggle.Text = ""
+    toggle.Size = UDim2.fromOffset(44, 22)
+    toggle.Position = UDim2.new(1, -44, 0.5, -11)
+    toggle.Parent = row
+    round(toggle, 11)
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.Position = UDim2.fromOffset(3, 3)
+    knob.BackgroundColor3 = Theme.Text
+    knob.Parent = toggle
+    round(knob, 8)
+    local function render()
+        local enabled = getter()
+        toggle.BackgroundColor3 = enabled and Theme.Accent or Color3.fromRGB(72, 75, 82)
+        knob.BackgroundColor3 = enabled and Theme.Background or Theme.Text
+        TweenService:Create(knob, TweenInfo.new(0.12), {Position = enabled and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)}):Play()
+    end
+    table.insert(controlRefreshers, render)
+    toggle.Activated:Connect(function()
+        setter(not getter())
+        render()
+    end)
+    render()
+    return {Render = render, Row = row, Label = label}
+end
+
+local function addSlider(card, text, minimum, maximum, getter, setter, decimals)
+    local holder = Instance.new("Frame")
+    holder.BackgroundTransparency = 1
+    holder.Size = UDim2.new(1, 0, 0, 48)
+    holder.Parent = card
+    local title = textLabel(holder, text, UDim2.new(1, -70, 0, 22), nil, 12, Theme.Text)
+    local valueLabel = textLabel(holder, "", UDim2.fromOffset(65, 22), UDim2.new(1, -65, 0, 0), 11, Theme.Muted, Enum.TextXAlignment.Right)
+    local bar = Instance.new("Frame")
+    bar.BackgroundColor3 = Color3.fromRGB(69, 72, 78)
+    bar.Size = UDim2.new(1, 0, 0, 6)
+    bar.Position = UDim2.new(0, 0, 1, -11)
+    bar.Parent = holder
+    round(bar, 3)
+    local fill = Instance.new("Frame")
+    fill.BackgroundColor3 = Theme.Accent
+    fill.Size = UDim2.fromScale(0, 1)
+    fill.Parent = bar
+    round(fill, 3)
+    local dragging = false
+    local precision = decimals or 0
+    local function render()
+        local value = math.clamp(tonumber(getter()) or minimum, minimum, maximum)
+        fill.Size = UDim2.fromScale((value - minimum) / (maximum - minimum), 1)
+        valueLabel.Text = string.format("%." .. precision .. "f", value)
+    end
+    table.insert(controlRefreshers, render)
+    local function update(input)
+        local ratio = math.clamp((input.Position.X - bar.AbsolutePosition.X) / math.max(1, bar.AbsoluteSize.X), 0, 1)
+        local value = minimum + (maximum - minimum) * ratio
+        local factor = 10 ^ precision
+        value = math.floor(value * factor + 0.5) / factor
+        setter(value)
+        render()
+    end
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            update(input)
+        end
+    end)
+    trackConnection(UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            update(input)
+        end
+    end))
+    trackConnection(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end))
+    render()
+    return {Render = render, Holder = holder, Title = title}
+end
+
+local function addCycle(card, text, values, getter, setter)
+    local item = addAction(card, "", function(buttonItem)
+        local current = getter()
+        local index = table.find(values, current) or 1
+        index = index % #values + 1
+        setter(values[index])
+        buttonItem.Text = text .. ": " .. tostring(values[index])
+    end)
+    local function render()
+        item.Text = text .. ": " .. tostring(getter())
+    end
+    table.insert(controlRefreshers, render)
+    render()
+    return item
+end
+
+local categories = {"Home", "Aim", "Visuals", "Movement", "World", "Players", "Catalog", "Explorer", "Configs", "Settings"}
+for _, name in ipairs(categories) do
+    createPage(name)
+    local categoryButton = button(CategoryScroller, name, UDim2.fromOffset(78, 28))
+    categoryButton.LayoutOrder = #categoryButtons + 1
+    categoryButtons[name] = categoryButton
+end
+
+local function showCategory(name)
+    if not pages[name] then
+        return
+    end
+    currentCategory = name
+    ContentWindow.Visible = true
+    WindowTitle.Text = name
+    for pageName, page in pairs(pages) do
+        page.Visible = pageName == name
+    end
+    for buttonName, item in pairs(categoryButtons) do
+        item.BackgroundColor3 = buttonName == name and Theme.Accent or Theme.Surface2
+        item.TextColor3 = buttonName == name and Theme.Background or Theme.Text
+    end
+end
+
+for name, item in pairs(categoryButtons) do
+    item.Activated:Connect(function()
+        showCategory(name)
+    end)
+end
+
+CloseButton.Activated:Connect(function()
+    ContentWindow.Visible = false
+end)
+
+local FOVCircle = Instance.new("Frame")
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Visible = false
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.ZIndex = 3
+FOVCircle.Parent = ScreenGui
+round(FOVCircle, 1000)
+local FOVStroke = stroke(FOVCircle, Theme.Accent, 1, 0.15)
+
+local function isVisibleTarget(character, targetPart)
+    if not State.Aim.WallCheck then
+        return true
+    end
+    local camera = Workspace.CurrentCamera
+    local localCharacter = LocalPlayer.Character
+    if not camera or not targetPart then
+        return false
+    end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {localCharacter, camera}
+    params.IgnoreWater = true
+    local direction = targetPart.Position - camera.CFrame.Position
+    local result = Workspace:Raycast(camera.CFrame.Position, direction, params)
+    return not result or result.Instance:IsDescendantOf(character)
+end
+
+local function chooseTarget()
+    local camera = Workspace.CurrentCamera
+    if not camera then
+        return nil
+    end
+    local mousePosition = getMousePosition()
+    local best
+    local bestScore = State.Aim.FOV
+    local _, _, localRoot = getCharacter(LocalPlayer)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local alive, character, humanoid, root = getAlive(player)
+            if alive and (not State.Aim.TeamCheck or player.Team ~= LocalPlayer.Team or player.Team == nil) then
+                local targetPart = character:FindFirstChild(State.Aim.TargetPart) or character:FindFirstChild("Head") or root
+                if targetPart then
+                    local worldDistance = localRoot and (root.Position - localRoot.Position).Magnitude or math.huge
+                    local screen, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+                    if onScreen and screen.Z > 0 and worldDistance <= State.Aim.MaxDistance then
+                        local score = (Vector2.new(screen.X, screen.Y) - mousePosition).Magnitude
+                        if score < bestScore and isVisibleTarget(character, targetPart) then
+                            bestScore = score
+                            best = {Player = player, Character = character, Humanoid = humanoid, Root = root, Part = targetPart}
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local currentTarget
+local mousemoverel = resolveGlobal("mousemoverel")
+trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
+    local mousePosition = getMousePosition()
+    local diameter = State.Aim.FOV * 2
+    FOVCircle.Size = UDim2.fromOffset(diameter, diameter)
+    FOVCircle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
+    FOVCircle.Visible = State.Aim.Enabled and State.Aim.ShowFOV
+    if not State.Aim.Enabled then
+        currentTarget = nil
+        return
+    end
+    if State.Aim.HoldRightMouse and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        currentTarget = nil
+        return
+    end
+    currentTarget = chooseTarget()
+    local camera = Workspace.CurrentCamera
+    if not currentTarget or not camera then
+        return
+    end
+    local aimPosition = currentTarget.Part.Position
+    if State.Aim.Prediction then
+        aimPosition = aimPosition + currentTarget.Root.AssemblyLinearVelocity * State.Aim.PredictionTime
+    end
+    if State.Aim.Method == "Mouse" and type(mousemoverel) == "function" then
+        local screen = camera:WorldToViewportPoint(aimPosition)
+        local delta = Vector2.new(screen.X, screen.Y) - mousePosition
+        local factor = math.clamp(1 - State.Aim.Smoothing, 0.02, 1)
+        pcall(mousemoverel, delta.X * factor, delta.Y * factor)
+    else
+        local goal = CFrame.lookAt(camera.CFrame.Position, aimPosition)
+        local factor = math.clamp((1 - State.Aim.Smoothing) * deltaTime * 60, 0.01, 1)
+        camera.CFrame = camera.CFrame:Lerp(goal, factor)
+    end
+end))
+
+local espRecords = {}
+
+local function newLine(parent, color)
+    local line = Instance.new("Frame")
+    line.AnchorPoint = Vector2.new(0, 0.5)
+    line.BorderSizePixel = 0
+    line.BackgroundColor3 = color or Theme.Accent
+    line.Size = UDim2.fromOffset(0, State.Visuals.Thickness)
+    line.Visible = false
+    line.ZIndex = 2
+    line.Parent = parent
+    return line
+end
+
+local function setLine(line, from, to, thickness)
+    local difference = to - from
+    local length = difference.Magnitude
+    line.Position = UDim2.fromOffset(from.X, from.Y)
+    line.Size = UDim2.fromOffset(length, thickness or 1)
+    line.Rotation = math.deg(math.atan2(difference.Y, difference.X))
+    line.Visible = true
+end
+
+local function destroyESP(player)
+    local record = espRecords[player]
+    if not record then
+        return
+    end
+    for _, object in pairs(record) do
+        if typeof(object) == "Instance" then
+            pcall(function()
+                object:Destroy()
+            end)
+        end
+    end
+    espRecords[player] = nil
+end
+
+local function createESP(player)
+    destroyESP(player)
+    local record = {
+        BoxTop = newLine(ScreenGui),
+        BoxBottom = newLine(ScreenGui),
+        BoxLeft = newLine(ScreenGui),
+        BoxRight = newLine(ScreenGui),
+        BoxFill = Instance.new("Frame"),
+        HealthBg = newLine(ScreenGui, Color3.fromRGB(25, 25, 27)),
+        HealthBar = newLine(ScreenGui, Color3.fromRGB(100, 230, 130)),
+        Tracer = newLine(ScreenGui),
+        HeadDot = Instance.new("Frame"),
+        SkeletonLayer = Instance.new("Frame"),
+        Arrow = textLabel(ScreenGui, "▲", UDim2.fromOffset(22, 22), nil, 18, Theme.Accent, Enum.TextXAlignment.Center),
+        Label = textLabel(ScreenGui, "", UDim2.fromOffset(180, 18), nil, 11, Theme.Text, Enum.TextXAlignment.Center),
+        Highlight = Instance.new("Highlight")
+    }
+    record.BoxFill.BorderSizePixel = 0
+    record.BoxFill.BackgroundColor3 = Theme.Accent
+    record.BoxFill.BackgroundTransparency = 0.82
+    record.BoxFill.Visible = false
+    record.BoxFill.ZIndex = 1
+    record.BoxFill.Parent = ScreenGui
+    record.HeadDot.AnchorPoint = Vector2.new(0.5, 0.5)
+    record.HeadDot.BorderSizePixel = 0
+    record.HeadDot.BackgroundColor3 = Theme.Accent
+    record.HeadDot.Size = UDim2.fromOffset(6, 6)
+    record.HeadDot.Visible = false
+    record.HeadDot.ZIndex = 3
+    record.HeadDot.Parent = ScreenGui
+    round(record.HeadDot, 6)
+    record.SkeletonLayer.BackgroundTransparency = 1
+    record.SkeletonLayer.Size = UDim2.fromScale(1, 1)
+    record.SkeletonLayer.Visible = false
+    record.SkeletonLayer.ZIndex = 2
+    record.SkeletonLayer.Parent = ScreenGui
+    for _ = 1, 15 do newLine(record.SkeletonLayer) end
+    record.Arrow.AnchorPoint = Vector2.new(0.5, 0.5)
+    record.Arrow.Visible = false
+    record.Arrow.ZIndex = 4
+    record.Label.AnchorPoint = Vector2.new(0.5, 1)
+    record.Label.Visible = false
+    record.Label.ZIndex = 3
+    record.Highlight.FillColor = Theme.Accent
+    record.Highlight.OutlineColor = Theme.Text
+    record.Highlight.FillTransparency = 0.75
+    record.Highlight.OutlineTransparency = 0.1
+    record.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    record.Highlight.Enabled = false
+    record.Highlight.Parent = ScreenGui
+    espRecords[player] = record
+    return record
+end
+
+local function updateSkeleton(record, character, camera, color)
+    local pairsToDraw
+    if character:FindFirstChild("UpperTorso") then
+        pairsToDraw = {
+            {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+            {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+            {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+            {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+            {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+        }
+    else
+        pairsToDraw = {
+            {"Head", "Torso"}, {"Torso", "Left Arm"}, {"Torso", "Right Arm"},
+            {"Torso", "Left Leg"}, {"Torso", "Right Leg"}
+        }
+    end
+    local lines = record.SkeletonLayer:GetChildren()
+    local used = 0
+    for _, pair in ipairs(pairsToDraw) do
+        local first = character:FindFirstChild(pair[1])
+        local second = character:FindFirstChild(pair[2])
+        if first and second then
+            local a, visibleA = camera:WorldToViewportPoint(first.Position)
+            local b, visibleB = camera:WorldToViewportPoint(second.Position)
+            if visibleA and visibleB and a.Z > 0 and b.Z > 0 then
+                used = used + 1
+                local line = lines[used]
+                if line then
+                    line.BackgroundColor3 = color
+                    setLine(line, Vector2.new(a.X, a.Y), Vector2.new(b.X, b.Y), State.Visuals.Thickness)
+                end
+            end
+        end
+    end
+    for index = used + 1, #lines do
+        if lines[index]:IsA("GuiObject") then lines[index].Visible = false end
+    end
+    record.SkeletonLayer.Visible = used > 0
+end
+
+local function hideRecord(record)
+    for key, object in pairs(record) do
+        if key == "Highlight" then
+            object.Enabled = false
+        elseif object:IsA("GuiObject") then
+            object.Visible = false
+        end
+    end
+end
+
+trackFeature("ESP", RunService.RenderStepped:Connect(function()
+    local camera = Workspace.CurrentCamera
+    if not camera then
+        return
+    end
+    local localAlive, _, _, localRoot = getAlive(LocalPlayer)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local record = espRecords[player] or createESP(player)
+            if not State.Visuals.Enabled then
+                hideRecord(record)
+            else
+                local alive, character, humanoid, root = getAlive(player)
+                local allowed = alive and (not State.Visuals.TeamCheck or player.Team ~= LocalPlayer.Team or player.Team == nil)
+                local distance = localAlive and localRoot and root and (root.Position - localRoot.Position).Magnitude or math.huge
+                if not allowed or distance > State.Visuals.MaxDistance then
+                    hideRecord(record)
+                else
+                    local cframe, size = character:GetBoundingBox()
+                    local topWorld = cframe.Position + Vector3.new(0, size.Y * 0.55, 0)
+                    local bottomWorld = cframe.Position - Vector3.new(0, size.Y * 0.55, 0)
+                    local topScreen, topVisible = camera:WorldToViewportPoint(topWorld)
+                    local bottomScreen, bottomVisible = camera:WorldToViewportPoint(bottomWorld)
+                    if not topVisible and not bottomVisible or topScreen.Z <= 0 or bottomScreen.Z <= 0 then
+                        hideRecord(record)
+                        if State.Visuals.Offscreen then
+                            local rootScreen = camera:WorldToViewportPoint(root.Position)
+                            local center = camera.ViewportSize * 0.5
+                            local direction = Vector2.new(rootScreen.X, rootScreen.Y) - center
+                            if rootScreen.Z < 0 then direction = -direction end
+                            if direction.Magnitude > 0 then
+                                local edge = center + direction.Unit * math.min(center.X, center.Y) * 0.82
+                                record.Arrow.Position = UDim2.fromOffset(edge.X, edge.Y)
+                                record.Arrow.Rotation = math.deg(math.atan2(direction.Y, direction.X)) + 90
+                                record.Arrow.TextColor3 = player.Team and player.Team.TeamColor.Color or Theme.Accent
+                                record.Arrow.Visible = true
+                            end
+                        end
+                    else
+                        local height = math.abs(bottomScreen.Y - topScreen.Y)
+                        local width = math.max(16, height * 0.55)
+                        local centerX = (topScreen.X + bottomScreen.X) * 0.5
+                        local left = centerX - width * 0.5
+                        local right = centerX + width * 0.5
+                        local top = math.min(topScreen.Y, bottomScreen.Y)
+                        local bottom = math.max(topScreen.Y, bottomScreen.Y)
+                        local color = player.Team and player.Team.TeamColor.Color or Theme.Accent
+                        record.Arrow.Visible = false
+                        for _, line in ipairs({record.BoxTop, record.BoxBottom, record.BoxLeft, record.BoxRight, record.Tracer}) do
+                            line.BackgroundColor3 = color
+                        end
+                        if State.Visuals.Boxes then
+                            setLine(record.BoxTop, Vector2.new(left, top), Vector2.new(right, top), State.Visuals.Thickness)
+                            setLine(record.BoxBottom, Vector2.new(left, bottom), Vector2.new(right, bottom), State.Visuals.Thickness)
+                            setLine(record.BoxLeft, Vector2.new(left, top), Vector2.new(left, bottom), State.Visuals.Thickness)
+                            setLine(record.BoxRight, Vector2.new(right, top), Vector2.new(right, bottom), State.Visuals.Thickness)
+                        else
+                            record.BoxTop.Visible = false
+                            record.BoxBottom.Visible = false
+                            record.BoxLeft.Visible = false
+                            record.BoxRight.Visible = false
+                        end
+                        record.BoxFill.Position = UDim2.fromOffset(left, top)
+                        record.BoxFill.Size = UDim2.fromOffset(width, height)
+                        record.BoxFill.BackgroundColor3 = color
+                        record.BoxFill.Visible = State.Visuals.Boxes and State.Visuals.BoxFilled
+                        if State.Visuals.Health then
+                            local ratio = math.clamp(humanoid.Health / math.max(1, humanoid.MaxHealth), 0, 1)
+                            local barX = left - 6
+                            setLine(record.HealthBg, Vector2.new(barX, bottom), Vector2.new(barX, top), 4)
+                            local healthTop = bottom - height * ratio
+                            setLine(record.HealthBar, Vector2.new(barX, bottom), Vector2.new(barX, healthTop), 2)
+                            record.HealthBar.BackgroundColor3 = Color3.fromRGB(235, 70, 70):Lerp(Color3.fromRGB(80, 235, 120), ratio)
+                        else
+                            record.HealthBg.Visible = false
+                            record.HealthBar.Visible = false
+                        end
+                        record.Label.Text = (State.Visuals.Names and player.DisplayName or "") .. (State.Visuals.Distance and string.format("  [%.0f]", distance) or "")
+                        record.Label.Position = UDim2.fromOffset(centerX, top - 3)
+                        record.Label.Visible = State.Visuals.Names or State.Visuals.Distance
+                        local head = character:FindFirstChild("Head")
+                        if State.Visuals.HeadDot and head then
+                            local headScreen, headVisible = camera:WorldToViewportPoint(head.Position)
+                            record.HeadDot.Position = UDim2.fromOffset(headScreen.X, headScreen.Y)
+                            record.HeadDot.BackgroundColor3 = color
+                            record.HeadDot.Visible = headVisible and headScreen.Z > 0
+                        else
+                            record.HeadDot.Visible = false
+                        end
+                        if State.Visuals.Skeleton then
+                            updateSkeleton(record, character, camera, color)
+                        else
+                            record.SkeletonLayer.Visible = false
+                        end
+                        if State.Visuals.Tracers then
+                            setLine(record.Tracer, Vector2.new(camera.ViewportSize.X * 0.5, camera.ViewportSize.Y), Vector2.new(centerX, bottom), State.Visuals.Thickness)
+                        else
+                            record.Tracer.Visible = false
+                        end
+                        record.Highlight.Adornee = character
+                        record.Highlight.FillColor = color
+                        record.Highlight.Enabled = State.Visuals.Chams
+                    end
+                end
+            end
+        end
+    end
+end))
+
+trackConnection(Players.PlayerRemoving:Connect(destroyESP))
+
+local freecamState
+local flyApplied = false
+local movementClock = 0
+trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
+    movementClock = movementClock + deltaTime
+    local alive, character, humanoid, root = getAlive(LocalPlayer)
+    if not alive then
+        return
+    end
+    if State.Movement.Speed then
+        if State.Movement.SpeedMethod == "WalkSpeed" then
+            humanoid.WalkSpeed = State.Movement.SpeedValue
+        elseif State.Movement.SpeedMethod == "Velocity" then
+            local direction = humanoid.MoveDirection
+            root.AssemblyLinearVelocity = Vector3.new(direction.X * State.Movement.SpeedValue, root.AssemblyLinearVelocity.Y, direction.Z * State.Movement.SpeedValue)
+        elseif humanoid.MoveDirection.Magnitude > 0 then
+            root.CFrame = root.CFrame + humanoid.MoveDirection * State.Movement.SpeedValue * deltaTime
+        end
+    end
+    if State.Movement.Jump then
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = State.Movement.JumpValue
+    end
+    if State.Movement.BunnyHop and humanoid.MoveDirection.Magnitude > 0 and humanoid.FloorMaterial ~= Enum.Material.Air then
+        humanoid.Jump = true
+    end
+    if State.Movement.Fly then
+        local camera = Workspace.CurrentCamera
+        if camera then
+            local direction = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.yAxis end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then direction = direction - Vector3.yAxis end
+            if direction.Magnitude > 0 then direction = direction.Unit end
+            humanoid.PlatformStand = true
+            flyApplied = true
+            if State.Movement.FlyMethod == "CFrame" then
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.CFrame = root.CFrame + direction * State.Movement.FlySpeed * deltaTime
+            else
+                root.AssemblyLinearVelocity = direction * State.Movement.FlySpeed
+            end
+        end
+    elseif flyApplied then
+        humanoid.PlatformStand = humanoidDefaults[humanoid] and humanoidDefaults[humanoid].PlatformStand or false
+        flyApplied = false
+    end
+    if State.Movement.Noclip then
+        for _, descendant in ipairs(character:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                if originalCollision[descendant] == nil then
+                    originalCollision[descendant] = descendant.CanCollide
+                end
+                descendant.CanCollide = false
+            end
+        end
+    end
+    if State.Movement.AntiFling then
+        if root.AssemblyLinearVelocity.Magnitude > 250 then
+            root.AssemblyLinearVelocity = Vector3.zero
+        end
+        if root.AssemblyAngularVelocity.Magnitude > 120 then
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+    end
+    if State.Movement.Orbit and selectedPlayer then
+        local targetAlive, _, _, targetRoot = getAlive(selectedPlayer)
+        if targetAlive then
+            local angle = movementClock * State.Movement.OrbitSpeed
+            root.CFrame = CFrame.lookAt(targetRoot.Position + Vector3.new(math.cos(angle) * State.Movement.OrbitRadius, 1.5, math.sin(angle) * State.Movement.OrbitRadius), targetRoot.Position)
+        end
+    end
+end))
+
+trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
+    local camera = Workspace.CurrentCamera
+    if not camera then
+        return
+    end
+    camera.FieldOfView = State.World.CameraFOV
+    LocalPlayer.CameraMinZoomDistance = originalCameraMinZoom
+    LocalPlayer.CameraMaxZoomDistance = State.World.ThirdPerson and math.max(40, originalCameraMaxZoom) or originalCameraMaxZoom
+    if State.World.Freecam then
+        if not freecamState then
+            local pitch, yaw = camera.CFrame:ToOrientation()
+            freecamState = {Position = camera.CFrame.Position, Pitch = pitch, Yaw = yaw, Type = camera.CameraType, Subject = camera.CameraSubject}
+            camera.CameraType = Enum.CameraType.Scriptable
+        end
+        if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+            local mouseDelta = UserInputService:GetMouseDelta()
+            freecamState.Yaw = freecamState.Yaw - mouseDelta.X * 0.0025
+            freecamState.Pitch = math.clamp(freecamState.Pitch - mouseDelta.Y * 0.0025, -1.5, 1.5)
+        end
+        local rotation = CFrame.fromOrientation(freecamState.Pitch, freecamState.Yaw, 0)
+        local direction = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + rotation.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - rotation.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + rotation.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - rotation.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.yAxis end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then direction = direction - Vector3.yAxis end
+        if direction.Magnitude > 0 then
+            freecamState.Position = freecamState.Position + direction.Unit * State.World.FreecamSpeed * 60 * deltaTime
+        end
+        camera.CFrame = CFrame.new(freecamState.Position) * rotation
+    elseif freecamState then
+        camera.CameraType = freecamState.Type or Enum.CameraType.Custom
+        camera.CameraSubject = freecamState.Subject
+        freecamState = nil
+    end
+end))
+
+trackConnection(UserInputService.JumpRequest:Connect(function()
+    if State.Movement.InfiniteJump then
+        local _, humanoid = getCharacter(LocalPlayer)
+        if humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end))
+
+trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then
+        return
+    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and State.Movement.ClickTP and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+        local camera = Workspace.CurrentCamera
+        local _, _, root = getCharacter(LocalPlayer)
+        if camera and root then
+            local mouse = LocalPlayer:GetMouse()
+            local ray = camera:ViewportPointToRay(mouse.X, mouse.Y)
+            local params = RaycastParams.new()
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            params.FilterDescendantsInstances = {LocalPlayer.Character}
+            local result = Workspace:Raycast(ray.Origin, ray.Direction * 10000, params)
+            if result then
+                root.CFrame = CFrame.new(result.Position + Vector3.new(0, 3, 0))
+            end
+        end
+    end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        ContentWindow.Visible = not ContentWindow.Visible
+    end
+end))
+
+local function restoreCollision()
+    for part, value in pairs(originalCollision) do
+        if part and part.Parent then
+            pcall(function()
+                part.CanCollide = value
+            end)
+        end
+    end
+    table.clear(originalCollision)
+end
+
+local function restoreMovement()
+    local character, humanoid, root = getCharacter(LocalPlayer)
+    if humanoid then
+        local defaults = humanoidDefaults[humanoid]
+        humanoid.WalkSpeed = defaults and defaults.WalkSpeed or 16
+        humanoid.JumpPower = defaults and defaults.JumpPower or 50
+        humanoid.UseJumpPower = defaults and defaults.UseJumpPower ~= false
+        humanoid.PlatformStand = defaults and defaults.PlatformStand or false
+    end
+    if root then
+        root.AssemblyAngularVelocity = Vector3.zero
+    end
+    restoreCollision()
+    Workspace.Gravity = originalGravity
+end
+
+local function applyWorld()
+    if State.World.Fullbright then
+        Lighting.Brightness = 3
+        Lighting.ClockTime = 14
+        Lighting.GlobalShadows = false
+        Lighting.Ambient = Color3.fromRGB(180, 180, 180)
+        Lighting.OutdoorAmbient = Color3.fromRGB(180, 180, 180)
+    else
+        Lighting.Brightness = originalLighting.Brightness
+        Lighting.ClockTime = originalLighting.ClockTime
+        Lighting.GlobalShadows = originalLighting.GlobalShadows
+        Lighting.Ambient = originalLighting.Ambient
+        Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+    end
+    if State.World.NoFog then
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 1000000
+    else
+        Lighting.FogStart = originalLighting.FogStart
+        Lighting.FogEnd = originalLighting.FogEnd
+    end
+    Workspace.Gravity = State.Movement.Gravity and State.Movement.GravityValue or originalGravity
+end
+
+local HomePage = pages.Home
+local StatusCard = createCard(HomePage, "Live Session")
+local StatusText = addNote(StatusCard, "")
+local CapabilityCard = createCard(HomePage, "Executor Capabilities")
+local capabilityLines = {}
+for key, value in pairs(capabilities) do
+    table.insert(capabilityLines, key .. ": " .. (value and "Supported" or "Unsupported"))
+end
+table.sort(capabilityLines)
+addNote(CapabilityCard, table.concat(capabilityLines, "   •   "))
+local QuickCard = createCard(HomePage, "Quick Controls")
+addAction(QuickCard, "Emergency Reset", function(item)
+    State.Aim.Enabled = false
+    State.Visuals.Enabled = false
+    State.Movement.Speed = false
+    State.Movement.Jump = false
+    State.Movement.Fly = false
+    State.Movement.Noclip = false
+    State.Movement.Orbit = false
+    State.World.Freecam = false
+    restoreMovement()
+    applyWorld()
+    item.Text = "Reset Complete"
+    task.delay(1, function()
+        if item.Parent then item.Text = "Emergency Reset" end
+    end)
+end)
+
+local statusClock = 0
+trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
+    statusClock = statusClock + deltaTime
+    if statusClock < 0.25 then return end
+    statusClock = 0
+    local ping = "n/a"
+    local ok, value = pcall(function()
+        return LocalPlayer:GetNetworkPing() * 1000
+    end)
+    if ok then ping = string.format("%.0f ms", value) end
+    StatusText.Text = string.format("Player: %s   •   PlaceId: %s   •   Players: %d   •   Ping: %s   •   Target: %s", LocalPlayer.Name, tostring(game.PlaceId), #Players:GetPlayers(), ping, currentTarget and currentTarget.Player.Name or "None")
+end))
+
+local AimPage = pages.Aim
+local AimCard = createCard(AimPage, "Live Aim")
+addToggle(AimCard, "Enabled", function() return State.Aim.Enabled end, function(value) State.Aim.Enabled = value end)
+addToggle(AimCard, "Hold Right Mouse", function() return State.Aim.HoldRightMouse end, function(value) State.Aim.HoldRightMouse = value end)
+addCycle(AimCard, "Method", {"Camera", "Mouse"}, function() return State.Aim.Method end, function(value) State.Aim.Method = value end)
+addCycle(AimCard, "Target Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso"}, function() return State.Aim.TargetPart end, function(value) State.Aim.TargetPart = value end)
+addToggle(AimCard, "Team Check", function() return State.Aim.TeamCheck end, function(value) State.Aim.TeamCheck = value end)
+addToggle(AimCard, "Wall Check", function() return State.Aim.WallCheck end, function(value) State.Aim.WallCheck = value end)
+addToggle(AimCard, "Prediction", function() return State.Aim.Prediction end, function(value) State.Aim.Prediction = value end)
+addToggle(AimCard, "Show FOV", function() return State.Aim.ShowFOV end, function(value) State.Aim.ShowFOV = value end)
+addSlider(AimCard, "FOV Radius", 20, 600, function() return State.Aim.FOV end, function(value) State.Aim.FOV = value end)
+addSlider(AimCard, "Smoothing", 0, 0.95, function() return State.Aim.Smoothing end, function(value) State.Aim.Smoothing = value end, 2)
+addSlider(AimCard, "Prediction Time", 0, 0.5, function() return State.Aim.PredictionTime end, function(value) State.Aim.PredictionTime = value end, 2)
+addSlider(AimCard, "Maximum Distance", 50, 5000, function() return State.Aim.MaxDistance end, function(value) State.Aim.MaxDistance = value end)
+
+local VisualPage = pages.Visuals
+local VisualCard = createCard(VisualPage, "Player ESP")
+addToggle(VisualCard, "Enabled", function() return State.Visuals.Enabled end, function(value) State.Visuals.Enabled = value end)
+addToggle(VisualCard, "Boxes", function() return State.Visuals.Boxes end, function(value) State.Visuals.Boxes = value end)
+addToggle(VisualCard, "Box Filled", function() return State.Visuals.BoxFilled end, function(value) State.Visuals.BoxFilled = value end)
+addToggle(VisualCard, "Names", function() return State.Visuals.Names end, function(value) State.Visuals.Names = value end)
+addToggle(VisualCard, "Distance", function() return State.Visuals.Distance end, function(value) State.Visuals.Distance = value end)
+addToggle(VisualCard, "Health", function() return State.Visuals.Health end, function(value) State.Visuals.Health = value end)
+addToggle(VisualCard, "Head Dot", function() return State.Visuals.HeadDot end, function(value) State.Visuals.HeadDot = value end)
+addToggle(VisualCard, "Tracers", function() return State.Visuals.Tracers end, function(value) State.Visuals.Tracers = value end)
+addToggle(VisualCard, "Chams", function() return State.Visuals.Chams end, function(value) State.Visuals.Chams = value end)
+addToggle(VisualCard, "Skeleton", function() return State.Visuals.Skeleton end, function(value) State.Visuals.Skeleton = value end)
+addToggle(VisualCard, "Offscreen Arrows", function() return State.Visuals.Offscreen end, function(value) State.Visuals.Offscreen = value end)
+addToggle(VisualCard, "Team Check", function() return State.Visuals.TeamCheck end, function(value) State.Visuals.TeamCheck = value end)
+addSlider(VisualCard, "Maximum Distance", 100, 5000, function() return State.Visuals.MaxDistance end, function(value) State.Visuals.MaxDistance = value end)
+addSlider(VisualCard, "Line Thickness", 1, 4, function() return State.Visuals.Thickness end, function(value) State.Visuals.Thickness = value end)
+
+local MovementPage = pages.Movement
+local MoveCard = createCard(MovementPage, "Movement")
+addToggle(MoveCard, "Speed", function() return State.Movement.Speed end, function(value)
+    State.Movement.Speed = value
+    if not value then
+        local _, humanoid = getCharacter(LocalPlayer)
+        if humanoid then humanoid.WalkSpeed = humanoidDefaults[humanoid] and humanoidDefaults[humanoid].WalkSpeed or 16 end
+    end
+end)
+addCycle(MoveCard, "Speed Method", {"WalkSpeed", "Velocity", "CFrame"}, function() return State.Movement.SpeedMethod end, function(value) State.Movement.SpeedMethod = value end)
+addSlider(MoveCard, "Speed Value", 16, 200, function() return State.Movement.SpeedValue end, function(value) State.Movement.SpeedValue = value end)
+addToggle(MoveCard, "Jump Power", function() return State.Movement.Jump end, function(value)
+    State.Movement.Jump = value
+    if not value then
+        local _, humanoid = getCharacter(LocalPlayer)
+        local defaults = humanoid and humanoidDefaults[humanoid]
+        if humanoid and defaults then
+            humanoid.JumpPower = defaults.JumpPower
+            humanoid.UseJumpPower = defaults.UseJumpPower
+        end
+    end
+end)
+addSlider(MoveCard, "Jump Value", 50, 300, function() return State.Movement.JumpValue end, function(value) State.Movement.JumpValue = value end)
+addToggle(MoveCard, "Infinite Jump", function() return State.Movement.InfiniteJump end, function(value) State.Movement.InfiniteJump = value end)
+addToggle(MoveCard, "Bunny Hop", function() return State.Movement.BunnyHop end, function(value) State.Movement.BunnyHop = value end)
+local FlyCard = createCard(MovementPage, "Flight and Collision")
+addToggle(FlyCard, "Fly", function() return State.Movement.Fly end, function(value) State.Movement.Fly = value end)
+addCycle(FlyCard, "Fly Method", {"Velocity", "CFrame"}, function() return State.Movement.FlyMethod end, function(value) State.Movement.FlyMethod = value end)
+addSlider(FlyCard, "Fly Speed", 10, 250, function() return State.Movement.FlySpeed end, function(value) State.Movement.FlySpeed = value end)
+addToggle(FlyCard, "Noclip", function() return State.Movement.Noclip end, function(value)
+    State.Movement.Noclip = value
+    if not value then restoreCollision() end
+end)
+addToggle(FlyCard, "Ctrl + Click Teleport", function() return State.Movement.ClickTP end, function(value) State.Movement.ClickTP = value end)
+addToggle(FlyCard, "Anti Fling", function() return State.Movement.AntiFling end, function(value) State.Movement.AntiFling = value end)
+local GravityCard = createCard(MovementPage, "World Physics")
+addToggle(GravityCard, "Custom Gravity", function() return State.Movement.Gravity end, function(value)
+    State.Movement.Gravity = value
+    Workspace.Gravity = value and State.Movement.GravityValue or originalGravity
+end)
+addSlider(GravityCard, "Gravity", 0, 300, function() return State.Movement.GravityValue end, function(value)
+    State.Movement.GravityValue = value
+    if State.Movement.Gravity then Workspace.Gravity = value end
+end, 1)
+addToggle(GravityCard, "Orbit Selected Player", function() return State.Movement.Orbit end, function(value) State.Movement.Orbit = value end)
+addSlider(GravityCard, "Orbit Radius", 2, 30, function() return State.Movement.OrbitRadius end, function(value) State.Movement.OrbitRadius = value end)
+addSlider(GravityCard, "Orbit Speed", 0.2, 8, function() return State.Movement.OrbitSpeed end, function(value) State.Movement.OrbitSpeed = value end, 1)
+
+local WorldPage = pages.World
+local LightingCard = createCard(WorldPage, "Lighting")
+addToggle(LightingCard, "Fullbright", function() return State.World.Fullbright end, function(value) State.World.Fullbright = value applyWorld() end)
+addToggle(LightingCard, "Remove Fog", function() return State.World.NoFog end, function(value) State.World.NoFog = value applyWorld() end)
+local CameraCard = createCard(WorldPage, "Camera")
+addSlider(CameraCard, "Field of View", 40, 120, function() return State.World.CameraFOV end, function(value) State.World.CameraFOV = value end)
+addToggle(CameraCard, "Third Person", function() return State.World.ThirdPerson end, function(value) State.World.ThirdPerson = value end)
+addToggle(CameraCard, "Freecam", function() return State.World.Freecam end, function(value) State.World.Freecam = value end)
+addSlider(CameraCard, "Freecam Speed", 0.2, 8, function() return State.World.FreecamSpeed end, function(value) State.World.FreecamSpeed = value end, 1)
+local WaypointCard = createCard(WorldPage, "Waypoints")
+local waypointNameInput = addInput(WaypointCard, "Waypoint name", "")
+local waypointStatus = addNote(WaypointCard, "No waypoint selected")
+addAction(WaypointCard, "Save Current Position", function()
+    local _, _, root = getCharacter(LocalPlayer)
+    if not root then return end
+    local components = {root.CFrame:GetComponents()}
+    table.insert(State.Waypoints, {Name = waypointNameInput.Text ~= "" and waypointNameInput.Text or "Waypoint " .. tostring(#State.Waypoints + 1), CFrame = components})
+    selectedWaypoint = #State.Waypoints
+    waypointStatus.Text = State.Waypoints[selectedWaypoint].Name
+end)
+addAction(WaypointCard, "Next Waypoint", function()
+    if #State.Waypoints == 0 then waypointStatus.Text = "No waypoints" return end
+    selectedWaypoint = selectedWaypoint % #State.Waypoints + 1
+    waypointStatus.Text = State.Waypoints[selectedWaypoint].Name
+end)
+addAction(WaypointCard, "Teleport to Waypoint", function()
+    local entry = State.Waypoints[selectedWaypoint]
+    local _, _, root = getCharacter(LocalPlayer)
+    if entry and root and type(entry.CFrame) == "table" and #entry.CFrame >= 12 then
+        root.CFrame = CFrame.new(table.unpack(entry.CFrame))
+    end
+end)
+addAction(WaypointCard, "Delete Selected Waypoint", function()
+    if State.Waypoints[selectedWaypoint] then table.remove(State.Waypoints, selectedWaypoint) end
+    selectedWaypoint = math.clamp(selectedWaypoint, 1, math.max(1, #State.Waypoints))
+    waypointStatus.Text = State.Waypoints[selectedWaypoint] and State.Waypoints[selectedWaypoint].Name or "No waypoint selected"
+end)
+
+local PlayersPage = pages.Players
+local PlayerCard = createCard(PlayersPage, "Live Players")
+local PlayerStatus = addNote(PlayerCard, "No player selected")
+local playerSearch = addInput(PlayerCard, "Search username or display name", "")
+local playerIndex = 0
+local function matchingPlayers()
+    local query = string.lower(playerSearch.Text)
+    local result = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and (query == "" or string.find(string.lower(player.Name), query, 1, true) or string.find(string.lower(player.DisplayName), query, 1, true)) then
+            table.insert(result, player)
+        end
+    end
+    table.sort(result, function(a, b) return a.Name < b.Name end)
+    return result
+end
+local function refreshPlayerStatus()
+    if not selectedPlayer or selectedPlayer.Parent ~= Players then
+        PlayerStatus.Text = "No player selected"
+        return
+    end
+    local alive, _, humanoid, root = getAlive(selectedPlayer)
+    local _, _, localRoot = getCharacter(LocalPlayer)
+    local distance = root and localRoot and (root.Position - localRoot.Position).Magnitude or math.huge
+    PlayerStatus.Text = string.format("%s (@%s)   •   UserId %s   •   Health %.0f   •   Distance %.0f", selectedPlayer.DisplayName, selectedPlayer.Name, tostring(selectedPlayer.UserId), alive and humanoid.Health or 0, distance)
+end
+addAction(PlayerCard, "Next Matching Player", function()
+    local list = matchingPlayers()
+    if #list == 0 then selectedPlayer = nil refreshPlayerStatus() return end
+    playerIndex = playerIndex % #list + 1
+    selectedPlayer = list[playerIndex]
+    refreshPlayerStatus()
+end)
+addAction(PlayerCard, "Spectate Selected", function(item)
+    local alive, _, humanoid = selectedPlayer and getAlive(selectedPlayer)
+    local camera = Workspace.CurrentCamera
+    if alive and camera then
+        camera.CameraSubject = humanoid
+        item.Text = "Spectating " .. selectedPlayer.Name
+    end
+end)
+addAction(PlayerCard, "Stop Spectating", function()
+    local _, humanoid = getCharacter(LocalPlayer)
+    local camera = Workspace.CurrentCamera
+    if humanoid and camera then camera.CameraSubject = humanoid end
+end)
+addAction(PlayerCard, "Teleport to Selected", function()
+    local alive, _, _, targetRoot = selectedPlayer and getAlive(selectedPlayer)
+    local _, _, root = getCharacter(LocalPlayer)
+    if alive and root then root.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 4) end
+end)
+local playerStatusClock = 0
+trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
+    playerStatusClock = playerStatusClock + deltaTime
+    if playerStatusClock < 0.25 then return end
+    playerStatusClock = 0
+    refreshPlayerStatus()
+end))
+
+local function sanitizeName(value)
+    return string.gsub(tostring(value), "[^%w_%-]", "_")
+end
+
+local function httpGet(url)
+    local request = getRequest()
+    if request then
+        local ok, response = pcall(request, {Url = url, Method = "GET"})
+        if not ok or type(response) ~= "table" then
+            return nil, "Request failed"
+        end
+        local statusCode = response.StatusCode or response.Status or response.status_code
+        if statusCode and statusCode >= 400 then
+            return nil, "HTTP " .. tostring(statusCode)
+        end
+        return response.Body or response.body
+    end
+    local ok, response = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not ok then
+        return nil, "Request failed"
+    end
+    return response
+end
+
+local function parsePlaceId(value)
+    local direct = tonumber(value)
+    if direct then return math.floor(direct) end
+    local text = tostring(value or "")
+    local matched = string.match(text, "roblox%.com/games/(%d+)") or string.match(text, "[?&]placeId=(%d+)") or string.match(text, "/places/(%d+)")
+    return matched and tonumber(matched) or nil
+end
+
+local CatalogPage = pages.Catalog
+local CatalogCard = createCard(CatalogPage, "Custom Game Catalog")
+addNote(CatalogCard, "The catalog starts empty. Entries are saved only when you save a config.")
+local catalogName = addInput(CatalogCard, "Game name", "")
+local catalogPlace = addInput(CatalogCard, "PlaceId or Roblox game URL", tostring(game.PlaceId))
+local catalogUrl = addInput(CatalogCard, "HTTPS script URL", "")
+local catalogStatus = addNote(CatalogCard, "No catalog entries")
+local catalogBanner = Instance.new("ImageLabel")
+catalogBanner.BackgroundColor3 = Theme.Surface2
+catalogBanner.Image = ""
+catalogBanner.Size = UDim2.new(1, 0, 0, 150)
+catalogBanner.ScaleType = Enum.ScaleType.Crop
+catalogBanner.Parent = CatalogCard
+round(catalogBanner, 6)
+local catalogIndex = 1
+local pendingRun = false
+local runButton
+local function currentCatalogEntry()
+    return State.Catalog[catalogIndex]
+end
+local function updateCatalogStatus()
+    local entry = currentCatalogEntry()
+    pendingRun = false
+    if runButton then runButton.Text = "Run Selected Script" end
+    if not entry then
+        catalogStatus.Text = "No catalog entries"
+        catalogBanner.Image = ""
+        return
+    end
+    catalogStatus.Text = string.format("%d/%d   •   %s   •   PlaceId %s", catalogIndex, #State.Catalog, entry.Name, tostring(entry.PlaceId))
+    catalogName.Text = entry.Name
+    catalogPlace.Text = tostring(entry.PlaceId)
+    catalogUrl.Text = entry.Url or ""
+    catalogBanner.Image = entry.BannerAsset or ""
+end
+local function fetchBanner(entry)
+    if not entry or not capabilities.Http or not capabilities.Files or not capabilities.Folders or not capabilities.CustomAsset then
+        return false
+    end
+    local universeMetadata, errorMessage = httpGet("https://apis.roblox.com/universes/v1/places/" .. tostring(entry.PlaceId) .. "/universe")
+    if not universeMetadata then
+        catalogStatus.Text = errorMessage
+        return false
+    end
+    local universeOk, universeDecoded = pcall(HttpService.JSONDecode, HttpService, universeMetadata)
+    local universeId = universeOk and universeDecoded and universeDecoded.universeId
+    if not universeId then
+        catalogStatus.Text = "Universe unavailable"
+        return false
+    end
+    local metadata
+    metadata, errorMessage = httpGet("https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds=" .. tostring(universeId) .. "&countPerUniverse=1&defaults=true&size=768x432&format=Png&isCircular=false")
+    if not metadata then
+        catalogStatus.Text = errorMessage
+        return false
+    end
+    local ok, decoded = pcall(HttpService.JSONDecode, HttpService, metadata)
+    local imageUrl = ok and decoded and decoded.data and decoded.data[1] and decoded.data[1].thumbnails and decoded.data[1].thumbnails[1] and decoded.data[1].thumbnails[1].imageUrl
+    if not imageUrl then
+        catalogStatus.Text = "Banner unavailable"
+        return false
+    end
+    local imageBody, imageError = httpGet(imageUrl)
+    if not imageBody then
+        catalogStatus.Text = imageError
+        return false
+    end
+    ensureFolder("TasuAnticheatTest/Catalog/Banners")
+    local path = "TasuAnticheatTest/Catalog/Banners/" .. sanitizeName(entry.PlaceId) .. ".png"
+    local writefile = resolveGlobal("writefile")
+    local saved = pcall(writefile, path, imageBody)
+    if not saved then
+        return false
+    end
+    entry.BannerAsset = getCustomAsset(path)
+    catalogBanner.Image = entry.BannerAsset or ""
+    return true
+end
+addAction(CatalogCard, "Add Entry", function()
+    local placeId = parsePlaceId(catalogPlace.Text)
+    if catalogName.Text == "" or not placeId then
+        catalogStatus.Text = "Name and valid PlaceId or Roblox URL required"
+        return
+    end
+    table.insert(State.Catalog, {Name = catalogName.Text, PlaceId = placeId, Url = catalogUrl.Text})
+    catalogIndex = #State.Catalog
+    updateCatalogStatus()
+    task.spawn(fetchBanner, currentCatalogEntry())
+end)
+addAction(CatalogCard, "Update Selected Entry", function()
+    local entry = currentCatalogEntry()
+    local placeId = parsePlaceId(catalogPlace.Text)
+    if not entry or not placeId then return end
+    entry.Name = catalogName.Text
+    entry.PlaceId = placeId
+    entry.Url = catalogUrl.Text
+    entry.BannerAsset = nil
+    updateCatalogStatus()
+    task.spawn(fetchBanner, entry)
+end)
+addAction(CatalogCard, "Next Entry", function()
+    if #State.Catalog == 0 then return end
+    catalogIndex = catalogIndex % #State.Catalog + 1
+    updateCatalogStatus()
+    if currentCatalogEntry() and not currentCatalogEntry().BannerAsset then task.spawn(fetchBanner, currentCatalogEntry()) end
+end)
+addAction(CatalogCard, "Previous Entry", function()
+    if #State.Catalog == 0 then return end
+    catalogIndex = (catalogIndex - 2) % #State.Catalog + 1
+    updateCatalogStatus()
+    if currentCatalogEntry() and not currentCatalogEntry().BannerAsset then task.spawn(fetchBanner, currentCatalogEntry()) end
+end)
+addAction(CatalogCard, "Delete Selected Entry", function()
+    if State.Catalog[catalogIndex] then table.remove(State.Catalog, catalogIndex) end
+    catalogIndex = math.clamp(catalogIndex, 1, math.max(1, #State.Catalog))
+    updateCatalogStatus()
+end)
+runButton = addAction(CatalogCard, "Run Selected Script", function(item)
+    local entry = currentCatalogEntry()
+    if not entry or type(entry.Url) ~= "string" or entry.Url == "" then
+        catalogStatus.Text = "Selected entry has no URL"
+        return
+    end
+    if not string.match(entry.Url, "^https://") then
+        catalogStatus.Text = "HTTPS URL required"
+        return
+    end
+    if not capabilities.LoadString or not capabilities.Http then
+        catalogStatus.Text = "Executor cannot load URL scripts"
+        return
+    end
+    if not pendingRun then
+        pendingRun = true
+        item.Text = "Confirm Run"
+        catalogStatus.Text = "Press again to download and run this entry"
+        return
+    end
+    pendingRun = false
+    item.Text = "Run Selected Script"
+    local source, errorMessage = httpGet(entry.Url)
+    if not source then
+        catalogStatus.Text = errorMessage
+        return
+    end
+    local chunk, compileError = loadstring(source, "TasuCatalog:" .. entry.Name)
+    if not chunk then
+        catalogStatus.Text = tostring(compileError)
+        return
+    end
+    local ok, runtimeError = pcall(chunk)
+    catalogStatus.Text = ok and "Script completed" or tostring(runtimeError)
+end)
+updateCatalogStatus()
+
+local ExplorerPage = pages.Explorer
+local ExplorerCard = createCard(ExplorerPage, "Read-only Instance Explorer")
+local explorerSearch = addInput(ExplorerCard, "Search instance name or class", "")
+local explorerStatus = addNote(ExplorerCard, "Enter a search term")
+local explorerResults = {}
+local explorerIndex = 1
+local function scanExplorer()
+    explorerResults = {}
+    explorerIndex = 1
+    local query = string.lower(explorerSearch.Text)
+    if query == "" then
+        explorerStatus.Text = "Enter a search term"
+        return
+    end
+    for _, instance in ipairs(game:GetDescendants()) do
+        if #explorerResults >= 500 then break end
+        if string.find(string.lower(instance.Name), query, 1, true) or string.find(string.lower(instance.ClassName), query, 1, true) then
+            table.insert(explorerResults, instance)
+        end
+    end
+    local selected = explorerResults[1]
+    explorerStatus.Text = selected and string.format("1/%d   •   %s [%s]   •   %s", #explorerResults, selected.Name, selected.ClassName, selected:GetFullName()) or "No results"
+end
+addAction(ExplorerCard, "Search", scanExplorer)
+addAction(ExplorerCard, "Next Result", function()
+    if #explorerResults == 0 then return end
+    explorerIndex = explorerIndex % #explorerResults + 1
+    local selected = explorerResults[explorerIndex]
+    explorerStatus.Text = string.format("%d/%d   •   %s [%s]   •   %s", explorerIndex, #explorerResults, selected.Name, selected.ClassName, selected:GetFullName())
+end)
+addAction(ExplorerCard, "Copy Selected Path", function()
+    local selected = explorerResults[explorerIndex]
+    local setclipboard = resolveGlobal("setclipboard") or resolveGlobal("toclipboard")
+    if selected and setclipboard then pcall(setclipboard, selected:GetFullName()) end
+end)
+
+local function configPayload()
+    local payload = deepCopy(State)
+    payload.Interface = {Title = State.Interface.Title}
+    for _, entry in ipairs(payload.Catalog) do
+        entry.BannerAsset = nil
+    end
+    return payload
+end
+
+local function merge(target, source)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+    for key, value in pairs(source) do
+        if type(value) == "table" and type(target[key]) == "table" and key ~= "Catalog" and key ~= "Waypoints" then
+            merge(target[key], value)
+        else
+            target[key] = deepCopy(value)
+        end
+    end
+end
+
+local function saveConfig(name)
+    if not capabilities.Files or not capabilities.Folders then
+        return false, "Filesystem unsupported"
+    end
+    ensureFolder("TasuAnticheatTest/Configs")
+    local path = "TasuAnticheatTest/Configs/" .. sanitizeName(name) .. ".json"
+    local ok, encoded = pcall(HttpService.JSONEncode, HttpService, configPayload())
+    if not ok then return false, encoded end
+    local writefile = resolveGlobal("writefile")
+    local saved, errorMessage = pcall(writefile, path, encoded)
+    return saved, saved and path or errorMessage
+end
+
+local function loadConfig(name)
+    if not capabilities.Files then
+        return false, "Filesystem unsupported"
+    end
+    local path = "TasuAnticheatTest/Configs/" .. sanitizeName(name) .. ".json"
+    local isfile = resolveGlobal("isfile")
+    if type(isfile) == "function" and not isfile(path) then
+        return false, "Config not found"
+    end
+    local readfile = resolveGlobal("readfile")
+    local ok, raw = pcall(readfile, path)
+    if not ok then return false, raw end
+    local decodedOk, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+    if not decodedOk or type(decoded) ~= "table" then return false, decoded end
+    merge(State, decoded)
+    applyWorld()
+    TopTitle.Text = State.Interface.Title or Theme.Title
+    catalogIndex = math.clamp(catalogIndex, 1, math.max(1, #State.Catalog))
+    refreshControls()
+    return true, path
+end
+
+local ConfigPage = pages.Configs
+local ConfigCard = createCard(ConfigPage, "Manual Config Storage")
+addNote(ConfigCard, "Configs never load automatically when the hub is injected.")
+local configName = addInput(ConfigCard, "Config name", "default")
+local configStatus = addNote(ConfigCard, "Ready")
+addAction(ConfigCard, "Save Config", function()
+    local ok, message = saveConfig(configName.Text)
+    configStatus.Text = ok and "Saved: " .. tostring(message) or "Error: " .. tostring(message)
+end)
+addAction(ConfigCard, "Load Config", function()
+    local ok, message = loadConfig(configName.Text)
+    configStatus.Text = ok and "Loaded: " .. tostring(message) or "Error: " .. tostring(message)
+    updateCatalogStatus()
+end)
+addAction(ConfigCard, "Reset to Defaults", function()
+    State = deepCopy(Defaults)
+    State.World.CameraFOV = originalCameraFOV
+    Theme = State.Interface
+    restoreMovement()
+    applyWorld()
+    TopTitle.Text = State.Interface.Title
+    if env.TasuAnticheatTest then env.TasuAnticheatTest.State = State end
+    refreshControls()
+    updateCatalogStatus()
+    configStatus.Text = "Defaults restored"
+end)
+
+local SettingsPage = pages.Settings
+local InterfaceCard = createCard(SettingsPage, "Interface")
+local titleInput = addInput(InterfaceCard, "Window title", Theme.Title)
+addAction(InterfaceCard, "Apply Title", function()
+    if titleInput.Text ~= "" then
+        State.Interface.Title = titleInput.Text
+        TopTitle.Text = titleInput.Text
+    end
+end)
+addNote(InterfaceCard, "Right Shift toggles the content window. The category bar always remains visible unless Unload is used.")
+local RuntimeCard = createCard(SettingsPage, "Runtime")
+
+local function unload()
+    if unloaded then return end
+    unloaded = true
+    State.Aim.Enabled = false
+    State.Visuals.Enabled = false
+    State.Movement.Fly = false
+    State.Movement.Noclip = false
+    State.Movement.Orbit = false
+    State.World.Freecam = false
+    restoreMovement()
+    Lighting.Brightness = originalLighting.Brightness
+    Lighting.ClockTime = originalLighting.ClockTime
+    Lighting.FogEnd = originalLighting.FogEnd
+    Lighting.FogStart = originalLighting.FogStart
+    Lighting.GlobalShadows = originalLighting.GlobalShadows
+    Lighting.Ambient = originalLighting.Ambient
+    Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+    local camera = Workspace.CurrentCamera
+    if camera then
+        camera.FieldOfView = originalCameraFOV
+        camera.CameraType = Enum.CameraType.Custom
+        local _, humanoid = getCharacter(LocalPlayer)
+        if humanoid then camera.CameraSubject = humanoid end
+    end
+    LocalPlayer.CameraMinZoomDistance = originalCameraMinZoom
+    LocalPlayer.CameraMaxZoomDistance = originalCameraMaxZoom
+    for _, player in ipairs(Players:GetPlayers()) do destroyESP(player) end
+    for _, list in pairs(featureConnections) do
+        for _, connection in ipairs(list) do pcall(function() connection:Disconnect() end) end
+    end
+    for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
+    for _, instance in ipairs(instances) do pcall(function() instance:Destroy() end) end
+    if ScreenGui then pcall(function() ScreenGui:Destroy() end) end
+    if env.TasuAnticheatTest and env.TasuAnticheatTest.Unload == unload then
+        env.TasuAnticheatTest = nil
+    end
+end
+
+addAction(RuntimeCard, "Unload Hub", unload)
+
+env.TasuAnticheatTest = {
+    Version = "1.0.0",
+    State = State,
+    Capabilities = capabilities,
+    Open = function() ContentWindow.Visible = true end,
+    Close = function() ContentWindow.Visible = false end,
+    Toggle = function() ContentWindow.Visible = not ContentWindow.Visible end,
+    ShowCategory = showCategory,
+    SaveConfig = saveConfig,
+    LoadConfig = loadConfig,
+    Unload = unload
+}
+
+showCategory("Home")
