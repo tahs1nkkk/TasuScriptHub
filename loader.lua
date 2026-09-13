@@ -36,7 +36,7 @@ local Defaults = {
         Chams = true,
         Skeleton = false,
         Offscreen = false,
-        TeamCheck = false,
+        TeamColors = true,
         MaxDistance = 2500,
         Thickness = 1
     },
@@ -203,6 +203,23 @@ local function areTeammates(first, second)
     local firstToken = getTeamToken(first)
     local secondToken = getTeamToken(second)
     return firstToken ~= nil and firstToken == secondToken
+end
+
+local function getPlayerVisualColor(player)
+    if State.Visuals.TeamColors then
+        if player.Team then
+            return player.Team.TeamColor.Color
+        end
+        local attributeColor = player:GetAttribute("TeamColor")
+        if typeof(attributeColor) == "Color3" then
+            return attributeColor
+        end
+        if player.Character then
+            attributeColor = player.Character:GetAttribute("TeamColor")
+            if typeof(attributeColor) == "Color3" then return attributeColor end
+        end
+    end
+    return Theme.Accent
 end
 
 local function getMousePosition()
@@ -1355,7 +1372,7 @@ trackFeature("ESP", RunService.RenderStepped:Connect(function()
                 hideRecord(record)
             else
                 local alive, character, humanoid, root = getAlive(player)
-                local allowed = alive and (not State.Visuals.TeamCheck or not areTeammates(player, LocalPlayer))
+                local allowed = alive
                 local distance = localAlive and localRoot and root and (root.Position - localRoot.Position).Magnitude or math.huge
                 if not allowed or distance > State.Visuals.MaxDistance then
                     hideRecord(record)
@@ -1372,7 +1389,7 @@ trackFeature("ESP", RunService.RenderStepped:Connect(function()
                                 local edge = center + direction.Unit * math.min(center.X, center.Y) * 0.82
                                 record.Arrow.Position = UDim2.fromOffset(edge.X, edge.Y)
                                 record.Arrow.Rotation = math.deg(math.atan2(direction.Y, direction.X)) + 90
-                                record.Arrow.TextColor3 = player.Team and player.Team.TeamColor.Color or Theme.Accent
+                                record.Arrow.TextColor3 = getPlayerVisualColor(player)
                                 record.Arrow.Visible = true
                             end
                         end
@@ -1380,7 +1397,7 @@ trackFeature("ESP", RunService.RenderStepped:Connect(function()
                         local width = right - left
                         local height = bottom - top
                         local centerX = left + width * 0.5
-                        local color = player.Team and player.Team.TeamColor.Color or Theme.Accent
+                        local color = getPlayerVisualColor(player)
                         record.Arrow.Visible = false
                         for _, line in ipairs({record.BoxTop, record.BoxBottom, record.BoxLeft, record.BoxRight, record.Tracer}) do
                             line.BackgroundColor3 = color
@@ -1814,7 +1831,7 @@ addToggle(VisualCard, "Tracers", function() return State.Visuals.Tracers end, fu
 addToggle(VisualCard, "Chams", function() return State.Visuals.Chams end, function(value) State.Visuals.Chams = value end)
 addToggle(VisualCard, "Skeleton", function() return State.Visuals.Skeleton end, function(value) State.Visuals.Skeleton = value end)
 addToggle(VisualCard, "Offscreen Arrows", function() return State.Visuals.Offscreen end, function(value) State.Visuals.Offscreen = value end)
-addToggle(VisualCard, "Team Check", function() return State.Visuals.TeamCheck end, function(value) State.Visuals.TeamCheck = value end)
+addToggle(VisualCard, "Use Team Colors", function() return State.Visuals.TeamColors end, function(value) State.Visuals.TeamColors = value end)
 addSlider(VisualCard, "Maximum Distance", 100, 5000, function() return State.Visuals.MaxDistance end, function(value) State.Visuals.MaxDistance = value end)
 addSlider(VisualCard, "Line Thickness", 1, 4, function() return State.Visuals.Thickness end, function(value) State.Visuals.Thickness = value end)
 
