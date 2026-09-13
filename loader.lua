@@ -476,12 +476,28 @@ local function clampGuiPosition(frame, desired)
     )
 end
 
+local function guiPositionForAbsolute(frame, desired)
+    local absolute = frame.AbsolutePosition
+    local current = frame.Position
+    local correction = desired - Vector2.new(absolute.X, absolute.Y)
+    return UDim2.new(
+        current.X.Scale,
+        current.X.Offset + correction.X,
+        current.Y.Scale,
+        current.Y.Offset + correction.Y
+    )
+end
+
+local function setGuiAbsolutePosition(frame, desired)
+    frame.Position = guiPositionForAbsolute(frame, desired)
+end
+
 local function keepGuiOnScreen(frame)
     local absolute = frame.AbsolutePosition
     local desired = Vector2.new(absolute.X, absolute.Y)
     local clamped = clampGuiPosition(frame, desired)
     if (clamped - desired).Magnitude > 0.5 then
-        frame.Position = UDim2.fromOffset(clamped.X, clamped.Y)
+        setGuiAbsolutePosition(frame, clamped)
     end
 end
 
@@ -489,34 +505,26 @@ local function makeDraggable(frame, handle)
     local dragging = false
     local dragStart
     local dragOrigin
-    local targetPosition
     local controller = {
         DidDrag = false,
         SuppressUntil = 0
     }
-    handle.Active = true
-    local function containsPointer(pointer)
-        local position = handle.AbsolutePosition
-        local size = handle.AbsoluteSize
-        return pointer.X >= position.X and pointer.X <= position.X + size.X
-            and pointer.Y >= position.Y and pointer.Y <= position.Y + size.Y
-    end
-    trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
+    local function beginDrag(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and frame.Visible then
             local pointer = input.Position
             local currentPointer = Vector2.new(pointer.X, pointer.Y)
-            if not containsPointer(currentPointer) then
-                return
-            end
             dragging = true
             controller.DidDrag = false
             dragStart = currentPointer
             local absolute = frame.AbsolutePosition
             dragOrigin = Vector2.new(absolute.X, absolute.Y)
-            targetPosition = dragOrigin
-            frame.Position = UDim2.fromOffset(dragOrigin.X, dragOrigin.Y)
         end
-    end))
+    end
+    function controller:AttachHandle(guiObject)
+        guiObject.Active = true
+        trackConnection(guiObject.InputBegan:Connect(beginDrag))
+    end
+    controller:AttachHandle(handle)
     trackConnection(UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and dragOrigin then
             local pointer = input.Position
@@ -527,8 +535,7 @@ local function makeDraggable(frame, handle)
                 controller.SuppressUntil = os.clock() + 0.2
             end
             local desired = dragOrigin + pointerDelta
-            targetPosition = clampGuiPosition(frame, desired)
-            frame.Position = UDim2.fromOffset(targetPosition.X, targetPosition.Y)
+            setGuiAbsolutePosition(frame, clampGuiPosition(frame, desired))
         end
     end))
     trackConnection(UserInputService.InputEnded:Connect(function(input)
@@ -1029,7 +1036,7 @@ local function positionCategoryTooltip()
     if y + CategoryTooltip.AbsoluteSize.Y > viewport.Y then
         y = TopBar.AbsolutePosition.Y - CategoryTooltip.AbsoluteSize.Y - 8
     end
-    CategoryTooltip.Position = UDim2.fromOffset(x, y)
+    setGuiAbsolutePosition(CategoryTooltip, Vector2.new(x, y))
 end
 local function showCategoryTooltip(text)
     tooltipTransition = tooltipTransition + 1
@@ -1055,6 +1062,7 @@ for index, name in ipairs(categories) do
     local categoryButton = button(CategoryScroller, "", UDim2.fromOffset(48, 48))
     categoryButton.Name = name .. "Button"
     categoryButton.LayoutOrder = index
+    TopBarDrag:AttachHandle(categoryButton)
     categoryButtons[name] = categoryButton
     local selectedOutline = stroke(categoryButton, Theme.Accent, 1.5, 0)
     selectedOutline.Enabled = false
@@ -1088,8 +1096,15 @@ local function placeContentWindow()
         opensBelow = false
         y = math.max(0, barPosition.Y - windowSize.Y - 12)
     end
-    ContentWindow.Position = UDim2.fromOffset(x, y + (opensBelow and -10 or 10))
-    animate(ContentWindow, {Position = UDim2.fromOffset(x, y)}, 0.22, Enum.EasingStyle.Quint)
+    local targetPosition = guiPositionForAbsolute(ContentWindow, Vector2.new(x, y))
+    local entranceOffset = opensBelow and -10 or 10
+    ContentWindow.Position = UDim2.new(
+        targetPosition.X.Scale,
+        targetPosition.X.Offset,
+        targetPosition.Y.Scale,
+        targetPosition.Y.Offset + entranceOffset
+    )
+    animate(ContentWindow, {Position = targetPosition}, 0.22, Enum.EasingStyle.Quint)
 end
 
 local function openContentWindow()
