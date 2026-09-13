@@ -511,8 +511,10 @@ local function makeDraggable(frame, handle)
     }
     local function beginDrag(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and frame.Visible then
-            local pointer = input.Position
-            local currentPointer = Vector2.new(pointer.X, pointer.Y)
+            if dragging then
+                return
+            end
+            local currentPointer = getMousePosition()
             dragging = true
             controller.DidDrag = false
             dragStart = currentPointer
@@ -527,13 +529,13 @@ local function makeDraggable(frame, handle)
     controller:AttachHandle(handle)
     trackConnection(UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and dragOrigin then
-            local pointer = input.Position
-            local currentPointer = Vector2.new(pointer.X, pointer.Y)
+            local currentPointer = getMousePosition()
             local pointerDelta = currentPointer - dragStart
-            if pointerDelta.Magnitude >= 4 then
-                controller.DidDrag = true
-                controller.SuppressUntil = os.clock() + 0.2
+            if pointerDelta.Magnitude < 4 then
+                return
             end
+            controller.DidDrag = true
+            controller.SuppressUntil = os.clock() + 0.2
             local desired = dragOrigin + pointerDelta
             setGuiAbsolutePosition(frame, clampGuiPosition(frame, desired))
         end
