@@ -6,8 +6,8 @@ local Defaults = {
         Background = Color3.fromRGB(242, 248, 255),
         Surface = Color3.fromRGB(255, 255, 255),
         Surface2 = Color3.fromRGB(235, 245, 255),
-        Text = Color3.fromRGB(32, 54, 78),
-        Muted = Color3.fromRGB(105, 132, 161)
+        Text = Color3.fromRGB(22, 27, 34),
+        Muted = Color3.fromRGB(82, 94, 108)
     },
     Aim = {
         Enabled = false,
@@ -312,34 +312,43 @@ local function button(parent, text, size, position)
     item.TextColor3 = Theme.Text
     item.TextSize = 12
     item.Font = Enum.Font.GothamMedium
+    item.ClipsDescendants = true
     item.Size = size or UDim2.new(0, 100, 0, 28)
     item.Position = position or UDim2.new()
     round(item, 8)
     local itemStroke = stroke(item, Color3.fromRGB(177, 212, 244), 1, 0.18)
     gradient(item, Color3.fromRGB(255, 255, 255), Theme.Surface2)
-    local scale = Instance.new("UIScale")
-    scale.Parent = item
+    local hoverGlow = Instance.new("Frame")
+    hoverGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+    hoverGlow.BackgroundColor3 = Theme.Accent
+    hoverGlow.BackgroundTransparency = 0.94
+    hoverGlow.BorderSizePixel = 0
+    hoverGlow.Position = UDim2.fromScale(0.5, 0.5)
+    hoverGlow.Size = UDim2.fromOffset(0, 0)
+    hoverGlow.ZIndex = 0
+    hoverGlow.Parent = item
+    round(hoverGlow, 50)
     local function restingColor()
         return item:GetAttribute("Selected") and Theme.AccentSoft or Theme.Surface2
     end
     item.MouseEnter:Connect(function()
         animate(item, {BackgroundColor3 = item:GetAttribute("Selected") and Color3.fromRGB(200, 229, 255) or Color3.fromRGB(224, 241, 255)}, 0.14)
         animate(itemStroke, {Color = Theme.Accent, Transparency = 0.04}, 0.14)
-        animate(scale, {Scale = 1.035}, 0.14)
+        animate(hoverGlow, {Size = UDim2.new(1.25, 0, 1.25, 0), BackgroundTransparency = 0.88}, 0.16)
     end)
     item.MouseLeave:Connect(function()
         animate(item, {BackgroundColor3 = restingColor()}, 0.16)
         animate(itemStroke, {Color = Color3.fromRGB(177, 212, 244), Transparency = 0.18}, 0.16)
-        animate(scale, {Scale = 1}, 0.16)
+        animate(hoverGlow, {Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 0.94}, 0.16)
     end)
     item.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            animate(scale, {Scale = 0.96}, 0.08, Enum.EasingStyle.Quad)
+            animate(hoverGlow, {Size = UDim2.new(0.86, 0, 0.86, 0), BackgroundTransparency = 0.82}, 0.08, Enum.EasingStyle.Quad)
         end
     end)
     item.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            animate(scale, {Scale = 1.035}, 0.1, Enum.EasingStyle.Quad)
+            animate(hoverGlow, {Size = UDim2.new(1.25, 0, 1.25, 0), BackgroundTransparency = 0.88}, 0.1, Enum.EasingStyle.Quad)
         end
     end)
     item.Parent = parent
@@ -348,35 +357,35 @@ end
 
 local function makeDraggable(frame, handle)
     local dragging = false
-    local dragStart
-    local startPosition
+    local grabOffset
     local targetPosition
+    handle.Active = true
     trackConnection(handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            dragStart = input.Position
-            startPosition = frame.AbsolutePosition
-            targetPosition = startPosition
-        end
-    end))
-    trackConnection(UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-            local x = math.clamp(startPosition.X + delta.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
-            local y = math.clamp(startPosition.Y + delta.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
-            targetPosition = Vector2.new(x, y)
+            local framePosition = frame.AbsolutePosition
+            local mousePosition = UserInputService:GetMouseLocation()
+            grabOffset = mousePosition - framePosition
+            targetPosition = framePosition
+            frame.Position = UDim2.fromOffset(framePosition.X, framePosition.Y)
         end
     end))
     trackConnection(UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
+            grabOffset = nil
         end
     end))
     trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
-        if dragging and targetPosition then
-            local current = frame.AbsolutePosition
-            local alpha = math.clamp(deltaTime * 20, 0, 1)
+        if dragging and grabOffset then
+            local mousePosition = UserInputService:GetMouseLocation()
+            local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+            local desired = mousePosition - grabOffset
+            local x = math.clamp(desired.X, 0, math.max(0, viewport.X - frame.AbsoluteSize.X))
+            local y = math.clamp(desired.Y, 0, math.max(0, viewport.Y - frame.AbsoluteSize.Y))
+            targetPosition = Vector2.new(x, y)
+            local current = Vector2.new(frame.Position.X.Offset, frame.Position.Y.Offset)
+            local alpha = 1 - math.exp(-deltaTime * 24)
             local nextPosition = current:Lerp(targetPosition, alpha)
             frame.Position = UDim2.fromOffset(nextPosition.X, nextPosition.Y)
         end
@@ -387,8 +396,8 @@ local TopBar = Instance.new("Frame")
 TopBar.Name = "CategoryBar"
 TopBar.BackgroundColor3 = Theme.Background
 TopBar.BackgroundTransparency = 0.1
-TopBar.Size = UDim2.fromOffset(660, 52)
-TopBar.Position = UDim2.new(0.5, -330, 0, 12)
+TopBar.Size = UDim2.fromOffset(720, 58)
+TopBar.Position = UDim2.new(0.5, -360, 0, 12)
 TopBar.Parent = ScreenGui
 round(TopBar, 14)
 stroke(TopBar, Color3.fromRGB(167, 210, 247), 1, 0.08)
@@ -396,13 +405,13 @@ gradient(TopBar, Color3.fromRGB(255, 255, 255), Color3.fromRGB(226, 243, 255), 7
 
 local DragGrip = Instance.new("Frame")
 DragGrip.BackgroundTransparency = 1
-DragGrip.Size = UDim2.fromOffset(142, 52)
+DragGrip.Size = UDim2.fromOffset(148, 58)
 DragGrip.Parent = TopBar
 
 local HubIcon = Instance.new("Frame")
 HubIcon.BackgroundColor3 = Theme.Accent
 HubIcon.Size = UDim2.fromOffset(30, 30)
-HubIcon.Position = UDim2.fromOffset(12, 11)
+HubIcon.Position = UDim2.fromOffset(12, 14)
 HubIcon.Parent = DragGrip
 round(HubIcon, 10)
 gradient(HubIcon, Color3.fromRGB(128, 196, 255), Color3.fromRGB(87, 151, 247), 45)
@@ -425,9 +434,9 @@ CategoryScroller.BorderSizePixel = 0
 CategoryScroller.ScrollBarThickness = 0
 CategoryScroller.ScrollBarImageColor3 = Theme.Accent
 CategoryScroller.ScrollingDirection = Enum.ScrollingDirection.X
-CategoryScroller.Size = UDim2.new(1, -154, 1, 0)
+CategoryScroller.Size = UDim2.new(1, -158, 1, 0)
 CategoryScroller.Position = UDim2.fromOffset(148, 0)
-CategoryScroller.CanvasSize = UDim2.fromOffset(454, 0)
+CategoryScroller.CanvasSize = UDim2.fromOffset(543, 0)
 CategoryScroller.Parent = TopBar
 
 local CategoryLayout = Instance.new("UIListLayout")
@@ -711,52 +720,208 @@ local function addCycle(card, text, values, getter, setter)
 end
 
 local categoryMeta = {
-    Home = {Icon = "⌂", Hint = "Home"},
-    Aim = {Icon = "◎", Hint = "Aim"},
-    Visuals = {Icon = "◉", Hint = "Visuals"},
-    Movement = {Icon = "↯", Hint = "Movement"},
-    World = {Icon = "◌", Hint = "World"},
-    Players = {Icon = "♙", Hint = "Players"},
-    Catalog = {Icon = "▦", Hint = "Catalog"},
-    Explorer = {Icon = "⌘", Hint = "Explorer"},
-    Configs = {Icon = "◫", Hint = "Configs"},
-    Settings = {Icon = "⚙", Hint = "Settings"}
+    Home = {Hint = "Home"},
+    Aim = {Hint = "Aim"},
+    Visuals = {Hint = "Visuals"},
+    Movement = {Hint = "Movement"},
+    World = {Hint = "World"},
+    Players = {Hint = "Players"},
+    Catalog = {Hint = "Catalog"},
+    Explorer = {Hint = "Explorer"},
+    Configs = {Hint = "Configs"},
+    Settings = {Hint = "Settings"}
 }
+
+local function iconPart(parent, x, y, width, height, rotation, radius)
+    local part = Instance.new("Frame")
+    part.AnchorPoint = Vector2.new(0.5, 0.5)
+    part.BackgroundColor3 = Theme.Accent
+    part.BorderSizePixel = 0
+    part.Position = UDim2.fromOffset(x, y)
+    part.Rotation = rotation or 0
+    part.Size = UDim2.fromOffset(width, height)
+    part.ZIndex = 2
+    part.Parent = parent
+    round(part, radius or math.min(width, height))
+    return part
+end
+
+local function vectorIcon(parent, category)
+    local canvas = Instance.new("Frame")
+    canvas.BackgroundTransparency = 1
+    canvas.Size = UDim2.fromOffset(28, 28)
+    canvas.AnchorPoint = Vector2.new(0.5, 0.5)
+    canvas.Position = UDim2.fromScale(0.5, 0.5)
+    canvas.ZIndex = 2
+    canvas.Parent = parent
+    if category == "Home" then
+        iconPart(canvas, 14, 17, 14, 12, 0, 3)
+        iconPart(canvas, 9, 11, 14, 3, 45, 2)
+        iconPart(canvas, 19, 11, 14, 3, -45, 2)
+        local door = iconPart(canvas, 14, 20, 4, 6, 0, 1)
+        door.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    elseif category == "Aim" then
+        local ring = Instance.new("Frame")
+        ring.AnchorPoint = Vector2.new(0.5, 0.5)
+        ring.BackgroundTransparency = 1
+        ring.Position = UDim2.fromOffset(14, 14)
+        ring.Size = UDim2.fromOffset(20, 20)
+        ring.ZIndex = 2
+        ring.Parent = canvas
+        round(ring, 20)
+        stroke(ring, Theme.Accent, 2, 0)
+        iconPart(canvas, 14, 14, 5, 5, 0, 5)
+        iconPart(canvas, 14, 2.5, 2, 5, 0, 1)
+        iconPart(canvas, 14, 25.5, 2, 5, 0, 1)
+        iconPart(canvas, 2.5, 14, 5, 2, 0, 1)
+        iconPart(canvas, 25.5, 14, 5, 2, 0, 1)
+    elseif category == "Visuals" then
+        local eye = Instance.new("Frame")
+        eye.AnchorPoint = Vector2.new(0.5, 0.5)
+        eye.BackgroundTransparency = 1
+        eye.Position = UDim2.fromOffset(14, 14)
+        eye.Size = UDim2.fromOffset(25, 14)
+        eye.ZIndex = 2
+        eye.Parent = canvas
+        round(eye, 14)
+        stroke(eye, Theme.Accent, 2, 0)
+        iconPart(canvas, 14, 14, 7, 7, 0, 7)
+    elseif category == "Movement" then
+        iconPart(canvas, 9, 8, 12, 3, 45, 2)
+        iconPart(canvas, 9, 14, 12, 3, -45, 2)
+        iconPart(canvas, 18, 14, 12, 3, 45, 2)
+        iconPart(canvas, 18, 20, 12, 3, -45, 2)
+    elseif category == "World" then
+        local globe = Instance.new("Frame")
+        globe.AnchorPoint = Vector2.new(0.5, 0.5)
+        globe.BackgroundTransparency = 1
+        globe.Position = UDim2.fromOffset(14, 14)
+        globe.Size = UDim2.fromOffset(22, 22)
+        globe.ZIndex = 2
+        globe.Parent = canvas
+        round(globe, 22)
+        stroke(globe, Theme.Accent, 2, 0)
+        iconPart(canvas, 14, 14, 2, 20, 0, 1)
+        iconPart(canvas, 14, 14, 20, 2, 0, 1)
+        iconPart(canvas, 14, 14, 12, 22, 0, 12).BackgroundTransparency = 1
+    elseif category == "Players" then
+        iconPart(canvas, 14, 8, 9, 9, 0, 9)
+        iconPart(canvas, 14, 20, 18, 10, 0, 7)
+        iconPart(canvas, 4, 21, 5, 3, 0, 2)
+        iconPart(canvas, 24, 21, 5, 3, 0, 2)
+    elseif category == "Catalog" then
+        for _, point in ipairs({{8, 8}, {20, 8}, {8, 20}, {20, 20}}) do
+            iconPart(canvas, point[1], point[2], 8, 8, 0, 2)
+        end
+    elseif category == "Explorer" then
+        iconPart(canvas, 7, 7, 5, 5, 0, 5)
+        iconPart(canvas, 21, 14, 5, 5, 0, 5)
+        iconPart(canvas, 21, 23, 5, 5, 0, 5)
+        iconPart(canvas, 12, 10.5, 10, 2, 0, 1)
+        iconPart(canvas, 16, 18.5, 2, 17, 0, 1)
+        iconPart(canvas, 19, 14, 6, 2, 0, 1)
+        iconPart(canvas, 19, 23, 6, 2, 0, 1)
+    elseif category == "Configs" then
+        for index, y in ipairs({7, 14, 21}) do
+            iconPart(canvas, 14, y, 21, 2, 0, 1)
+            iconPart(canvas, index == 1 and 9 or index == 2 and 18 or 12, y, 5, 5, 0, 5)
+        end
+    elseif category == "Settings" then
+        iconPart(canvas, 14, 14, 10, 10, 0, 10)
+        for _, point in ipairs({{14, 3}, {14, 25}, {3, 14}, {25, 14}, {6, 6}, {22, 22}, {22, 6}, {6, 22}}) do
+            iconPart(canvas, point[1], point[2], 4, 4, 0, 1)
+        end
+        local hole = iconPart(canvas, 14, 14, 4, 4, 0, 4)
+        hole.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    end
+    return canvas
+end
+
 local categories = {"Home", "Aim", "Visuals", "Movement", "World", "Players", "Catalog", "Explorer", "Configs", "Settings"}
 local CategoryTooltip = Instance.new("TextLabel")
 CategoryTooltip.BackgroundColor3 = Color3.fromRGB(44, 83, 120)
-CategoryTooltip.BackgroundTransparency = 0.04
+CategoryTooltip.BackgroundTransparency = 1
 CategoryTooltip.TextColor3 = Color3.fromRGB(255, 255, 255)
-CategoryTooltip.TextSize = 11
-CategoryTooltip.Font = Enum.Font.GothamMedium
+CategoryTooltip.TextTransparency = 1
+CategoryTooltip.TextSize = 10
+CategoryTooltip.Font = Enum.Font.Gotham
+CategoryTooltip.TextXAlignment = Enum.TextXAlignment.Center
+CategoryTooltip.TextYAlignment = Enum.TextYAlignment.Center
 CategoryTooltip.Visible = false
 CategoryTooltip.ZIndex = 20
-CategoryTooltip.Size = UDim2.fromOffset(92, 24)
+CategoryTooltip.Size = UDim2.fromOffset(116, 22)
 CategoryTooltip.Parent = ScreenGui
 round(CategoryTooltip, 7)
 stroke(CategoryTooltip, Color3.fromRGB(178, 220, 255), 1, 0.12)
+local tooltipTransition = 0
+local function positionCategoryTooltip()
+    local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+    local x = TopBar.AbsolutePosition.X + TopBar.AbsoluteSize.X * 0.5 - CategoryTooltip.AbsoluteSize.X * 0.5
+    local y = TopBar.AbsolutePosition.Y + TopBar.AbsoluteSize.Y + 8
+    if y + CategoryTooltip.AbsoluteSize.Y > viewport.Y then
+        y = TopBar.AbsolutePosition.Y - CategoryTooltip.AbsoluteSize.Y - 8
+    end
+    CategoryTooltip.Position = UDim2.fromOffset(x, y)
+end
+local function showCategoryTooltip(text)
+    tooltipTransition = tooltipTransition + 1
+    positionCategoryTooltip()
+    CategoryTooltip.Text = text
+    CategoryTooltip.Visible = true
+    CategoryTooltip.BackgroundTransparency = 1
+    CategoryTooltip.TextTransparency = 1
+    animate(CategoryTooltip, {BackgroundTransparency = 0.04, TextTransparency = 0}, 0.16)
+end
+local function hideCategoryTooltip()
+    tooltipTransition = tooltipTransition + 1
+    local transition = tooltipTransition
+    animate(CategoryTooltip, {BackgroundTransparency = 1, TextTransparency = 1}, 0.14)
+    task.delay(0.14, function()
+        if transition == tooltipTransition and CategoryTooltip.Parent then
+            CategoryTooltip.Visible = false
+        end
+    end)
+end
 for _, name in ipairs(categories) do
     createPage(name)
-    local categoryButton = button(CategoryScroller, categoryMeta[name].Icon, UDim2.fromOffset(38, 38))
+    local categoryButton = button(CategoryScroller, "", UDim2.fromOffset(48, 48))
     categoryButton.Name = name .. "Button"
-    categoryButton.TextSize = 18
-    categoryButton.Font = Enum.Font.GothamBold
     categoryButton.LayoutOrder = #categoryButtons + 1
     categoryButtons[name] = categoryButton
+    vectorIcon(categoryButton, name)
     categoryButton.MouseEnter:Connect(function()
-        local mouse = UserInputService:GetMouseLocation()
-        CategoryTooltip.Text = categoryMeta[name].Hint
-        CategoryTooltip.Position = UDim2.fromOffset(mouse.X - 46, mouse.Y + 28)
-        CategoryTooltip.Visible = true
-        animate(CategoryTooltip, {BackgroundTransparency = 0.04}, 0.12)
+        showCategoryTooltip(categoryMeta[name].Hint)
     end)
     categoryButton.MouseLeave:Connect(function()
-        CategoryTooltip.Visible = false
+        hideCategoryTooltip()
     end)
 end
 
+local windowTransition = 0
+
+local function placeContentWindow()
+    local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+    local barPosition = TopBar.AbsolutePosition
+    local barSize = TopBar.AbsoluteSize
+    local windowSize = ContentWindow.AbsoluteSize
+    local opensBelow = barPosition.Y + barSize.Y * 0.5 < viewport.Y * 0.5
+    local x = math.clamp(barPosition.X + barSize.X * 0.5 - windowSize.X * 0.5, 0, math.max(0, viewport.X - windowSize.X))
+    local y = opensBelow and barPosition.Y + barSize.Y + 12 or barPosition.Y - windowSize.Y - 12
+    if y < 0 then
+        opensBelow = true
+        y = math.min(viewport.Y - windowSize.Y, barPosition.Y + barSize.Y + 12)
+    elseif y + windowSize.Y > viewport.Y then
+        opensBelow = false
+        y = math.max(0, barPosition.Y - windowSize.Y - 12)
+    end
+    ContentWindow.Position = UDim2.fromOffset(x, y + (opensBelow and -10 or 10))
+    animate(ContentWindow, {Position = UDim2.fromOffset(x, y)}, 0.22, Enum.EasingStyle.Quint)
+end
+
 local function openContentWindow()
+    windowTransition = windowTransition + 1
     if not ContentWindow.Visible then
+        placeContentWindow()
         ContentWindow.Visible = true
         ContentScale.Scale = 0.94
         animate(ContentScale, {Scale = 1}, 0.24, Enum.EasingStyle.Back)
@@ -767,9 +932,11 @@ end
 
 local function closeContentWindow()
     if not ContentWindow.Visible then return end
+    windowTransition = windowTransition + 1
+    local transition = windowTransition
     animate(ContentScale, {Scale = 0.95}, 0.16, Enum.EasingStyle.Quad)
     task.delay(0.16, function()
-        if ContentWindow and ContentWindow.Parent then
+        if transition == windowTransition and ContentWindow and ContentWindow.Parent then
             ContentWindow.Visible = false
             ContentScale.Scale = 1
         end
@@ -807,6 +974,11 @@ end
 CloseButton.Activated:Connect(function()
     closeContentWindow()
 end)
+
+trackConnection(RunService.RenderStepped:Connect(function()
+    if not TopBar.Visible then TopBar.Visible = true end
+    if not ScreenGui.Enabled then ScreenGui.Enabled = true end
+end))
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.BackgroundTransparency = 1
@@ -1368,7 +1540,7 @@ HomeSubtitle.TextSize = 12
 local StatusCard = createCard(HomePage, "Live Session")
 local StatusText = addNote(StatusCard, "")
 local NavigationCard = createCard(HomePage, "Categories")
-local function addHomeCategory(icon, title, description, category)
+local function addHomeCategory(title, description, category)
     local tile = Instance.new("TextButton")
     tile.AutoButtonColor = false
     tile.Text = ""
@@ -1379,46 +1551,34 @@ local function addHomeCategory(icon, title, description, category)
     round(tile, 10)
     local tileStroke = stroke(tile, Color3.fromRGB(188, 220, 246), 1, 0.14)
     gradient(tile, Color3.fromRGB(255, 255, 255), Color3.fromRGB(232, 246, 255), 0)
-    local tileScale = Instance.new("UIScale")
-    tileScale.Parent = tile
     local iconFrame = Instance.new("Frame")
     iconFrame.BackgroundColor3 = Theme.AccentSoft
     iconFrame.Size = UDim2.fromOffset(42, 42)
     iconFrame.Position = UDim2.fromOffset(10, 10)
     iconFrame.Parent = tile
     round(iconFrame, 12)
-    local iconLabel = textLabel(iconFrame, icon, UDim2.fromScale(1, 1), nil, 20, Theme.Accent, Enum.TextXAlignment.Center)
-    iconLabel.Font = Enum.Font.GothamBold
+    vectorIcon(iconFrame, category)
     local titleLabel = textLabel(tile, title, UDim2.new(1, -72, 0, 26), UDim2.fromOffset(64, 7), 16, Theme.Text)
     titleLabel.Font = Enum.Font.GothamSemibold
     local detailLabel = textLabel(tile, description, UDim2.new(1, -72, 0, 20), UDim2.fromOffset(64, 32), 11, Theme.Muted)
     tile.MouseEnter:Connect(function()
         animate(tile, {BackgroundColor3 = Color3.fromRGB(224, 241, 255)}, 0.14)
         animate(tileStroke, {Color = Theme.Accent, Transparency = 0.02}, 0.14)
-        animate(tileScale, {Scale = 1.015}, 0.14)
     end)
     tile.MouseLeave:Connect(function()
         animate(tile, {BackgroundColor3 = Theme.Surface2}, 0.16)
         animate(tileStroke, {Color = Color3.fromRGB(188, 220, 246), Transparency = 0.14}, 0.16)
-        animate(tileScale, {Scale = 1}, 0.16)
     end)
     tile.Activated:Connect(function()
         showCategory(category)
     end)
 end
-addHomeCategory("◎", "Aim", "Targeting, field of view and prediction", "Aim")
-addHomeCategory("◉", "Visuals", "Live player overlays and visual telemetry", "Visuals")
-addHomeCategory("↯", "Movement", "Movement and world-physics test controls", "Movement")
-addHomeCategory("◌", "World", "Camera, lighting and waypoint controls", "World")
-addHomeCategory("♙", "Players", "Select, inspect and observe live players", "Players")
-addHomeCategory("▦", "Catalog", "Your custom game-script collection", "Catalog")
-local CapabilityCard = createCard(HomePage, "Runtime")
-local capabilityLines = {}
-for key, value in pairs(capabilities) do
-    table.insert(capabilityLines, key .. ": " .. (value and "Supported" or "Unsupported"))
-end
-table.sort(capabilityLines)
-addNote(CapabilityCard, table.concat(capabilityLines, "   •   "))
+addHomeCategory("Aim", "Targeting, field of view and prediction", "Aim")
+addHomeCategory("Visuals", "Live player overlays and visual telemetry", "Visuals")
+addHomeCategory("Movement", "Movement and world-physics test controls", "Movement")
+addHomeCategory("World", "Camera, lighting and waypoint controls", "World")
+addHomeCategory("Players", "Select, inspect and observe live players", "Players")
+addHomeCategory("Catalog", "Your custom game-script collection", "Catalog")
 
 local statusClock = 0
 trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
