@@ -329,6 +329,14 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = guiParent
 
+local UIRoot = Instance.new("Frame")
+UIRoot.Name = "UIRoot"
+UIRoot.BackgroundTransparency = 1
+UIRoot.BorderSizePixel = 0
+UIRoot.Size = UDim2.fromScale(1, 1)
+UIRoot.Position = UDim2.fromScale(0, 0)
+UIRoot.Parent = ScreenGui
+
 local function round(object, radius)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, radius or 6)
@@ -371,7 +379,7 @@ Toast.TextSize = 11
 Toast.TextTransparency = 1
 Toast.Visible = false
 Toast.ZIndex = 40
-Toast.Parent = ScreenGui
+Toast.Parent = UIRoot
 round(Toast, 9)
 stroke(Toast, Color3.fromRGB(158, 207, 247), 1, 0.16)
 local toastRevision = 0
@@ -459,98 +467,73 @@ local function button(parent, text, size, position)
     return item
 end
 
-local function getViewportSize()
+local function getCanvasSize()
+    local size = UIRoot.AbsoluteSize
+    if size.X > 0 and size.Y > 0 then
+        return size
+    end
     local camera = Workspace.CurrentCamera
     return camera and camera.ViewportSize or Vector2.new(1920, 1080)
 end
 
-local function clampGuiPosition(frame, desired)
-    local viewport = getViewportSize()
+local function getLocalPosition(frame)
+    local rootPosition = UIRoot.AbsolutePosition
+    local framePosition = frame.AbsolutePosition
+    return Vector2.new(framePosition.X - rootPosition.X, framePosition.Y - rootPosition.Y)
+end
+
+local function clampLocalPosition(frame, desired)
+    local canvas = getCanvasSize()
     local size = frame.AbsoluteSize
     if size.X <= 0 or size.Y <= 0 then
         size = Vector2.new(frame.Size.X.Offset, frame.Size.Y.Offset)
     end
     return Vector2.new(
-        math.clamp(desired.X, 0, math.max(0, viewport.X - size.X)),
-        math.clamp(desired.Y, 0, math.max(0, viewport.Y - size.Y))
+        math.clamp(desired.X, 0, math.max(0, canvas.X - size.X)),
+        math.clamp(desired.Y, 0, math.max(0, canvas.Y - size.Y))
     )
-end
-
-local function guiPositionForAbsolute(frame, desired)
-    local absolute = frame.AbsolutePosition
-    local current = frame.Position
-    local correction = desired - Vector2.new(absolute.X, absolute.Y)
-    return UDim2.new(
-        current.X.Scale,
-        current.X.Offset + correction.X,
-        current.Y.Scale,
-        current.Y.Offset + correction.Y
-    )
-end
-
-local function setGuiAbsolutePosition(frame, desired)
-    frame.Position = guiPositionForAbsolute(frame, desired)
 end
 
 local function keepGuiOnScreen(frame)
-    local absolute = frame.AbsolutePosition
-    local desired = Vector2.new(absolute.X, absolute.Y)
-    local clamped = clampGuiPosition(frame, desired)
-    if (clamped - desired).Magnitude > 0.5 then
-        setGuiAbsolutePosition(frame, clamped)
+    local current = getLocalPosition(frame)
+    local clamped = clampLocalPosition(frame, current)
+    if (clamped - current).Magnitude > 0.5 then
+        frame.Position = UDim2.fromOffset(clamped.X, clamped.Y)
     end
 end
 
 local function makeDraggable(frame, handle)
     local dragging = false
     local dragStart
-    local dragOrigin
-    local controller = {
-        DidDrag = false,
-        SuppressUntil = 0
-    }
+    local frameStart
     local function beginDrag(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 and frame.Visible then
-            if dragging then
-                return
-            end
-            local currentPointer = getMousePosition()
-            dragging = true
-            controller.DidDrag = false
-            dragStart = currentPointer
-            local absolute = frame.AbsolutePosition
-            dragOrigin = Vector2.new(absolute.X, absolute.Y)
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 or not frame.Visible or dragging then
+            return
         end
+        dragging = true
+        dragStart = getMousePosition()
+        frameStart = getLocalPosition(frame)
     end
-    function controller:AttachHandle(guiObject)
-        guiObject.Active = true
-        trackConnection(guiObject.InputBegan:Connect(beginDrag))
-    end
-    controller:AttachHandle(handle)
+    handle.Active = true
+    trackConnection(handle.InputBegan:Connect(beginDrag))
     trackConnection(UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and dragOrigin then
-            local currentPointer = getMousePosition()
-            local pointerDelta = currentPointer - dragStart
-            if pointerDelta.Magnitude < 4 then
-                return
-            end
-            controller.DidDrag = true
-            controller.SuppressUntil = os.clock() + 0.2
-            local desired = dragOrigin + pointerDelta
-            setGuiAbsolutePosition(frame, clampGuiPosition(frame, desired))
+        if not dragging or input.UserInputType ~= Enum.UserInputType.MouseMovement or not dragStart or not frameStart then
+            return
         end
+        local delta = getMousePosition() - dragStart
+        if delta.Magnitude < 4 then
+            return
+        end
+        local nextPosition = clampLocalPosition(frame, frameStart + delta)
+        frame.Position = UDim2.fromOffset(nextPosition.X, nextPosition.Y)
     end))
     trackConnection(UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
             dragStart = nil
-            dragOrigin = nil
+            frameStart = nil
         end
     end))
-    function controller:ShouldSuppressClick()
-        return self.DidDrag or os.clock() < self.SuppressUntil
-    end
-    return controller
 end
 
 local TopBar = Instance.new("Frame")
@@ -559,7 +542,7 @@ TopBar.BackgroundColor3 = Theme.Background
 TopBar.BackgroundTransparency = 0.1
 TopBar.Size = UDim2.fromOffset(720, 58)
 TopBar.Position = UDim2.new(0.5, -360, 0, 12)
-TopBar.Parent = ScreenGui
+TopBar.Parent = UIRoot
 round(TopBar, 14)
 stroke(TopBar, Color3.fromRGB(167, 210, 247), 1, 0.08)
 gradient(TopBar, Color3.fromRGB(255, 255, 255), Color3.fromRGB(226, 243, 255), 75)
@@ -608,7 +591,7 @@ ContentWindow.BackgroundTransparency = 0.08
 ContentWindow.Size = UDim2.fromOffset(680, 440)
 ContentWindow.Position = UDim2.new(0.5, -340, 0, 64)
 ContentWindow.Visible = false
-ContentWindow.Parent = ScreenGui
+ContentWindow.Parent = UIRoot
 round(ContentWindow, 16)
 stroke(ContentWindow, Color3.fromRGB(153, 204, 244), 1, 0.08)
 gradient(ContentWindow, Color3.fromRGB(255, 255, 255), Color3.fromRGB(229, 244, 255), 80)
@@ -650,7 +633,7 @@ PageHost.Size = UDim2.new(1, -16, 1, -50)
 PageHost.Position = UDim2.fromOffset(8, 44)
 PageHost.Parent = ContentWindow
 
-local TopBarDrag = makeDraggable(TopBar, TopBar)
+makeDraggable(TopBar, DragGrip)
 makeDraggable(ContentWindow, WindowDragZone)
 
 local pages = {}
@@ -1027,18 +1010,19 @@ CategoryTooltip.TextYAlignment = Enum.TextYAlignment.Center
 CategoryTooltip.Visible = false
 CategoryTooltip.ZIndex = 20
 CategoryTooltip.Size = UDim2.fromOffset(116, 22)
-CategoryTooltip.Parent = ScreenGui
+CategoryTooltip.Parent = UIRoot
 round(CategoryTooltip, 7)
 stroke(CategoryTooltip, Color3.fromRGB(178, 220, 255), 1, 0.12)
 local tooltipTransition = 0
 local function positionCategoryTooltip()
-    local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-    local x = TopBar.AbsolutePosition.X + TopBar.AbsoluteSize.X * 0.5 - CategoryTooltip.AbsoluteSize.X * 0.5
-    local y = TopBar.AbsolutePosition.Y + TopBar.AbsoluteSize.Y + 8
-    if y + CategoryTooltip.AbsoluteSize.Y > viewport.Y then
-        y = TopBar.AbsolutePosition.Y - CategoryTooltip.AbsoluteSize.Y - 8
+    local canvas = getCanvasSize()
+    local barPosition = getLocalPosition(TopBar)
+    local x = barPosition.X + TopBar.AbsoluteSize.X * 0.5 - CategoryTooltip.AbsoluteSize.X * 0.5
+    local y = barPosition.Y + TopBar.AbsoluteSize.Y + 8
+    if y + CategoryTooltip.AbsoluteSize.Y > canvas.Y then
+        y = barPosition.Y - CategoryTooltip.AbsoluteSize.Y - 8
     end
-    setGuiAbsolutePosition(CategoryTooltip, Vector2.new(x, y))
+    CategoryTooltip.Position = UDim2.fromOffset(x, y)
 end
 local function showCategoryTooltip(text)
     tooltipTransition = tooltipTransition + 1
@@ -1064,7 +1048,6 @@ for index, name in ipairs(categories) do
     local categoryButton = button(CategoryScroller, "", UDim2.fromOffset(48, 48))
     categoryButton.Name = name .. "Button"
     categoryButton.LayoutOrder = index
-    TopBarDrag:AttachHandle(categoryButton)
     categoryButtons[name] = categoryButton
     local selectedOutline = stroke(categoryButton, Theme.Accent, 1.5, 0)
     selectedOutline.Enabled = false
@@ -1081,24 +1064,24 @@ end
 local windowTransition = 0
 
 local function placeContentWindow()
-    local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-    local barPosition = TopBar.AbsolutePosition
+    local canvas = getCanvasSize()
+    local barPosition = getLocalPosition(TopBar)
     local barSize = TopBar.AbsoluteSize
     local windowSize = ContentWindow.AbsoluteSize
     if windowSize.X <= 0 or windowSize.Y <= 0 then
         windowSize = Vector2.new(ContentWindow.Size.X.Offset, ContentWindow.Size.Y.Offset)
     end
-    local opensBelow = barPosition.Y + barSize.Y * 0.5 < viewport.Y * 0.5
-    local x = math.clamp(barPosition.X + barSize.X * 0.5 - windowSize.X * 0.5, 0, math.max(0, viewport.X - windowSize.X))
+    local opensBelow = barPosition.Y + barSize.Y * 0.5 < canvas.Y * 0.5
+    local x = math.clamp(barPosition.X + barSize.X * 0.5 - windowSize.X * 0.5, 0, math.max(0, canvas.X - windowSize.X))
     local y = opensBelow and barPosition.Y + barSize.Y + 12 or barPosition.Y - windowSize.Y - 12
     if y < 0 then
         opensBelow = true
-        y = math.min(viewport.Y - windowSize.Y, barPosition.Y + barSize.Y + 12)
-    elseif y + windowSize.Y > viewport.Y then
+        y = math.max(0, math.min(canvas.Y - windowSize.Y, barPosition.Y + barSize.Y + 12))
+    elseif y + windowSize.Y > canvas.Y then
         opensBelow = false
         y = math.max(0, barPosition.Y - windowSize.Y - 12)
     end
-    local targetPosition = guiPositionForAbsolute(ContentWindow, Vector2.new(x, y))
+    local targetPosition = UDim2.fromOffset(x, y)
     local entranceOffset = opensBelow and -10 or 10
     ContentWindow.Position = UDim2.new(
         targetPosition.X.Scale,
@@ -1166,14 +1149,13 @@ local function showCategory(name)
 end
 
 for name, item in pairs(categoryButtons) do
-    item.Activated:Connect(function()
-        if TopBarDrag:ShouldSuppressClick() then
-            return
-        end
-        if currentCategory == name and ContentWindow.Visible then
+    local categoryName = name
+    local categoryButton = item
+    categoryButton.Activated:Connect(function()
+        if currentCategory == categoryName and ContentWindow.Visible then
             closeContentWindow()
         else
-            showCategory(name)
+            showCategory(categoryName)
         end
     end)
 end
@@ -1196,7 +1178,7 @@ FOVCircle.BackgroundTransparency = 1
 FOVCircle.Visible = false
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 FOVCircle.ZIndex = 3
-FOVCircle.Parent = ScreenGui
+FOVCircle.Parent = UIRoot
 round(FOVCircle, 1000)
 local FOVStroke = stroke(FOVCircle, Theme.Accent, 1, 0.15)
 
@@ -2495,7 +2477,7 @@ unload = function()
 end
 
 env.TasuHub = {
-    Version = "1.2.0",
+    Version = "2.0.0",
     State = State,
     Capabilities = capabilities,
     Open = function() ContentWindow.Visible = true end,
