@@ -578,6 +578,7 @@ local function addShadow(object, transparency)
     shadow.Name = "DropShadow"
     shadow.AnchorPoint = Vector2.new(0.5, 0.5)
     shadow.BackgroundTransparency = 1
+    shadow.BorderSizePixel = 0
     shadow.Image = "rbxassetid://1316045217"
     shadow.ImageColor3 = Color3.new(0, 0, 0)
     local baseTransparency = transparency or 0.72
@@ -585,15 +586,6 @@ local function addShadow(object, transparency)
     shadow.ScaleType = Enum.ScaleType.Slice
     shadow.SliceCenter = Rect.new(10, 10, 118, 118)
     shadow.ZIndex = math.max(0, object.ZIndex - 1)
-    local sourceCorner = object:FindFirstChildOfClass("UICorner")
-    local shadowCorner = Instance.new("UICorner")
-    shadowCorner.CornerRadius = sourceCorner and sourceCorner.CornerRadius or UDim.new(0, 0)
-    shadowCorner.Parent = shadow
-    if sourceCorner then
-        trackConnection(sourceCorner:GetPropertyChangedSignal("CornerRadius"):Connect(function()
-            shadowCorner.CornerRadius = sourceCorner.CornerRadius
-        end))
-    end
     if object.ClipsDescendants and object.Parent then
         shadow.AnchorPoint = object.AnchorPoint
         local function sync()
@@ -971,7 +963,6 @@ TopBar.Parent = InterfaceRoot
 UI.BindTheme(TopBar, "BackgroundColor3", "Background")
 round(TopBar, 14)
 gradient(TopBar, "Surface", "Surface2", 75)
-addShadow(TopBar, UI.ShadowTransparency).ZIndex = 3
 
 local DragGrip = Instance.new("Frame")
 DragGrip.Name = "BrandButton"
