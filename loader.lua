@@ -71,6 +71,8 @@ local Defaults = {
         OrbitMode = "Circle",
         OrbitRadius = 8,
         OrbitSpeed = 2,
+        OrbitHeight = 5,
+        OrbitOffset = 2,
         Fling = false,
         FlingMode = "Walk Fling",
         FlingPower = 50000,
@@ -96,15 +98,15 @@ local Defaults = {
         FlatGreen = 150,
         FlatBlue = 160
     },
-    MM2Security = {
-        Enabled = false,
-        PlayerESP = true,
-        GunDropESP = true,
-        AutoPickupTest = false,
-        AutoFireTest = false
-    },
     Players = {
         Sort = "Nearest"
+    },
+    Stats = {
+        Visible = false,
+        FPS = true,
+        Ping = true,
+        Players = false,
+        Memory = false
     },
     Keybinds = {},
     Catalog = {},
@@ -121,6 +123,7 @@ local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local StarterGui = game:GetService("StarterGui")
+local StatsService = game:GetService("Stats")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
@@ -372,9 +375,15 @@ local UI = {
     Version = "0.1",
     Ready = false,
     TopBarBaseWidth = 840,
+    -- ShadowSpread / 2 is roughly the visible edge in pixels. Offset moves it right/down.
+    ShadowOffsetX = 2,
+    ShadowOffsetY = 2,
+    ShadowSpread = 38,
+    ShadowTransparency = 0.6,
     RefreshControls = function() end,
     RefreshNavigation = function() end,
     RefreshOrbitPlayers = function() end,
+    RefreshVisualPreview = function() end,
     CloseGlobalSearch = function(_force) end,
     OpenConfigSaveModal = function() end,
     AddStaticCard = function(_page, _title) return game end,
@@ -404,11 +413,11 @@ local UI = {
     GradientBindings = {},
     CategoryIconUrls = {
         Home = "", Catalog = "", Players = "", Visuals = "", Aim = "",
-        Movement = "", World = "", MM2Security = "", Misc = "", Configs = ""
+        Movement = "", World = "", Misc = "", Configs = ""
     },
     CategoryIconBackgrounds = {
         Home = "AccentSoft", Catalog = "AccentSoft", Players = "AccentSoft", Visuals = "AccentSoft", Aim = "AccentSoft",
-        Movement = "AccentSoft", World = "AccentSoft", MM2Security = "AccentSoft", Misc = "AccentSoft", Configs = "AccentSoft"
+        Movement = "AccentSoft", World = "AccentSoft", Misc = "AccentSoft", Configs = "AccentSoft"
     },
     Fonts = {
         Option = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
@@ -571,8 +580,8 @@ local function addShadow(object, transparency)
     if object.ClipsDescendants and object.Parent then
         shadow.AnchorPoint = object.AnchorPoint
         local function sync()
-            shadow.Position = object.Position + UDim2.fromOffset(2, 2)
-            shadow.Size = object.Size + UDim2.fromOffset(38, 38)
+            shadow.Position = object.Position + UDim2.fromOffset(UI.ShadowOffsetX, UI.ShadowOffsetY)
+            shadow.Size = object.Size + UDim2.fromOffset(UI.ShadowSpread, UI.ShadowSpread)
             shadow.Visible = object.Visible
             if object:IsA("CanvasGroup") then
                 shadow.ImageTransparency = baseTransparency + (1 - baseTransparency) * object.GroupTransparency
@@ -587,8 +596,8 @@ local function addShadow(object, transparency)
             trackConnection(object:GetPropertyChangedSignal("GroupTransparency"):Connect(sync))
         end
     else
-        shadow.Position = UDim2.new(0.5, 2, 0.5, 2)
-        shadow.Size = UDim2.new(1, 38, 1, 38)
+        shadow.Position = UDim2.new(0.5, UI.ShadowOffsetX, 0.5, UI.ShadowOffsetY)
+        shadow.Size = UDim2.new(1, UI.ShadowSpread, 1, UI.ShadowSpread)
         shadow.Parent = object
     end
     return shadow
@@ -939,6 +948,7 @@ TopBar.Size = UDim2.fromOffset(UI.TopBarBaseWidth, 58)
 TopBar.Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, 44)
 TopBar.ClipsDescendants = true
 TopBar.Visible = false
+TopBar.ZIndex = 5
 TopBar.Parent = InterfaceRoot
 UI.BindTheme(TopBar, "BackgroundColor3", "Background")
 round(TopBar, 14)
@@ -950,10 +960,10 @@ TopBarGlow.AnchorPoint = TopBar.AnchorPoint
 TopBarGlow.BackgroundTransparency = 1
 TopBarGlow.Image = "rbxassetid://1316045217"
 TopBarGlow.ImageColor3 = Theme.Accent
-TopBarGlow.ImageTransparency = 0.52
+TopBarGlow.ImageTransparency = 0.38
 TopBarGlow.ScaleType = Enum.ScaleType.Slice
 TopBarGlow.SliceCenter = Rect.new(10, 10, 118, 118)
-TopBarGlow.ZIndex = 0
+TopBarGlow.ZIndex = 4
 TopBarGlow.Parent = InterfaceRoot
 UI.BindTheme(TopBarGlow, "ImageColor3", "Accent")
 local TopBarGlowGradient = Instance.new("UIGradient")
@@ -1085,13 +1095,20 @@ ContentWindow.Position = UDim2.new(0.5, -340, 0, 64)
 ContentWindow.Visible = false
 ContentWindow.GroupTransparency = 1
 ContentWindow.ClipsDescendants = true
+ContentWindow.ZIndex = 10
 ContentWindow.Parent = InterfaceRoot
 UI.BindTheme(ContentWindow, "BackgroundColor3", "Background")
 round(ContentWindow, 16)
-addShadow(ContentWindow, 0.6)
 gradient(ContentWindow, "Surface", "Surface2", 80)
 local ContentScale = Instance.new("UIScale")
 ContentScale.Parent = ContentWindow
+local ContentShadow = addShadow(ContentWindow, UI.ShadowTransparency)
+ContentShadow.ZIndex = 2
+local ContentShadowScale = Instance.new("UIScale")
+ContentShadowScale.Parent = ContentShadow
+trackConnection(ContentScale:GetPropertyChangedSignal("Scale"):Connect(function()
+    ContentShadowScale.Scale = ContentScale.Scale
+end))
 
 local WindowHeader = Instance.new("Frame")
 WindowHeader.BackgroundColor3 = Theme.Surface
@@ -1187,6 +1204,80 @@ do
     end)
 end
 
+local StatsPanel = Instance.new("CanvasGroup")
+StatsPanel.Name = "TasuHubStats"
+StatsPanel.BackgroundColor3 = Theme.Surface
+StatsPanel.BackgroundTransparency = 0.08
+StatsPanel.GroupTransparency = 1
+StatsPanel.ClipsDescendants = true
+StatsPanel.Position = UDim2.fromOffset(24, 120)
+StatsPanel.Size = UDim2.fromOffset(190, 92)
+StatsPanel.Visible = false
+StatsPanel.ZIndex = 30
+StatsPanel.Parent = InterfaceRoot
+UI.BindTheme(StatsPanel, "BackgroundColor3", "Surface")
+round(StatsPanel, 12)
+gradient(StatsPanel, "Surface", "Surface2", 90)
+addShadow(StatsPanel, 0.7)
+local StatsTitle = textLabel(StatsPanel, "TasuHub Stats", UDim2.new(1, -34, 0, 30), UDim2.fromOffset(10, 2), 16, Theme.Text)
+StatsTitle.FontFace = UI.Fonts.HeadingHeavy
+StatsTitle.ZIndex = 31
+local StatsClose = button(StatsPanel, "×", UDim2.fromOffset(26, 24), UDim2.new(1, -29, 0, 3))
+StatsClose.ZIndex = 31
+StatsClose.TextSize = 17
+local StatsBody = textLabel(StatsPanel, "", UDim2.new(1, -20, 1, -34), UDim2.fromOffset(10, 31), 14, Theme.Text)
+StatsBody.FontFace = UI.Fonts.Description
+StatsBody.TextYAlignment = Enum.TextYAlignment.Top
+StatsBody.ZIndex = 31
+local StatsScale = Instance.new("UIScale")
+StatsScale.Parent = StatsPanel
+makeDraggable(StatsPanel, StatsTitle)
+local statsTransition = 0
+UI.RefreshStatsWindow = function()
+    statsTransition = statsTransition + 1
+    local revision = statsTransition
+    if State.Stats.Visible then
+        StatsPanel.Visible = true
+        StatsPanel.GroupTransparency = 1
+        StatsScale.Scale = 0.9
+        animate(StatsPanel, {GroupTransparency = 0}, 0.28, Enum.EasingStyle.Quint)
+        animate(StatsScale, {Scale = 1}, 0.32, Enum.EasingStyle.Quint)
+    else
+        animate(StatsPanel, {GroupTransparency = 1}, 0.22, Enum.EasingStyle.Quint)
+        animate(StatsScale, {Scale = 0.92}, 0.22, Enum.EasingStyle.Quint)
+        task.delay(0.23, function()
+            if revision == statsTransition and not State.Stats.Visible and StatsPanel.Parent then StatsPanel.Visible = false end
+        end)
+    end
+end
+StatsClose.Activated:Connect(function()
+    State.Stats.Visible = false
+    UI.RefreshStatsWindow()
+    UI.RefreshControls()
+end)
+local statsElapsed, statsFrames, statsFPS = 0, 0, 0
+trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
+    statsElapsed = statsElapsed + deltaTime
+    statsFrames = statsFrames + 1
+    if statsElapsed < 0.3 then return end
+    statsFPS = math.floor(statsFrames / statsElapsed + 0.5)
+    statsElapsed, statsFrames = 0, 0
+    if not State.Stats.Visible then return end
+    local lines = {}
+    if State.Stats.FPS then table.insert(lines, "FPS   " .. tostring(statsFPS)) end
+    if State.Stats.Ping then
+        local ok, ping = pcall(function() return LocalPlayer:GetNetworkPing() * 1000 end)
+        table.insert(lines, "PING  " .. (ok and string.format("%.0f ms", ping) or "n/a"))
+    end
+    if State.Stats.Players then table.insert(lines, "PLAYERS  " .. tostring(#Players:GetPlayers())) end
+    if State.Stats.Memory then
+        local ok, memory = pcall(function() return StatsService:GetTotalMemoryUsageMb() end)
+        table.insert(lines, "MEMORY  " .. (ok and string.format("%.0f MB", memory) or "n/a"))
+    end
+    StatsBody.Text = table.concat(lines, "\n")
+    StatsPanel.Size = UDim2.fromOffset(190, 38 + math.max(1, #lines) * 18)
+end))
+
 UI.SetLoading(0.22, "Loading UI components")
 
 local topBarCollapsed = false
@@ -1266,7 +1357,36 @@ local function createPage(name)
     return page
 end
 
+local compactPendingRows = setmetatable({}, {__mode = "k"})
+local function resetCompactRow(card)
+    compactPendingRows[card] = nil
+end
+
+local function compactParent(card, minimumHeight)
+    local pending = compactPendingRows[card]
+    if not pending or not pending.Parent or (pending:GetAttribute("CompactCount") or 0) >= 2 then
+        pending = Instance.new("Frame")
+        pending.Name = "CompactOptionsRow"
+        pending.BackgroundTransparency = 1
+        pending.AutomaticSize = Enum.AutomaticSize.Y
+        pending.Size = UDim2.new(1, 0, 0, minimumHeight)
+        pending.Parent = card
+        pending:SetAttribute("CompactCount", 0)
+        local layout = Instance.new("UIListLayout")
+        layout.FillDirection = Enum.FillDirection.Horizontal
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+        layout.VerticalAlignment = Enum.VerticalAlignment.Top
+        layout.Padding = UDim.new(0, 8)
+        layout.Parent = pending
+        compactPendingRows[card] = pending
+    end
+    pending:SetAttribute("CompactCount", (pending:GetAttribute("CompactCount") or 0) + 1)
+    if pending:GetAttribute("CompactCount") >= 2 then compactPendingRows[card] = nil end
+    return pending
+end
+
 local function addNote(card, text)
+    resetCompactRow(card)
     local label = textLabel(card, text, UDim2.new(1, 0, 0, 38), nil, 16, Theme.Muted)
     label.FontFace = UI.Fonts.Description
     label.TextWrapped = true
@@ -1395,6 +1515,7 @@ local function createCard(page, title)
 end
 
 local function addAction(card, text, callback)
+    resetCompactRow(card)
     local item = button(card, text, UDim2.new(1, 0, 0, 30))
     item.Activated:Connect(function()
         pcall(callback, item)
@@ -1410,6 +1531,7 @@ local function addAction(card, text, callback)
 end
 
 local function addInput(card, placeholder, defaultText, callback, multiLine)
+    resetCompactRow(card)
     local input = Instance.new("TextBox")
     input.BackgroundColor3 = Theme.Surface2
     input.BackgroundTransparency = 0.06
@@ -1461,8 +1583,8 @@ local keybindActions = {}
 local function addToggle(card, text, getter, setter, bindable)
     local row = Instance.new("Frame")
     row.BackgroundTransparency = 1
-    row.Size = UDim2.new(1, 0, 0, 32)
-    row.Parent = card
+    row.Size = UDim2.new(0.5, -4, 0, 32)
+    row.Parent = compactParent(card, 32)
     local label = textLabel(row, text, UDim2.new(1, bindable and -122 or -58, 1, 0), nil, 16, Theme.Text)
     label.FontFace = UI.Fonts.Option
     local toggle = Instance.new("TextButton")
@@ -1528,6 +1650,7 @@ local function addToggle(card, text, getter, setter, bindable)
 end
 
 local function addSlider(card, text, minimum, maximum, getter, setter, decimals, visibleGetter)
+    resetCompactRow(card)
     local holder = Instance.new("Frame")
     holder.BackgroundTransparency = 1
     holder.ClipsDescendants = true
@@ -1610,9 +1733,10 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
     local holder = Instance.new("Frame")
     holder.Name = string.gsub(text, "[^%w]", "") .. "Dropdown"
     holder.BackgroundTransparency = 1
-    holder.Size = UDim2.new(1, 0, 0, 38)
+    local forceFullWidth = card:GetAttribute("ForceFullWidth") == true
+    holder.Size = forceFullWidth and UDim2.new(1, 0, 0, 38) or UDim2.new(0.5, -4, 0, 38)
     holder.AutomaticSize = Enum.AutomaticSize.Y
-    holder.Parent = card
+    holder.Parent = forceFullWidth and card or compactParent(card, 38)
     holder:SetAttribute("SearchText", string.lower(text .. " " .. table.concat(values, " ")))
     local holderLayout = Instance.new("UIListLayout")
     holderLayout.Padding = UDim.new(0, 5)
@@ -1748,6 +1872,7 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
 end
 
 UI.AddPlayerDropdown = function(card, text, getter, setter)
+    resetCompactRow(card)
     local holder = Instance.new("Frame")
     holder.Name = string.gsub(text, "[^%w]", "") .. "PlayerDropdown"
     holder.BackgroundTransparency = 1
@@ -1904,6 +2029,7 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
 end
 
 UI.AddColorPicker = function(card, text, getter, setter)
+    resetCompactRow(card)
     local holder = Instance.new("Frame")
     holder.Name = string.gsub(text, "[^%w]", "") .. "ColorPicker"
     holder.BackgroundTransparency = 1
@@ -2072,7 +2198,6 @@ local categoryMeta = {
     Players = {Hint = "Players"},
     Catalog = {Hint = "Catalog"},
     Misc = {Hint = "Misc"},
-    MM2Security = {Hint = "Murder Mystery 2"},
     Configs = {Hint = "Configs"}
 }
 
@@ -2167,11 +2292,6 @@ local function vectorIcon(parent, category)
         iconPart(canvas, 16, 18.5, 2, 17, 0, 1)
         iconPart(canvas, 19, 14, 6, 2, 0, 1)
         iconPart(canvas, 19, 23, 6, 2, 0, 1)
-    elseif category == "MM2Security" then
-        iconPart(canvas, 10, 14, 4, 22, 45, 2)
-        iconPart(canvas, 18, 14, 4, 22, -45, 2)
-        iconPart(canvas, 7, 22, 7, 4, 45, 2)
-        iconPart(canvas, 21, 22, 7, 4, -45, 2)
     elseif category == "Configs" then
         for index, y in ipairs({7, 14, 21}) do
             iconPart(canvas, 14, y, 21, 2, 0, 1)
@@ -2229,7 +2349,7 @@ UI.ApplyCategoryIcon = function(categoryButton, category, url)
     image.Parent = iconBackground
 end
 
-local categories = {"Home", "Catalog", "Players", "Visuals", "Aim", "Movement", "World", "MM2Security", "Misc", "Configs"}
+local categories = {"Home", "Catalog", "Players", "Visuals", "Aim", "Movement", "World", "Misc", "Configs"}
 local CategoryTooltip = Instance.new("TextLabel")
 CategoryTooltip.BackgroundColor3 = Color3.fromRGB(44, 83, 120)
 CategoryTooltip.BackgroundTransparency = 1
@@ -2404,15 +2524,17 @@ local function openContentWindow()
     windowTransition = windowTransition + 1
     if not ContentWindow.Visible then
         placeContentWindow()
-        ContentWindow.Visible = true
         ContentWindow.GroupTransparency = 1
         ContentScale.Scale = 0.9
+        ContentShadowScale.Scale = 0.9
+        ContentWindow.Visible = true
         animate(ContentWindow, {GroupTransparency = 0}, 0.34, Enum.EasingStyle.Quint)
         animate(ContentScale, {Scale = 1}, 0.42, Enum.EasingStyle.Quint)
     else
         animate(ContentWindow, {GroupTransparency = 0}, 0.24, Enum.EasingStyle.Quint)
         animate(ContentScale, {Scale = 1}, 0.28, Enum.EasingStyle.Quint)
     end
+    task.defer(UI.RefreshVisualPreview)
 end
 
 local function closeContentWindow()
@@ -2434,6 +2556,7 @@ local function closeContentWindow()
             ContentWindow.GroupTransparency = 0
         end
     end)
+    task.defer(UI.RefreshVisualPreview)
 end
 
 local function showCategory(name)
@@ -2441,9 +2564,10 @@ local function showCategory(name)
         return
     end
     currentCategory = name
+    UI.ActiveCategory = name
     UI.SearchMode = false
     openContentWindow()
-    WindowTitle.Text = name == "MM2Security" and "Murder Mystery 2" or name
+    WindowTitle.Text = name
     for pageName, page in pairs(pages) do
         local selected = pageName == name
         page.Visible = selected
@@ -2461,6 +2585,7 @@ local function showCategory(name)
             if selected then animate(categoryOutlines[buttonName], {Thickness = 2.25, Transparency = 0}, 0.16) end
         end
     end
+    task.defer(UI.RefreshVisualPreview)
 end
 
 UI.ShowCategory = showCategory
@@ -2687,6 +2812,7 @@ local function isVisibleTarget(character, targetPart)
     return not result or result.Instance:IsDescendantOf(character)
 end
 
+UI.AimDiscardedCharacters = setmetatable({}, {__mode = "k"})
 local function chooseTarget()
     local camera = Workspace.CurrentCamera
     if not camera then
@@ -2700,7 +2826,10 @@ local function chooseTarget()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
             local alive, character, humanoid, root = getAlive(player)
-            if alive and (rage or not State.Aim.TeamCheck or not areTeammates(player, LocalPlayer)) then
+            if UI.AimDiscardedCharacters[player] and UI.AimDiscardedCharacters[player] ~= character then
+                UI.AimDiscardedCharacters[player] = nil
+            end
+            if alive and UI.AimDiscardedCharacters[player] ~= character and (rage or not State.Aim.TeamCheck or not areTeammates(player, LocalPlayer)) then
                 local targetPart = character:FindFirstChild(rage and "Head" or State.Aim.TargetPart) or character:FindFirstChild("Head") or root
                 if targetPart then
                     local worldDistance = localRoot and (root.Position - localRoot.Position).Magnitude or math.huge
@@ -2709,7 +2838,7 @@ local function chooseTarget()
                         local score = (Vector2.new(screen.X, screen.Y) - mousePosition).Magnitude
                         if score < bestScore and (rage or isVisibleTarget(character, targetPart)) then
                             bestScore = score
-                            best = {Player = player, Character = character, Humanoid = humanoid, Root = root, Part = targetPart}
+                            best = {Player = player, Character = character, Humanoid = humanoid, Root = root, Part = targetPart, LastPosition = root.Position}
                         end
                     end
                 end
@@ -2742,11 +2871,19 @@ trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
     end
     if currentTarget then
         local alive, character, humanoid, root = getAlive(currentTarget.Player)
-        if alive and character == currentTarget.Character then
+        local _, _, localRoot = getCharacter(LocalPlayer)
+        local state = humanoid and humanoid:GetState()
+        local tooFar = root and localRoot and (root.Position - localRoot.Position).Magnitude > math.max(State.Aim.MaxDistance * 1.5, 3000)
+        local belowWorld = root and root.Position.Y < Workspace.FallenPartsDestroyHeight + 80
+        local deathTeleport = root and currentTarget.LastPosition and (root.Position - currentTarget.LastPosition).Magnitude > 450
+        local invalidState = state == Enum.HumanoidStateType.Dead or state == Enum.HumanoidStateType.None
+        if alive and character == currentTarget.Character and character:IsDescendantOf(Workspace) and not tooFar and not belowWorld and not deathTeleport and not invalidState then
             currentTarget.Humanoid = humanoid
             currentTarget.Root = root
             currentTarget.Part = character:FindFirstChild(State.Aim.Rage and "Head" or State.Aim.TargetPart) or character:FindFirstChild("Head") or root
+            currentTarget.LastPosition = root.Position
         else
+            UI.AimDiscardedCharacters[currentTarget.Player] = currentTarget.Character
             currentTarget = nil
         end
     end
@@ -2901,11 +3038,19 @@ local function createESP(player)
 end
 
 local function updateSkeleton(record, character, camera, color)
-    local function joint(name)
+    if record.SkeletonCharacter ~= character then
+        record.SkeletonCharacter = character
+        record.SkeletonMotors = {}
         for _, descendant in ipairs(character:GetDescendants()) do
-            if descendant:IsA("Motor6D") and descendant.Name == name and descendant.Part0 then
-                return (descendant.Part0.CFrame * descendant.C0 * descendant.Transform).Position
+            if descendant:IsA("Motor6D") then
+                record.SkeletonMotors[descendant.Name] = descendant
             end
+        end
+    end
+    local function joint(name)
+        local motor = record.SkeletonMotors[name]
+        if motor and motor.Parent and motor.Part0 then
+            return (motor.Part0.CFrame * motor.C0 * motor.Transform).Position
         end
         return nil
     end
@@ -2914,6 +3059,7 @@ local function updateSkeleton(record, character, camera, color)
         return part and part.CFrame:PointToWorldSpace(direction * part.Size * 0.5) or nil
     end
     local points = {}
+    local head = character:FindFirstChild("Head")
     if character:FindFirstChild("UpperTorso") then
         local neck, waist = joint("Neck"), joint("Waist")
         local ls, le, lw = joint("LeftShoulder"), joint("LeftElbow"), joint("LeftWrist")
@@ -2921,7 +3067,7 @@ local function updateSkeleton(record, character, camera, color)
         local lh, lk, la = joint("LeftHip"), joint("LeftKnee"), joint("LeftAnkle")
         local rh, rk, ra = joint("RightHip"), joint("RightKnee"), joint("RightAnkle")
         points = {
-            {character.Head and character.Head.Position, neck}, {neck, waist},
+            {head and head.Position, neck}, {neck, waist},
             {neck, ls}, {ls, le}, {le, lw}, {lw, endOf("LeftHand", Vector3.new(0, -1, 0))},
             {neck, rs}, {rs, re}, {re, rw}, {rw, endOf("RightHand", Vector3.new(0, -1, 0))},
             {waist, lh}, {lh, lk}, {lk, la},
@@ -2932,7 +3078,7 @@ local function updateSkeleton(record, character, camera, color)
         local leftShoulder, rightShoulder = joint("Left Shoulder"), joint("Right Shoulder")
         local leftHip, rightHip = joint("Left Hip"), joint("Right Hip")
         points = {
-            {character:FindFirstChild("Head") and character.Head.Position, neck},
+            {head and head.Position, neck},
             {neck, leftShoulder}, {leftShoulder, endOf("Left Arm", Vector3.new(0, -1, 0))},
             {neck, rightShoulder}, {rightShoulder, endOf("Right Arm", Vector3.new(0, -1, 0))},
             {neck, leftHip}, {leftHip, endOf("Left Leg", Vector3.new(0, -1, 0))},
@@ -2972,33 +3118,18 @@ local function hideRecord(record)
     end
 end
 
-local OBSERVED_MM2_ROLE_NAMES = {"MM2ServerRole", "ServerRole", "Role"}
-local function isObservedMM2Innocent(player)
-    local character = player.Character
-    local backpack = player:FindFirstChildOfClass("Backpack")
-    local knife = (character and character:FindFirstChild("Knife")) or (backpack and backpack:FindFirstChild("Knife"))
-    local gun = (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun"))
-    if (knife and knife:IsA("Tool")) or (gun and gun:IsA("Tool")) then
-        return false
-    end
-    for _, container in ipairs({player, character}) do
-        if container then
-            for _, roleName in ipairs(OBSERVED_MM2_ROLE_NAMES) do
-                local role = container:GetAttribute(roleName)
-                local roleValue = container:FindFirstChild(roleName)
-                if roleValue and roleValue:IsA("StringValue") then role = roleValue.Value end
-                if role == "Murderer" or role == "Sheriff" then
-                    return false
-                end
-            end
-        end
-    end
-    return true
-end
 
-RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, function()
+local espRenderAccumulator = 0
+RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, function(deltaTime)
+    espRenderAccumulator = espRenderAccumulator + deltaTime
+    if espRenderAccumulator < 1 / 30 then return end
+    espRenderAccumulator = 0
     local camera = Workspace.CurrentCamera
     if not camera then
+        return
+    end
+    if not State.Visuals.Enabled then
+        for _, record in pairs(espRecords) do hideRecord(record) end
         return
     end
     local localAlive, _, _, localRoot = getAlive(LocalPlayer)
@@ -3010,9 +3141,6 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, functi
             else
                 local alive, character, humanoid, root = getAlive(player)
                 local allowed = alive
-                if allowed and State.MM2Security.Enabled and State.MM2Security.PlayerESP then
-                    allowed = isObservedMM2Innocent(player)
-                end
                 local distance = localAlive and localRoot and root and (root.Position - localRoot.Position).Magnitude or math.huge
                 if not allowed or distance > State.Visuals.MaxDistance then
                     hideRecord(record)
@@ -3125,577 +3253,6 @@ end)
 
 trackConnection(Players.PlayerRemoving:Connect(destroyESP))
 
-local function createMM2SecurityClient()
--- MM2 client-only security test --------------------------------------------
--- Uses only replicated objects and interaction paths already present in the
--- game. Server-only roles and decisions are deliberately never fabricated.
-local MM2_RED = Color3.fromRGB(244, 72, 83)
-local MM2_BLUE = Color3.fromRGB(65, 145, 255)
-local mm2PlayerESP = {}
-local mm2GunDrop = nil
-local mm2GunDropESP = nil
-local mm2StatusText = nil
-local mm2DecisionText = "No test attempted"
-local mm2OriginalSheriffUserId = nil
-local mm2OriginalSheriffName = nil
-local mm2RoundEmptySince = nil
-local mm2PendingPickup = nil
-local mm2PendingShot = nil
-local mm2PickupRequestedFor = setmetatable({}, {__mode = "k"})
-local mm2LastAutoFire = 0
-local MM2_TEST_COOLDOWN = 1
-local MM2_RESULT_TIMEOUT = 2
-local mm2SilentAimState = type(env.TasuMM2SilentAimHook) == "table" and env.TasuMM2SilentAimHook or {
-    Installed = false,
-    TargetPart = nil,
-    ExpiresAt = 0,
-    Mouse = LocalPlayer:GetMouse()
-}
-env.TasuMM2SilentAimHook = mm2SilentAimState
-
-local function mm2FindTool(player, toolName, equippedOnly)
-    local character = player and player.Character
-    local inCharacter = character and character:FindFirstChild(toolName)
-    if inCharacter and inCharacter:IsA("Tool") then
-        return inCharacter, true
-    end
-    if not equippedOnly then
-        local backpack = player and player:FindFirstChildOfClass("Backpack")
-        local inBackpack = backpack and backpack:FindFirstChild(toolName)
-        if inBackpack and inBackpack:IsA("Tool") then
-            return inBackpack, false
-        end
-    end
-    return nil, false
-end
-
-local function mm2ObservedClass(player)
-    if mm2FindTool(player, "Knife", false) then
-        return "Knife Holder"
-    end
-    if mm2FindTool(player, "Gun", false) then
-        return "Gun Holder"
-    end
-    return "None"
-end
-
-local function mm2RoleFor(player)
-    if not player then return "Unknown" end
-    local roleNames = {"MM2ServerRole", "ServerRole", "Role"}
-    for _, container in ipairs({player, player.Character}) do
-        if container then
-            for _, name in ipairs(roleNames) do
-                local attribute = container:GetAttribute(name)
-                if attribute == "Murderer" or attribute == "Sheriff" or attribute == "Innocent" then
-                    return attribute
-                end
-                local valueObject = container:FindFirstChild(name)
-                if valueObject and valueObject:IsA("StringValue") then
-                    local value = valueObject.Value
-                    if value == "Murderer" or value == "Sheriff" or value == "Innocent" then
-                        return value
-                    end
-                end
-            end
-        end
-    end
-    return "Unavailable to client"
-end
-
-local function mm2ObjectPosition(instance)
-    if not instance or not instance.Parent then return nil end
-    if instance:IsA("BasePart") then return instance.Position end
-    if instance:IsA("Model") then
-        local ok, pivot = pcall(instance.GetPivot, instance)
-        if ok then return pivot.Position end
-    end
-    local handle = instance:FindFirstChild("Handle", true)
-    if handle and handle:IsA("BasePart") then return handle.Position end
-    local part = instance:FindFirstChildWhichIsA("BasePart", true)
-    return part and part.Position or nil
-end
-
-local function mm2Adornee(instance)
-    if not instance then return nil end
-    if instance:IsA("Model") or instance:IsA("BasePart") then return instance end
-    local handle = instance:FindFirstChild("Handle", true)
-    if handle and handle:IsA("BasePart") then return handle end
-    return instance:FindFirstChildWhichIsA("BasePart", true)
-end
-
-local function mm2BillboardAnchor(instance)
-    if not instance then return nil end
-    if instance:IsA("BasePart") then return instance end
-    local handle = instance:FindFirstChild("Handle", true)
-    if handle and handle:IsA("BasePart") then return handle end
-    return instance:FindFirstChildWhichIsA("BasePart", true)
-end
-
-local function mm2FindGunDrop()
-    local ok, result = pcall(Workspace.FindFirstChild, Workspace, "GunDrop", true)
-    if ok and result and result:IsDescendantOf(Workspace) then return result end
-    return nil
-end
-
-local function mm2DestroyPlayerESP(player)
-    local record = mm2PlayerESP[player]
-    if not record then return end
-    for _, object in pairs(record) do
-        if typeof(object) == "Instance" then pcall(function() object:Destroy() end) end
-    end
-    mm2PlayerESP[player] = nil
-end
-
-local function mm2CreatePlayerESP(player)
-    mm2DestroyPlayerESP(player)
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "TasuMM2Highlight"
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillTransparency = 0.62
-    highlight.OutlineTransparency = 0.05
-    highlight.Enabled = false
-    highlight.Parent = ScreenGui
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "TasuMM2Label"
-    billboard.AlwaysOnTop = true
-    billboard.LightInfluence = 0
-    billboard.MaxDistance = 3000
-    billboard.Size = UDim2.fromOffset(180, 22)
-    billboard.StudsOffset = Vector3.new(0, 3.3, 0)
-    billboard.Enabled = false
-    billboard.Parent = ScreenGui
-    local label = textLabel(billboard, "", UDim2.fromScale(1, 1), nil, 13, MM2_RED, Enum.TextXAlignment.Center)
-    label.FontFace = UI.Fonts.Option
-    label.BackgroundTransparency = 1
-    label.TextStrokeTransparency = 1
-    label.TextWrapped = false
-    local record = {Highlight = highlight, Billboard = billboard, Label = label}
-    mm2PlayerESP[player] = record
-    return record
-end
-
-local function mm2ClearGunDropESP()
-    if mm2GunDropESP then
-        for _, object in pairs(mm2GunDropESP) do
-            if typeof(object) == "Instance" then pcall(function() object:Destroy() end) end
-        end
-    end
-    mm2GunDropESP = nil
-end
-
-local function mm2SetGunDrop(instance)
-    if instance == mm2GunDrop then return end
-    mm2ClearGunDropESP()
-    mm2GunDrop = instance
-    if not instance then return end
-    local adornee = mm2Adornee(instance)
-    local billboardAnchor = mm2BillboardAnchor(instance)
-    if not adornee or not billboardAnchor then return end
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "TasuGunDropHighlight"
-    highlight.Adornee = adornee
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillColor = MM2_BLUE
-    highlight.OutlineColor = Color3.fromRGB(205, 230, 255)
-    highlight.FillTransparency = 0.48
-    highlight.OutlineTransparency = 0
-    highlight.Parent = ScreenGui
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "TasuGunDropLabel"
-    billboard.Adornee = billboardAnchor
-    billboard.AlwaysOnTop = true
-    billboard.LightInfluence = 0
-    billboard.MaxDistance = 3000
-    billboard.Size = UDim2.fromOffset(150, 28)
-    billboard.StudsOffset = Vector3.new(0, 2.1, 0)
-    billboard.Parent = ScreenGui
-    local label = textLabel(billboard, "GUN DROP", UDim2.fromScale(1, 1), nil, 12, Color3.new(1, 1, 1), Enum.TextXAlignment.Center)
-    label.BackgroundColor3 = MM2_BLUE
-    label.BackgroundTransparency = 0.15
-    label.FontFace = UI.Fonts.Heading
-    round(label, 7)
-    mm2GunDropESP = {Highlight = highlight, Billboard = billboard, Label = label}
-end
-
-local function mm2SetDropESPVisible(visible)
-    if not mm2GunDropESP then return end
-    mm2GunDropESP.Highlight.Enabled = visible
-    mm2GunDropESP.Billboard.Enabled = visible
-end
-
-local function mm2PrepareSilentAim(targetPart)
-    if not targetPart or not targetPart:IsA("BasePart") then return false end
-    mm2SilentAimState.Mouse = LocalPlayer:GetMouse()
-    if not mm2SilentAimState.Installed then
-        local hookMetamethod = resolveGlobal("hookmetamethod")
-        local newCClosure = resolveGlobal("newcclosure")
-        if type(hookMetamethod) ~= "function" then return false end
-        local oldIndex
-        local function indexHook(object, key)
-            local activeTarget = mm2SilentAimState.TargetPart
-            if object == mm2SilentAimState.Mouse
-                and activeTarget
-                and activeTarget.Parent
-                and os.clock() <= mm2SilentAimState.ExpiresAt then
-                if key == "Target" then
-                    return activeTarget
-                elseif key == "Hit" then
-                    return activeTarget.CFrame
-                elseif key == "UnitRay" then
-                    local camera = Workspace.CurrentCamera
-                    local origin = camera and camera.CFrame.Position or activeTarget.Position
-                    local direction = activeTarget.Position - origin
-                    if direction.Magnitude > 0 then
-                        return Ray.new(origin, direction.Unit * 10000)
-                    end
-                end
-            end
-            return oldIndex(object, key)
-        end
-        local replacement = indexHook
-        if type(newCClosure) == "function" then
-            local closureOk, closure = pcall(newCClosure, indexHook)
-            if not closureOk or type(closure) ~= "function" then return false end
-            replacement = closure
-        end
-        local ok, original = pcall(hookMetamethod, game, "__index", replacement)
-        if not ok or type(original) ~= "function" then return false end
-        oldIndex = original
-        mm2SilentAimState.OriginalIndex = original
-        mm2SilentAimState.Installed = true
-    end
-    mm2SilentAimState.TargetPart = targetPart
-    mm2SilentAimState.ExpiresAt = os.clock() + 0.3
-    return true
-end
-
-local function mm2RequestPickup()
-    if not mm2GunDrop then
-        mm2DecisionText = "Pickup: GunDrop not found"
-        return
-    end
-    if mm2PendingPickup then
-        mm2DecisionText = "Pickup: Existing result pending"
-        return
-    end
-    local _, _, root = getCharacter(LocalPlayer)
-    local anchor = mm2BillboardAnchor(mm2GunDrop)
-    if not root or not anchor then
-        mm2DecisionText = "Pickup: Character or GunDrop part unavailable"
-        return
-    end
-
-    local interactionName = nil
-    local interactionOk = false
-    local fireTouchInterest = resolveGlobal("firetouchinterest")
-    local fireProximityPrompt = resolveGlobal("fireproximityprompt")
-    local fireClickDetector = resolveGlobal("fireclickdetector")
-    local prompt = mm2GunDrop:FindFirstChildWhichIsA("ProximityPrompt", true)
-    local clickDetector = mm2GunDrop:FindFirstChildWhichIsA("ClickDetector", true)
-    if prompt and type(fireProximityPrompt) == "function" then
-        interactionName = "ProximityPrompt"
-        interactionOk = pcall(fireProximityPrompt, prompt)
-    elseif clickDetector and type(fireClickDetector) == "function" then
-        interactionName = "ClickDetector"
-        interactionOk = pcall(fireClickDetector, clickDetector)
-    elseif type(fireTouchInterest) == "function" then
-        interactionName = "Touch"
-        interactionOk = pcall(function()
-            fireTouchInterest(root, anchor, 0)
-            fireTouchInterest(root, anchor, 1)
-        end)
-    end
-    if not interactionName then
-        mm2DecisionText = "Pickup: No supported interaction path found"
-        return
-    end
-    if not interactionOk then
-        mm2DecisionText = "Pickup: " .. interactionName .. " attempt failed locally"
-        return
-    end
-    mm2PendingPickup = {
-        Drop = mm2GunDrop,
-        StartedAt = os.clock(),
-        HadGun = mm2FindTool(LocalPlayer, "Gun", false) ~= nil,
-        Interaction = interactionName
-    }
-    mm2DecisionText = "Pickup: " .. interactionName .. " attempt sent; observing result"
-end
-
-local function mm2SelectTarget()
-    local fallback
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local alive = getAlive(player)
-            if alive and mm2RoleFor(player) == "Murderer" then return player end
-            if alive and not fallback and mm2ObservedClass(player) == "Knife Holder" then fallback = player end
-        end
-    end
-    return fallback
-end
-
-local function mm2RequestShot()
-    local target = mm2SelectTarget()
-    if not target then
-        mm2DecisionText = "Shot: No Murderer / Knife Holder target"
-        return
-    end
-    if mm2PendingShot then
-        mm2DecisionText = "Shot: Existing result pending"
-        return
-    end
-    local gun, equipped = mm2FindTool(LocalPlayer, "Gun", true)
-    if not gun or not equipped then
-        mm2DecisionText = "Shot: Gun is not equipped"
-        return
-    end
-    local alive, _, humanoid, targetRoot = getAlive(target)
-    if not alive or not targetRoot then
-        mm2DecisionText = "Shot: Target is not alive"
-        return
-    end
-    local elapsed = os.clock() - mm2LastAutoFire
-    if elapsed < MM2_TEST_COOLDOWN then
-        mm2DecisionText = string.format("Shot: Local test cooldown %.2fs", MM2_TEST_COOLDOWN - elapsed)
-        return
-    end
-
-    local aimPart = target.Character and (target.Character:FindFirstChild("Head") or targetRoot) or targetRoot
-    if not mm2PrepareSilentAim(aimPart) then
-        mm2DecisionText = "Shot: Silent aim is unsupported by this executor"
-        return
-    end
-    local activated = pcall(gun.Activate, gun)
-    if not activated then
-        mm2DecisionText = "Shot: Gun activation failed locally"
-        return
-    end
-    mm2LastAutoFire = os.clock()
-    mm2PendingShot = {
-        Target = target,
-        StartedAt = os.clock(),
-        InitialHealth = humanoid.Health
-    }
-    mm2DecisionText = "Shot: Gun activated for " .. target.Name .. "; observing result"
-end
-
-local function mm2ClientLineOfSight(target)
-    local _, _, localRoot = getCharacter(LocalPlayer)
-    local _, _, targetRoot = getCharacter(target)
-    if not localRoot or not targetRoot then return false, math.huge end
-    local direction = targetRoot.Position - localRoot.Position
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {LocalPlayer.Character}
-    params.IgnoreWater = true
-    local result = Workspace:Raycast(localRoot.Position, direction, params)
-    local clear = not result or (target.Character and result.Instance:IsDescendantOf(target.Character))
-    return clear, direction.Magnitude
-end
-
-local function mm2NamesForObserved(className)
-    local names = {}
-    for _, player in ipairs(Players:GetPlayers()) do
-        if mm2ObservedClass(player) == className then table.insert(names, player.Name) end
-    end
-    return #names > 0 and table.concat(names, ", ") or "None"
-end
-
-local function mm2FirstObserved(className)
-    for _, player in ipairs(Players:GetPlayers()) do
-        if mm2ObservedClass(player) == className then return player end
-    end
-    return nil
-end
-
-local function mm2ThreatNames()
-    local names = {}
-    for _, player in ipairs(Players:GetPlayers()) do
-        if mm2RoleFor(player) == "Murderer" or mm2ObservedClass(player) == "Knife Holder" then
-            table.insert(names, player.Name)
-        end
-    end
-    return #names > 0 and table.concat(names, ", ") or "None"
-end
-
-local function mm2InferredRoundRole(player)
-    if not player then return "Unknown" end
-    local replicatedRole = mm2RoleFor(player)
-    if replicatedRole ~= "Unavailable to client" then return replicatedRole end
-    local observed = mm2ObservedClass(player)
-    if observed == "Knife Holder" then return "Murderer (inferred)" end
-    if mm2OriginalSheriffUserId == player.UserId then return "Sheriff (first observed)" end
-    if observed == "Gun Holder" and mm2OriginalSheriffUserId then return "Innocent (inferred)" end
-    return "Unknown"
-end
-
-local function mm2UpdatePanel()
-    local observedKnifeHolder = mm2FirstObserved("Knife Holder")
-    local observedGunHolder = mm2FirstObserved("Gun Holder")
-    if not observedKnifeHolder and not observedGunHolder and not mm2GunDrop then
-        mm2RoundEmptySince = mm2RoundEmptySince or os.clock()
-        if os.clock() - mm2RoundEmptySince >= 3 then
-            mm2OriginalSheriffUserId = nil
-            mm2OriginalSheriffName = nil
-        end
-    else
-        mm2RoundEmptySince = nil
-    end
-    if not mm2OriginalSheriffUserId then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if mm2RoleFor(player) == "Sheriff" then
-                mm2OriginalSheriffUserId = player.UserId
-                mm2OriginalSheriffName = player.Name
-                break
-            end
-        end
-        if not mm2OriginalSheriffUserId then
-            local firstGunHolder = observedGunHolder
-            if firstGunHolder then
-                mm2OriginalSheriffUserId = firstGunHolder.UserId
-                mm2OriginalSheriffName = firstGunHolder.Name
-            end
-        end
-    end
-    local target = mm2SelectTarget()
-    local dropPosition = mm2ObjectPosition(mm2GunDrop)
-    local _, _, localRoot = getCharacter(LocalPlayer)
-    local dropDistance = dropPosition and localRoot and (dropPosition - localRoot.Position).Magnitude or nil
-    local lineOfSight, targetDistance = false, math.huge
-    if target then
-        lineOfSight, targetDistance = mm2ClientLineOfSight(target)
-    end
-    local _, gunEquipped = mm2FindTool(LocalPlayer, "Gun", true)
-    local originalSheriff = mm2OriginalSheriffUserId and Players:GetPlayerByUserId(mm2OriginalSheriffUserId)
-    local cooldownRemaining = math.max(0, MM2_TEST_COOLDOWN - (os.clock() - mm2LastAutoFire))
-    local lines = {
-        "MM2 SECURITY TEST",
-        "Mode: Client-only / no game changes",
-        "Shot Mode: Silent Aim (camera unchanged)",
-        "Murderer / Knife Holder: " .. mm2ThreatNames(),
-        "Gun Holder: " .. mm2NamesForObserved("Gun Holder"),
-        "Original Sheriff (first observed): " .. (originalSheriff and originalSheriff.Name or mm2OriginalSheriffName or "Unknown"),
-        "Current Gun Holder: " .. mm2NamesForObserved("Gun Holder"),
-        "Gun Holder Replicated Role: " .. (observedGunHolder and mm2RoleFor(observedGunHolder) or "n/a"),
-        "Gun Holder Inferred Round Role: " .. (observedGunHolder and mm2InferredRoundRole(observedGunHolder) or "n/a"),
-        "Gun Holder Observed Class: " .. (observedGunHolder and mm2ObservedClass(observedGunHolder) or "n/a"),
-        "GunDrop Status: " .. (mm2GunDrop and "Found" or "Not Found"),
-        "GunDrop Position: " .. (dropPosition and string.format("%.1f, %.1f, %.1f", dropPosition.X, dropPosition.Y, dropPosition.Z) or "n/a"),
-        "Distance to GunDrop: " .. (dropDistance and string.format("%.1f studs", dropDistance) or "n/a"),
-        "Local Replicated Role: " .. mm2RoleFor(LocalPlayer),
-        "Local Observed Class: " .. mm2ObservedClass(LocalPlayer),
-        "Gun Equipped: " .. (gunEquipped and "Yes" or "No"),
-        "Target: " .. (target and target.Name or "None"),
-        "Target Replicated Role: " .. (target and mm2RoleFor(target) or "n/a"),
-        "Target Distance: " .. (targetDistance < math.huge and string.format("%.1f studs", targetDistance) or "n/a"),
-        "Line of Sight (client preview): " .. (target and (lineOfSight and "Clear" or "Blocked") or "n/a"),
-        "Cooldown (local test timer): " .. (cooldownRemaining <= 0 and "Ready" or string.format("%.2fs", cooldownRemaining)),
-        "Last Server Decision: not exposed; observed result follows",
-        "Observed Result: " .. mm2DecisionText
-    }
-    if mm2StatusText then mm2StatusText.Text = table.concat(lines, "\n") end
-end
-
-local function mm2RefreshObservations()
-    mm2SetGunDrop(mm2FindGunDrop())
-    mm2UpdatePanel()
-end
-
-trackConnection(Workspace.DescendantAdded:Connect(function(instance)
-    if instance.Name == "GunDrop" then mm2SetGunDrop(instance) end
-end))
-trackConnection(Workspace.DescendantRemoving:Connect(function(instance)
-    if mm2GunDrop and (instance == mm2GunDrop or mm2GunDrop:IsDescendantOf(instance)) then
-        mm2SetGunDrop(nil)
-        task.defer(function() mm2SetGunDrop(mm2FindGunDrop()) end)
-    end
-end))
-trackConnection(Players.PlayerRemoving:Connect(mm2DestroyPlayerESP))
-
-local mm2Clock = 0
-trackFeature("MM2Security", RunService.Heartbeat:Connect(function(deltaTime)
-    mm2Clock = mm2Clock + deltaTime
-    if mm2Clock < 0.2 then return end
-    mm2Clock = 0
-    if not mm2GunDrop or not mm2GunDrop.Parent or not mm2GunDrop:IsDescendantOf(Workspace) then
-        mm2SetGunDrop(mm2FindGunDrop())
-    end
-    mm2SetDropESPVisible(State.MM2Security.Enabled and State.MM2Security.GunDropESP)
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local record = mm2PlayerESP[player] or mm2CreatePlayerESP(player)
-            local observed = mm2ObservedClass(player)
-            local role = mm2RoleFor(player)
-            local color = (observed == "Knife Holder" or role == "Murderer") and MM2_RED or (observed == "Gun Holder" and MM2_BLUE or nil)
-            local alive, character, _, root = getAlive(player)
-            local visible = State.MM2Security.Enabled and State.MM2Security.PlayerESP and alive and color ~= nil
-            record.Highlight.Adornee = visible and character or nil
-            record.Highlight.FillColor = color or Theme.Accent
-            record.Highlight.OutlineColor = color or Theme.Text
-            record.Highlight.Enabled = visible
-            record.Billboard.Adornee = visible and root or nil
-            record.Billboard.Enabled = visible
-            record.Label.TextColor3 = color or Theme.Accent
-            record.Label.Text = player.DisplayName
-        end
-    end
-    if State.MM2Security.Enabled and State.MM2Security.AutoPickupTest and mm2GunDrop and not mm2PickupRequestedFor[mm2GunDrop] then
-        mm2PickupRequestedFor[mm2GunDrop] = true
-        mm2RequestPickup()
-    end
-    if State.MM2Security.Enabled and State.MM2Security.AutoFireTest then
-        local _, equipped = mm2FindTool(LocalPlayer, "Gun", true)
-        if equipped and not mm2PendingShot and os.clock() - mm2LastAutoFire >= MM2_TEST_COOLDOWN then
-            mm2RequestShot()
-        end
-    end
-
-    if mm2PendingPickup then
-        local hasGun = mm2FindTool(LocalPlayer, "Gun", false) ~= nil
-        if hasGun and not mm2PendingPickup.HadGun then
-            mm2DecisionText = "Pickup: Gun appeared after " .. mm2PendingPickup.Interaction .. " attempt (observed accepted)"
-            mm2PendingPickup = nil
-        elseif os.clock() - mm2PendingPickup.StartedAt >= MM2_RESULT_TIMEOUT then
-            local dropStillExists = mm2PendingPickup.Drop and mm2PendingPickup.Drop:IsDescendantOf(Workspace)
-            mm2DecisionText = dropStillExists
-                and "Pickup: No replicated change observed (rejected or ignored)"
-                or "Pickup: GunDrop disappeared but no Gun was observed"
-            mm2PendingPickup = nil
-        end
-    end
-
-    if mm2PendingShot then
-        local target = mm2PendingShot.Target
-        local humanoid = target and target.Character and target.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid.Health < mm2PendingShot.InitialHealth then
-            mm2DecisionText = "Shot: Target health decreased (observed accepted)"
-            mm2PendingShot = nil
-        elseif os.clock() - mm2PendingShot.StartedAt >= MM2_RESULT_TIMEOUT then
-            mm2DecisionText = "Shot: No target-health change observed (rejected, blocked or missed)"
-            mm2PendingShot = nil
-        end
-    end
-    mm2UpdatePanel()
-end))
-
-return {
-    PlayerESP = mm2PlayerESP,
-    SetDropESPVisible = mm2SetDropESPVisible,
-    RequestPickup = mm2RequestPickup,
-    RequestShot = mm2RequestShot,
-    RefreshObservations = mm2RefreshObservations,
-    SetStatusText = function(label)
-        mm2StatusText = label
-        mm2UpdatePanel()
-    end,
-    ClearSilentAim = function()
-        mm2SilentAimState.TargetPart = nil
-        mm2SilentAimState.ExpiresAt = 0
-    end
-}
-end
-
-local MM2SecurityClient = createMM2SecurityClient()
 
 local freecamState
 local FREECAM_SINK_ACTION = "TasuHubFreecamMovementSink"
@@ -4138,7 +3695,13 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
             local radius = State.Movement.OrbitRadius
             local mode = State.Movement.OrbitMode
             local offset
-            if mode == "Wave" then
+            if mode == "Carpet" then
+                offset = targetRoot.CFrame:VectorToWorldSpace(Vector3.new(0, -math.abs(State.Movement.OrbitHeight), -State.Movement.OrbitOffset))
+            elseif mode == "Backpack" then
+                offset = targetRoot.CFrame:VectorToWorldSpace(Vector3.new(0, State.Movement.OrbitHeight, State.Movement.OrbitOffset))
+            elseif mode == "Helicopter" then
+                offset = Vector3.new(math.cos(angle) * State.Movement.OrbitOffset, State.Movement.OrbitHeight, math.sin(angle) * State.Movement.OrbitOffset)
+            elseif mode == "Wave" then
                 offset = Vector3.new(math.cos(angle) * radius, 2 + math.sin(angle * 2) * radius * 0.55, math.sin(angle) * radius)
             elseif mode == "Vertical Loop" then
                 offset = Vector3.new(math.cos(angle) * radius, math.sin(angle) * radius, 0)
@@ -4150,7 +3713,13 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
                 offset = Vector3.new(math.cos(angle) * radius, 1.5, math.sin(angle) * radius)
             end
             local orbitPosition = targetRoot.Position + offset
-            if mode == "Avatar Spin" then
+            if mode == "Carpet" then
+                root.CFrame = CFrame.lookAt(orbitPosition, orbitPosition + targetRoot.CFrame.LookVector) * CFrame.Angles(math.rad(90), 0, 0)
+            elseif mode == "Backpack" then
+                root.CFrame = targetRoot.CFrame * CFrame.new(0, State.Movement.OrbitHeight, State.Movement.OrbitOffset)
+            elseif mode == "Helicopter" then
+                root.CFrame = CFrame.new(orbitPosition) * CFrame.Angles(0, angle * 2, math.rad(90))
+            elseif mode == "Avatar Spin" then
                 root.CFrame = CFrame.new(orbitPosition) * CFrame.Angles(0, movementClock * 3, 0)
             elseif mode == "Vertical Loop" then
                 root.CFrame = CFrame.lookAt(orbitPosition, targetRoot.Position) * CFrame.Angles(0, 0, angle)
@@ -4181,15 +3750,6 @@ trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
     if State.World.FlatTextures and flatScanClock >= 0.75 then
         flatScanClock = 0
         applyFlatTextures()
-    end
-    if State.World.ThirdPerson then
-        LocalPlayer.CameraMode = Enum.CameraMode.Classic
-        LocalPlayer.CameraMinZoomDistance = math.max(8, originalCameraMinZoom)
-        LocalPlayer.CameraMaxZoomDistance = math.max(40, originalCameraMaxZoom)
-    else
-        LocalPlayer.CameraMode = originalCameraMode
-        LocalPlayer.CameraMinZoomDistance = originalCameraMinZoom
-        LocalPlayer.CameraMaxZoomDistance = originalCameraMaxZoom
     end
     if State.World.Freecam then
         if not freecamState then
@@ -4251,6 +3811,39 @@ trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
     end
 end))
 
+local thirdPersonBaseCFrame
+local thirdPersonAppliedCFrame
+RunService:BindToRenderStep("TasuHubThirdPerson", Enum.RenderPriority.Camera.Value + 25, function()
+    local camera = Workspace.CurrentCamera
+    if not camera or not State.World.ThirdPerson or State.World.Freecam then
+        thirdPersonBaseCFrame = nil
+        thirdPersonAppliedCFrame = nil
+        return
+    end
+    local observed = camera.CFrame
+    local base = observed
+    if thirdPersonAppliedCFrame and thirdPersonBaseCFrame then
+        local unchangedPosition = (observed.Position - thirdPersonAppliedCFrame.Position).Magnitude < 0.002
+        local unchangedLook = observed.LookVector:Dot(thirdPersonAppliedCFrame.LookVector) > 0.99999
+        if unchangedPosition and unchangedLook then base = thirdPersonBaseCFrame end
+    end
+    thirdPersonBaseCFrame = base
+    local desired = base * CFrame.new(1.35, 0.45, 6)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {LocalPlayer.Character, camera}
+    params.IgnoreWater = true
+    local offset = desired.Position - base.Position
+    local hit = Workspace:Raycast(base.Position, offset, params)
+    if hit then
+        local safeDistance = math.max(0.25, hit.Distance - 0.35)
+        desired = CFrame.new(base.Position + offset.Unit * safeDistance) * base.Rotation
+    end
+    camera.CFrame = desired
+    camera.Focus = CFrame.new(base.Position + base.LookVector * 12)
+    thirdPersonAppliedCFrame = desired
+end)
+
 trackConnection(UserInputService.JumpRequest:Connect(function()
     if State.Movement.InfiniteJump and not State.World.Freecam then
         local _, humanoid = getCharacter(LocalPlayer)
@@ -4267,25 +3860,25 @@ trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
         pendingKeybind = nil
         if input.KeyCode == Enum.KeyCode.Backspace then
             State.Keybinds[bind.Id] = nil
-            bind.Button.Text = "Bind"
+            bind.Button.Text = (bind.Prefix or "") .. "Bind"
             showToast("Keybind cleared")
             return
         end
         if input.KeyCode == Enum.KeyCode.RightShift or input.KeyCode == Enum.KeyCode.Unknown then
-            bind.Button.Text = State.Keybinds[bind.Id] or "Bind"
+            bind.Button.Text = (bind.Prefix or "") .. (State.Keybinds[bind.Id] or "Bind")
             showToast("That key is reserved or unavailable")
             return
         end
         local keyName = input.KeyCode.Name
         for id, assignedKey in pairs(State.Keybinds) do
             if id ~= bind.Id and assignedKey == keyName then
-                bind.Button.Text = State.Keybinds[bind.Id] or "Bind"
+                bind.Button.Text = (bind.Prefix or "") .. (State.Keybinds[bind.Id] or "Bind")
                 showToast("Key is already assigned; clear it first")
                 return
             end
         end
         State.Keybinds[bind.Id] = keyName
-        bind.Button.Text = keyName
+        bind.Button.Text = (bind.Prefix or "") .. keyName
         showToast("Bound to " .. keyName)
         return
     end
@@ -4490,12 +4083,22 @@ UI.SetLoading(0.7, "Preparing categories")
 
 local HomePage = pages.Home
 local HomeCard = UI.AddAccordion(HomePage, "TasuHub", true)
-HomeCard.Parent.LayoutOrder = 3
+HomeCard.Parent.LayoutOrder = 4
 local HomeBrand = textLabel(HomeCard, "TasuHub", UDim2.new(1, 0, 0, 36), nil, 28, Theme.Text)
 HomeBrand.FontFace = UI.Fonts.Home
 local HomeSubtitle = addNote(HomeCard, "Live client test workspace")
 HomeSubtitle.TextSize = 16
 HomeSubtitle.FontFace = UI.Fonts.HomeRegular
+local StatsCard = createCard(HomePage, "Stats Overlay")
+StatsCard.Parent.LayoutOrder = 2
+addToggle(StatsCard, "Show Stats", function() return State.Stats.Visible end, function(value)
+    State.Stats.Visible = value
+    UI.RefreshStatsWindow()
+end)
+addToggle(StatsCard, "FPS", function() return State.Stats.FPS end, function(value) State.Stats.FPS = value end)
+addToggle(StatsCard, "Ping", function() return State.Stats.Ping end, function(value) State.Stats.Ping = value end)
+addToggle(StatsCard, "Player Count", function() return State.Stats.Players end, function(value) State.Stats.Players = value end)
+addToggle(StatsCard, "Memory", function() return State.Stats.Memory end, function(value) State.Stats.Memory = value end)
 local StatusCard = UI.AddStaticCard(HomePage, "Live Session")
 StatusCard.Parent.LayoutOrder = 1
 local StatusText = addNote(StatusCard, "")
@@ -4509,7 +4112,7 @@ do
         "Remote icon slots for category and action buttons"
     }
     local updateCard = createCard(HomePage, "Update Log  ·  v" .. UI.Version)
-    updateCard.Parent.LayoutOrder = 2
+    updateCard.Parent.LayoutOrder = 3
     addNote(updateCard, (table.concat(UI.UpdateLog, "\n• "):gsub("^", "• ")))
 end
 local unloadButton = addAction(HomeCard, "Unload TasuHub", function()
@@ -4538,17 +4141,22 @@ do
 local AimPage = pages.Aim
 local AimCard = createCard(AimPage, "Live Aim")
 addToggle(AimCard, "Enabled", function() return State.Aim.Enabled end, function(value) State.Aim.Enabled = value end, true)
-addCycle(AimCard, "Activation", {"Right Mouse", "Left Mouse", "Always"}, function() return State.Aim.Activation end, function(value)
-    State.Aim.Activation = value
-    State.Aim.HoldRightMouse = value == "Right Mouse"
-    currentTarget = nil
-end)
 addToggle(AimCard, "Rage Mode", function() return State.Aim.Rage end, function(value)
     State.Aim.Rage = value
     currentTarget = nil
 end)
 addToggle(AimCard, "Show FOV", function() return State.Aim.ShowFOV end, function(value) State.Aim.ShowFOV = value end)
+local aimSliderVisible = function() return State.Aim.Enabled and not State.Aim.Rage end
+addSlider(AimCard, "FOV Radius", 20, 600, function() return State.Aim.FOV end, function(value) State.Aim.FOV = value end, nil, aimSliderVisible)
+addSlider(AimCard, "Smoothing", 0, 0.95, function() return State.Aim.Smoothing end, function(value) State.Aim.Smoothing = value end, 2, aimSliderVisible)
+addSlider(AimCard, "Prediction Time", 0, 0.5, function() return State.Aim.PredictionTime end, function(value) State.Aim.PredictionTime = value end, 2, function() return aimSliderVisible() and State.Aim.Prediction end)
+addSlider(AimCard, "Maximum Distance", 25, 5000, function() return State.Aim.MaxDistance end, function(value) State.Aim.MaxDistance = value end, nil, aimSliderVisible)
 local aimAdjustables = {
+    addCycle(AimCard, "Activation", {"Right Mouse", "Left Mouse", "Always"}, function() return State.Aim.Activation end, function(value)
+        State.Aim.Activation = value
+        State.Aim.HoldRightMouse = value == "Right Mouse"
+        currentTarget = nil
+    end),
     addCycle(AimCard, "Method", {"Camera", "Mouse"}, function() return State.Aim.Method end, function(value) State.Aim.Method = value end),
     addCycle(AimCard, "Target Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso"}, function() return State.Aim.TargetPart end, function(value) State.Aim.TargetPart = value end),
     addToggle(AimCard, "Team Check", function() return State.Aim.TeamCheck end, function(value) State.Aim.TeamCheck = value end),
@@ -4561,11 +4169,6 @@ table.insert(controlRefreshers, function()
         if object then object.Visible = not State.Aim.Rage end
     end
 end)
-local aimSliderVisible = function() return State.Aim.Enabled and not State.Aim.Rage end
-addSlider(AimCard, "FOV Radius", 20, 600, function() return State.Aim.FOV end, function(value) State.Aim.FOV = value end, nil, aimSliderVisible)
-addSlider(AimCard, "Smoothing", 0, 0.95, function() return State.Aim.Smoothing end, function(value) State.Aim.Smoothing = value end, 2, aimSliderVisible)
-addSlider(AimCard, "Prediction Time", 0, 0.5, function() return State.Aim.PredictionTime end, function(value) State.Aim.PredictionTime = value end, 2, function() return aimSliderVisible() and State.Aim.Prediction end)
-addSlider(AimCard, "Maximum Distance", 25, 5000, function() return State.Aim.MaxDistance end, function(value) State.Aim.MaxDistance = value end, nil, aimSliderVisible)
 
 end
 
@@ -4587,40 +4190,218 @@ addToggle(VisualCard, "Use Team Colors", function() return State.Visuals.TeamCol
 addSlider(VisualCard, "Maximum Distance", 25, 5000, function() return State.Visuals.MaxDistance end, function(value) State.Visuals.MaxDistance = value end, nil, function() return State.Visuals.Enabled end)
 addSlider(VisualCard, "Line Thickness", 1, 4, function() return State.Visuals.Thickness end, function(value) State.Visuals.Thickness = value end, nil, function() return State.Visuals.Enabled end)
 
+local function setupVisualPreview()
+local previewOpen = false
+local previewModel
+local previewRotation = 0
+local PreviewPanel = Instance.new("CanvasGroup")
+PreviewPanel.Name = "VisualPreviewPanel"
+PreviewPanel.BackgroundColor3 = Theme.Surface
+PreviewPanel.BackgroundTransparency = 0.06
+PreviewPanel.ClipsDescendants = true
+PreviewPanel.GroupTransparency = 1
+PreviewPanel.Size = UDim2.fromOffset(300, 440)
+PreviewPanel.Visible = false
+PreviewPanel.ZIndex = 8
+PreviewPanel.Parent = InterfaceRoot
+UI.BindTheme(PreviewPanel, "BackgroundColor3", "Surface")
+round(PreviewPanel, 16)
+gradient(PreviewPanel, "Surface", "Surface2", 90)
+local PreviewShadow = addShadow(PreviewPanel, 0.72)
+PreviewShadow.ZIndex = 1
+local PreviewTitle = textLabel(PreviewPanel, "Live Visual Preview", UDim2.new(1, -36, 0, 42), UDim2.fromOffset(14, 4), 17, Theme.Text)
+PreviewTitle.FontFace = UI.Fonts.HeadingHeavy
+PreviewTitle.ZIndex = 9
+local PreviewToggle = button(PreviewPanel, "Ⅱ", UDim2.fromOffset(20, 390), UDim2.new(1, -22, 0, 25))
+PreviewToggle.TextSize = 13
+PreviewToggle.ZIndex = 12
+local PreviewViewport = Instance.new("ViewportFrame")
+PreviewViewport.BackgroundColor3 = Theme.Surface2
+PreviewViewport.BackgroundTransparency = 0.12
+PreviewViewport.Position = UDim2.fromOffset(12, 48)
+PreviewViewport.Size = UDim2.new(1, -42, 1, -62)
+PreviewViewport.Ambient = Color3.fromRGB(190, 190, 200)
+PreviewViewport.LightColor = Color3.fromRGB(255, 255, 255)
+PreviewViewport.LightDirection = Vector3.new(-1, -1, -1)
+PreviewViewport.ZIndex = 9
+PreviewViewport.Parent = PreviewPanel
+UI.BindTheme(PreviewViewport, "BackgroundColor3", "Surface2")
+round(PreviewViewport, 12)
+local PreviewWorld = Instance.new("WorldModel")
+PreviewWorld.Parent = PreviewViewport
+local PreviewCamera = Instance.new("Camera")
+PreviewCamera.Parent = PreviewViewport
+PreviewViewport.CurrentCamera = PreviewCamera
+local PreviewBox = Instance.new("Frame")
+PreviewBox.BackgroundColor3 = Theme.Accent
+PreviewBox.BackgroundTransparency = 0.88
+PreviewBox.Position = UDim2.fromScale(0.25, 0.15)
+PreviewBox.Size = UDim2.fromScale(0.5, 0.72)
+PreviewBox.ZIndex = 11
+PreviewBox.Parent = PreviewViewport
+local PreviewBoxStroke = stroke(PreviewBox, nil, State.Visuals.Thickness, 0)
+local PreviewName = textLabel(PreviewViewport, LocalPlayer.DisplayName, UDim2.fromScale(0.8, 0.07), UDim2.fromScale(0.1, 0.06), 14, Theme.Accent, Enum.TextXAlignment.Center)
+PreviewName.ZIndex = 12
+local PreviewDistance = textLabel(PreviewViewport, "[25]", UDim2.fromOffset(70, 20), UDim2.fromScale(0.68, 0.08), 13, Color3.fromRGB(255, 196, 74), Enum.TextXAlignment.Center)
+PreviewDistance.ZIndex = 12
+local PreviewHealth = Instance.new("Frame")
+PreviewHealth.AnchorPoint = Vector2.new(0, 1)
+PreviewHealth.BackgroundColor3 = Color3.fromRGB(80, 235, 120)
+PreviewHealth.Position = UDim2.fromScale(0.77, 0.87)
+PreviewHealth.Size = UDim2.fromScale(0.025, 0.64)
+PreviewHealth.ZIndex = 12
+PreviewHealth.Parent = PreviewViewport
+local PreviewHead = Instance.new("Frame")
+PreviewHead.AnchorPoint = Vector2.new(0.5, 0.5)
+PreviewHead.BackgroundColor3 = Theme.Accent
+PreviewHead.Position = UDim2.fromScale(0.5, 0.25)
+PreviewHead.Size = UDim2.fromOffset(7, 7)
+PreviewHead.ZIndex = 12
+PreviewHead.Parent = PreviewViewport
+round(PreviewHead, 7)
+local PreviewTracer = newLine(PreviewViewport)
+PreviewTracer.ZIndex = 11
+local PreviewSkeleton = {}
+for _ = 1, 6 do
+    local skeletonLine = newLine(PreviewViewport)
+    skeletonLine.ZIndex = 11
+    table.insert(PreviewSkeleton, skeletonLine)
+end
+local PreviewArrow = textLabel(PreviewViewport, "▲", UDim2.fromOffset(34, 34), UDim2.fromScale(0.86, 0.46), 28, Theme.Accent, Enum.TextXAlignment.Center)
+PreviewArrow.ZIndex = 12
+local PreviewHighlight
+
+local function placePreviewPanel(animated)
+    local position = getLocalPosition(ContentWindow)
+    local target = UDim2.fromOffset(position.X + (previewOpen and ContentWindow.AbsoluteSize.X - 4 or 400), position.Y)
+    if animated then
+        animate(PreviewPanel, {Position = target}, 0.42, Enum.EasingStyle.Quint)
+    else
+        PreviewPanel.Position = target
+    end
 end
 
-do
-    local MM2Page = pages.MM2Security
-    local MM2ControlCard = createCard(MM2Page, "Murder Mystery 2")
-    addNote(MM2ControlCard, "Runs entirely from this client script. Server-only roles and decisions can only be reported when the game already replicates them; otherwise results are inferred from visible Tool, GunDrop and health changes.")
-    addToggle(MM2ControlCard, "Enabled", function() return State.MM2Security.Enabled end, function(value)
-        State.MM2Security.Enabled = value
-        if not value then
-            for _, record in pairs(MM2SecurityClient.PlayerESP) do
-                record.Highlight.Enabled = false
-                record.Billboard.Enabled = false
-            end
-            MM2SecurityClient.SetDropESPVisible(false)
-        end
-    end)
-    addToggle(MM2ControlCard, "Player Role ESP", function() return State.MM2Security.PlayerESP end, function(value) State.MM2Security.PlayerESP = value end)
-    addToggle(MM2ControlCard, "GunDrop ESP", function() return State.MM2Security.GunDropESP end, function(value) State.MM2Security.GunDropESP = value end)
-    addToggle(MM2ControlCard, "Automatic Pickup Test", function() return State.MM2Security.AutoPickupTest end, function(value)
-        State.MM2Security.AutoPickupTest = value
-    end)
-    addToggle(MM2ControlCard, "Automatic Fire Test", function() return State.MM2Security.AutoFireTest end, function(value) State.MM2Security.AutoFireTest = value end)
-    addAction(MM2ControlCard, "Send Pickup Test", MM2SecurityClient.RequestPickup)
-    addAction(MM2ControlCard, "Send Fire Test", MM2SecurityClient.RequestShot)
-    addAction(MM2ControlCard, "Refresh Observations", MM2SecurityClient.RefreshObservations)
+local function destroyPreviewModel()
+    if previewModel then
+        previewModel:Destroy()
+        previewModel = nil
+    end
+    PreviewHighlight = nil
+end
 
-    local MM2StatusCard = createCard(MM2Page, "Live Security Telemetry")
-    local statusText = addNote(MM2StatusCard, "Waiting for first scan...")
-    statusText.TextSize = 15
-    statusText.FontFace = UI.Fonts.Description
-    statusText.TextColor3 = Theme.Text
-    statusText.TextWrapped = true
-    statusText.AutomaticSize = Enum.AutomaticSize.Y
-    MM2SecurityClient.SetStatusText(statusText)
+local function createPreviewModel()
+    destroyPreviewModel()
+    local character = LocalPlayer.Character
+    if not character then return end
+    local archivable = character.Archivable
+    character.Archivable = true
+    local ok, clone = pcall(function() return character:Clone() end)
+    character.Archivable = archivable
+    if not ok or not clone then return end
+    for _, object in ipairs(clone:GetDescendants()) do
+        if object:IsA("Script") or object:IsA("LocalScript") or object:IsA("Tool") then
+            object:Destroy()
+        elseif object:IsA("BasePart") then
+            object.Anchored = true
+            object.CanCollide = false
+        end
+    end
+    clone:PivotTo(CFrame.new())
+    clone.Parent = PreviewWorld
+    previewModel = clone
+    local _, size = clone:GetBoundingBox()
+    local distance = math.max(size.X, size.Y, size.Z) * 1.7
+    PreviewCamera.CFrame = CFrame.lookAt(Vector3.new(0, size.Y * 0.05, distance), Vector3.new(0, size.Y * 0.05, 0))
+    PreviewHighlight = Instance.new("Highlight")
+    PreviewHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    PreviewHighlight.FillTransparency = 0.72
+    PreviewHighlight.OutlineTransparency = 0.08
+    PreviewHighlight.Adornee = clone
+    PreviewHighlight.Parent = PreviewWorld
+end
+
+local function setPreviewOpen(value)
+    previewOpen = value == true
+    if previewOpen then
+        createPreviewModel()
+        PreviewViewport.Visible = true
+    else
+        PreviewViewport.Visible = false
+        destroyPreviewModel()
+    end
+    placePreviewPanel(true)
+end
+PreviewToggle.Activated:Connect(function() setPreviewOpen(not previewOpen) end)
+UI.RefreshVisualPreview = function()
+    local available = UI.ActiveCategory == "Visuals" and ContentWindow.Visible
+    if available then
+        PreviewPanel.Visible = true
+        placePreviewPanel(false)
+        animate(PreviewPanel, {GroupTransparency = 0}, 0.28, Enum.EasingStyle.Quint)
+    else
+        previewOpen = false
+        destroyPreviewModel()
+        animate(PreviewPanel, {GroupTransparency = 1}, 0.2, Enum.EasingStyle.Quint)
+        task.delay(0.21, function()
+            if (UI.ActiveCategory ~= "Visuals" or not ContentWindow.Visible) and PreviewPanel.Parent then PreviewPanel.Visible = false end
+        end)
+    end
+end
+trackConnection(ContentWindow:GetPropertyChangedSignal("Position"):Connect(function() placePreviewPanel(false) end))
+local previewClock = 0
+trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
+    if not previewOpen or not previewModel or not PreviewPanel.Visible then return end
+    previewClock = previewClock + deltaTime
+    if previewClock < 1 / 30 then return end
+    previewRotation = previewRotation + previewClock * 0.45
+    previewClock = 0
+    previewModel:PivotTo(CFrame.Angles(0, previewRotation, 0))
+    local color = State.Interface.RGBEnabled and getRGBColor(0) or Theme.Accent
+    PreviewBox.BackgroundColor3 = color
+    PreviewBox.BackgroundTransparency = State.Visuals.BoxFilled and 0.82 or 1
+    PreviewBoxStroke.Color = color
+    PreviewBoxStroke.Thickness = State.Visuals.Thickness
+    PreviewBox.Visible = State.Visuals.Boxes
+    PreviewName.TextColor3 = color
+    PreviewName.Visible = State.Visuals.Names
+    PreviewDistance.Visible = State.Visuals.Distance
+    PreviewHealth.Visible = State.Visuals.Health
+    PreviewHead.BackgroundColor3 = color
+    PreviewHead.Visible = State.Visuals.HeadDot
+    PreviewTracer.BackgroundColor3 = color
+    if State.Visuals.Tracers then
+        setLine(PreviewTracer, Vector2.new(PreviewViewport.AbsoluteSize.X * 0.5, PreviewViewport.AbsoluteSize.Y), Vector2.new(PreviewViewport.AbsoluteSize.X * 0.5, PreviewViewport.AbsoluteSize.Y * 0.83), State.Visuals.Thickness)
+    else
+        PreviewTracer.Visible = false
+    end
+    local width, height = PreviewViewport.AbsoluteSize.X, PreviewViewport.AbsoluteSize.Y
+    local skeletonPoints = {
+        {Vector2.new(width * 0.5, height * 0.24), Vector2.new(width * 0.5, height * 0.58)},
+        {Vector2.new(width * 0.34, height * 0.37), Vector2.new(width * 0.66, height * 0.37)},
+        {Vector2.new(width * 0.34, height * 0.37), Vector2.new(width * 0.27, height * 0.61)},
+        {Vector2.new(width * 0.66, height * 0.37), Vector2.new(width * 0.73, height * 0.61)},
+        {Vector2.new(width * 0.5, height * 0.58), Vector2.new(width * 0.39, height * 0.84)},
+        {Vector2.new(width * 0.5, height * 0.58), Vector2.new(width * 0.61, height * 0.84)}
+    }
+    for index, skeletonLine in ipairs(PreviewSkeleton) do
+        skeletonLine.BackgroundColor3 = color
+        if State.Visuals.Skeleton then
+            setLine(skeletonLine, skeletonPoints[index][1], skeletonPoints[index][2], State.Visuals.Thickness)
+        else
+            skeletonLine.Visible = false
+        end
+    end
+    PreviewArrow.TextColor3 = color
+    PreviewArrow.Visible = State.Visuals.Offscreen
+    if PreviewHighlight then
+        PreviewHighlight.FillColor = color
+        PreviewHighlight.OutlineColor = color
+        PreviewHighlight.Enabled = State.Visuals.Chams
+    end
+end))
+end
+setupVisualPreview()
+
 end
 
 local MiscPage = pages.Misc
@@ -4635,11 +4416,11 @@ addToggle(MoveCard, "Speed", function() return State.Movement.Speed end, functio
     end
     refreshControls()
 end)
+addSlider(MoveCard, "Speed Value", 16, 200, function() return State.Movement.SpeedValue end, function(value) State.Movement.SpeedValue = value end, nil, function() return State.Movement.Speed end)
 local speedMethodControl = addCycle(MoveCard, "Speed Method", {"WalkSpeed", "Velocity", "CFrame"}, function() return State.Movement.SpeedMethod end, function(value) State.Movement.SpeedMethod = value end)
 table.insert(controlRefreshers, function()
     speedMethodControl.Holder.Visible = State.Movement.Speed
 end)
-addSlider(MoveCard, "Speed Value", 16, 200, function() return State.Movement.SpeedValue end, function(value) State.Movement.SpeedValue = value end, nil, function() return State.Movement.Speed end)
 addToggle(MoveCard, "Jump Power", function() return State.Movement.Jump end, function(value)
     State.Movement.Jump = value
     if not value then
@@ -4657,11 +4438,11 @@ addToggle(FlyCard, "Fly", function() return State.Movement.Fly end, function(val
     State.Movement.Fly = value
     refreshControls()
 end, true)
+addSlider(FlyCard, "Fly Speed", 10, 250, function() return State.Movement.FlySpeed end, function(value) State.Movement.FlySpeed = value end, nil, function() return State.Movement.Fly end)
 local flyMethodControl = addCycle(FlyCard, "Fly Method", {"Velocity", "CFrame"}, function() return State.Movement.FlyMethod end, function(value) State.Movement.FlyMethod = value end)
 table.insert(controlRefreshers, function()
     flyMethodControl.Holder.Visible = State.Movement.Fly
 end)
-addSlider(FlyCard, "Fly Speed", 10, 250, function() return State.Movement.FlySpeed end, function(value) State.Movement.FlySpeed = value end, nil, function() return State.Movement.Fly end)
 addNote(FlyCard, "WASD follows the camera. Space or E moves up; Ctrl, Q or C moves down.")
 addToggle(FlyCard, "Noclip", function() return State.Movement.Noclip end, function(value)
     State.Movement.Noclip = value
@@ -4700,9 +4481,9 @@ addToggle(FlingCard, "Enabled", function() return State.Movement.Fling end, func
     end
     refreshControls()
 end, true)
-addCycle(FlingCard, "Fling Mode", {"Walk Fling", "Fly Fling", "Contact Fling"}, function() return State.Movement.FlingMode end, function(value) State.Movement.FlingMode = value end)
 addSlider(FlingCard, "Fling Power", 1000, 100000, function() return State.Movement.FlingPower end, function(value) State.Movement.FlingPower = value end, nil, function() return State.Movement.Fling end)
 addSlider(FlingCard, "Fly Fling Speed", 10, 300, function() return State.Movement.FlingFlySpeed end, function(value) State.Movement.FlingFlySpeed = value end, nil, function() return State.Movement.Fling and State.Movement.FlingMode == "Fly Fling" end)
+addCycle(FlingCard, "Fling Mode", {"Walk Fling", "Fly Fling", "Contact Fling"}, function() return State.Movement.FlingMode end, function(value) State.Movement.FlingMode = value end)
 addNote(FlingCard, "Your avatar never spins. Walk and Contact pulse only on physical touch; Fly uses WASD/Space/Ctrl. Each pulse is restored before the next rendered frame.")
 local GravityCard = createCard(MovementPage, "World Physics")
 addToggle(GravityCard, "Custom Gravity", function() return State.Movement.Gravity end, function(value)
@@ -4714,10 +4495,34 @@ addSlider(GravityCard, "Gravity", 0, 300, function() return State.Movement.Gravi
     if State.Movement.Gravity then Workspace.Gravity = value end
 end, 1, function() return State.Movement.Gravity end)
 local OrbitCard = createCard(MiscPage, "Orbit")
-UI.OrbitPlayerDropdown = UI.AddPlayerDropdown(OrbitCard, "Orbit Player", function()
+local orbitSelectionRow = Instance.new("Frame")
+orbitSelectionRow.BackgroundTransparency = 1
+orbitSelectionRow.AutomaticSize = Enum.AutomaticSize.Y
+orbitSelectionRow.Size = UDim2.new(1, 0, 0, 42)
+orbitSelectionRow.Parent = OrbitCard
+local orbitSelectionLayout = Instance.new("UIListLayout")
+orbitSelectionLayout.FillDirection = Enum.FillDirection.Horizontal
+orbitSelectionLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+orbitSelectionLayout.Padding = UDim.new(0, 8)
+orbitSelectionLayout.Parent = orbitSelectionRow
+local orbitPlayerSlot = Instance.new("Frame")
+orbitPlayerSlot.BackgroundTransparency = 1
+orbitPlayerSlot.AutomaticSize = Enum.AutomaticSize.Y
+orbitPlayerSlot.Size = UDim2.new(0.5, -4, 0, 42)
+orbitPlayerSlot:SetAttribute("ForceFullWidth", true)
+orbitPlayerSlot.Parent = orbitSelectionRow
+local orbitModeSlot = orbitPlayerSlot:Clone()
+orbitModeSlot.Parent = orbitSelectionRow
+UI.OrbitPlayerDropdown = UI.AddPlayerDropdown(orbitPlayerSlot, "Player", function()
     return selectedPlayer
 end, function(player)
     selectedPlayer = player
+end)
+UI.OrbitModeDropdown = addCycle(orbitModeSlot, "Feature", {"Circle", "Wave", "Vertical Loop", "Horizontal Loop", "Spiral", "Avatar Spin", "Carpet", "Backpack", "Helicopter"}, function()
+    return State.Movement.OrbitMode
+end, function(value)
+    State.Movement.OrbitMode = value
+    refreshControls()
 end)
 UI.RefreshOrbitPlayers = function()
     if UI.OrbitPlayerDropdown and UI.OrbitPlayerDropdown.Refresh then
@@ -4735,19 +4540,19 @@ addToggle(OrbitCard, "Orbit Selected Player", function() return State.Movement.O
     State.Movement.Orbit = value
     if not value then clearOrbitMotion() end
 end, true)
-addCycle(OrbitCard, "Orbit Mode", {"Circle", "Wave", "Vertical Loop", "Horizontal Loop", "Spiral", "Avatar Spin"}, function() return State.Movement.OrbitMode end, function(value) State.Movement.OrbitMode = value end)
 addSlider(OrbitCard, "Orbit Radius", 2, 30, function() return State.Movement.OrbitRadius end, function(value) State.Movement.OrbitRadius = value end, nil, function() return State.Movement.Orbit end)
-addSlider(OrbitCard, "Orbit Speed", 0.2, 30, function() return State.Movement.OrbitSpeed end, function(value) State.Movement.OrbitSpeed = value end, 1, function() return State.Movement.Orbit end)
+addSlider(OrbitCard, "Orbit Speed", 0.2, 100, function() return State.Movement.OrbitSpeed end, function(value) State.Movement.OrbitSpeed = value end, 1, function() return State.Movement.Orbit end)
+addSlider(OrbitCard, "Feature Height", -5, 20, function() return State.Movement.OrbitHeight end, function(value) State.Movement.OrbitHeight = value end, 1, function()
+    return State.Movement.Orbit and table.find({"Wave", "Spiral", "Carpet", "Backpack", "Helicopter"}, State.Movement.OrbitMode) ~= nil
+end)
+addSlider(OrbitCard, "Feature Offset", 0, 10, function() return State.Movement.OrbitOffset end, function(value) State.Movement.OrbitOffset = value end, 1, function()
+    return State.Movement.Orbit and table.find({"Carpet", "Backpack", "Helicopter"}, State.Movement.OrbitMode) ~= nil
+end)
 end
 
 do
 local WorldPage = pages.World
 local LightingCard = createCard(WorldPage, "Lighting")
-addCycle(LightingCard, "Vision Mode", {"Default", "Glow", "RGB Vision", "Manual"}, function() return State.World.LightingMode end, function(value)
-    State.World.LightingMode = value
-    applyWorld()
-    refreshControls()
-end)
 addSlider(LightingCard, "Glow Strength", 0, 4, function() return State.World.GlowIntensity end, function(value)
     State.World.GlowIntensity = value
     applyWorld()
@@ -4771,6 +4576,11 @@ addSlider(LightingCard, "Manual Saturation", -1, 1, function() return State.Worl
     State.World.ManualSaturation = value
     applyWorld()
 end, 2, function() return State.World.LightingMode == "Manual" end)
+addCycle(LightingCard, "Vision Mode", {"Default", "Glow", "RGB Vision", "Manual"}, function() return State.World.LightingMode end, function(value)
+    State.World.LightingMode = value
+    applyWorld()
+    refreshControls()
+end)
 addToggle(LightingCard, "Fullbright", function() return State.World.Fullbright end, function(value)
     State.World.Fullbright = value
     applyWorld()
@@ -4798,6 +4608,7 @@ addToggle(CameraCard, "Third Person", function() return State.World.ThirdPerson 
 local FreecamCard = createCard(WorldPage, "Freecam")
 addToggle(FreecamCard, "Freecam", function() return State.World.Freecam end, function(value)
     State.World.Freecam = value
+    refreshControls()
 end)
 addSlider(FreecamCard, "Freecam Speed", 0.2, 8, function() return State.World.FreecamSpeed end, function(value) State.World.FreecamSpeed = value end, 1, function() return State.World.Freecam end)
 local freecamTeleportButton = addAction(FreecamCard, "Teleport Player to Freecam", function()
@@ -4812,6 +4623,9 @@ local freecamTeleportButton = addAction(FreecamCard, "Teleport Player to Freecam
     root.AssemblyAngularVelocity = Vector3.zero
 end)
 UI.BindActionIcon(freecamTeleportButton, "FreecamTeleport")
+table.insert(controlRefreshers, function()
+    freecamTeleportButton.Visible = State.World.Freecam
+end)
 local WaypointCard = createCard(MiscPage, "Waypoints")
 local waypointStatus = addNote(WaypointCard, "No waypoint selected")
 UI.WaypointDropdown = UI.AddDropdown(WaypointCard, "Saved Waypoint", {}, function()
@@ -4844,10 +4658,10 @@ UI.WaypointActionLayout.FillDirection = Enum.FillDirection.Horizontal
 UI.WaypointActionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 UI.WaypointActionLayout.Padding = UDim.new(0, 10)
 UI.WaypointActionLayout.Parent = UI.WaypointActions
-UI.WaypointSave = button(UI.WaypointActions, "+", UDim2.fromOffset(46, 46))
+UI.WaypointSave = button(UI.WaypointActions, "+", UDim2.new(1 / 3, -7, 0, 46))
 UI.WaypointSave.TextSize = 27
-UI.WaypointTeleport = button(UI.WaypointActions, "", UDim2.fromOffset(46, 46))
-UI.WaypointDelete = button(UI.WaypointActions, "", UDim2.fromOffset(46, 46))
+UI.WaypointTeleport = button(UI.WaypointActions, "", UDim2.new(1 / 3, -7, 0, 46))
+UI.WaypointDelete = button(UI.WaypointActions, "", UDim2.new(1 / 3, -7, 0, 46))
 UI.BindActionIcon(UI.WaypointSave, "WaypointSave")
 do
     local pin = Instance.new("Frame")
@@ -4894,29 +4708,54 @@ do
     UI.BindActionIcon(UI.WaypointDelete, "WaypointDelete", {bin, lid})
 end
 
-UI.WaypointSave.Activated:Connect(function()
+local function saveWaypoint()
     local _, _, root = getCharacter(LocalPlayer)
     if not root then return end
     local components = {root.CFrame:GetComponents()}
     table.insert(State.Waypoints, {Name = "Waypoint " .. tostring(#State.Waypoints + 1), CFrame = components})
     selectedWaypoint = #State.Waypoints
     UI.RefreshWaypointList()
-end)
-UI.WaypointTeleport.Activated:Connect(function()
+end
+local function teleportWaypoint()
     local entry = State.Waypoints[selectedWaypoint]
     local _, _, root = getCharacter(LocalPlayer)
     if entry and root and type(entry.CFrame) == "table" and #entry.CFrame >= 12 then
         root.CFrame = CFrame.new(table.unpack(entry.CFrame))
     end
-end)
-UI.WaypointDelete.Activated:Connect(function()
+end
+local function deleteWaypoint()
     local entry = State.Waypoints[selectedWaypoint]
     if not entry then return end
     UI.ShowConfirm("Delete Waypoint", "Delete “" .. entry.Name .. "”? This cannot be undone.", function()
         table.remove(State.Waypoints, selectedWaypoint)
         UI.RefreshWaypointList()
     end)
-end)
+end
+UI.WaypointSave.Activated:Connect(saveWaypoint)
+UI.WaypointTeleport.Activated:Connect(teleportWaypoint)
+UI.WaypointDelete.Activated:Connect(deleteWaypoint)
+local waypointBindRow = Instance.new("Frame")
+waypointBindRow.BackgroundTransparency = 1
+waypointBindRow.Size = UDim2.new(1, 0, 0, 32)
+waypointBindRow.Parent = WaypointCard
+local waypointBindLayout = Instance.new("UIListLayout")
+waypointBindLayout.FillDirection = Enum.FillDirection.Horizontal
+waypointBindLayout.Padding = UDim.new(0, 10)
+waypointBindLayout.Parent = waypointBindRow
+for _, bindData in ipairs({
+    {"WaypointSave", "Save", saveWaypoint},
+    {"WaypointTeleport", "Teleport", teleportWaypoint},
+    {"WaypointDelete", "Delete", deleteWaypoint}
+}) do
+    local bindId = "Misc/Waypoints/" .. bindData[1]
+    local bindButton = button(waypointBindRow, bindData[2] .. ": " .. (State.Keybinds[bindId] or "Bind"), UDim2.new(1 / 3, -7, 0, 32))
+    bindButton.TextSize = 13
+    keybindActions[bindId] = bindData[3]
+    bindButton.Activated:Connect(function()
+        pendingKeybind = {Id = bindId, Button = bindButton, Prefix = bindData[2] .. ": "}
+        bindButton.Text = bindData[2] .. ": ..."
+    end)
+end
 UI.Register("Misc/Waypoints/Save Current Position", {Instance = UI.WaypointSave})
 UI.Register("Misc/Waypoints/Teleport to Waypoint", {Instance = UI.WaypointTeleport})
 UI.Register("Misc/Waypoints/Delete Selected Waypoint", {Instance = UI.WaypointDelete})
@@ -5134,8 +4973,27 @@ local function parsePlaceId(value)
     return matched and tonumber(matched) or nil
 end
 
+local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/main/mm2.lua"
+local function ensureBuiltinCatalogEntries()
+    for _, entry in ipairs(State.Catalog) do
+        if entry.BuiltInId == "mm2" then
+            entry.Name = "Murder Mystery 2"
+            entry.PlaceId = 142823291
+            entry.Url = MM2_CATALOG_URL
+            return
+        end
+    end
+    table.insert(State.Catalog, 1, {
+        BuiltInId = "mm2",
+        Name = "Murder Mystery 2",
+        PlaceId = 142823291,
+        Url = MM2_CATALOG_URL
+    })
+end
+ensureBuiltinCatalogEntries()
+
 local updateCatalogStatus = function() end
-do
+local function setupCatalog()
 local CatalogPage = pages.Catalog
 local CatalogCard = UI.AddStaticCard(CatalogPage, "Script Catalog")
 local CatalogGrid = Instance.new("Frame")
@@ -5223,6 +5081,10 @@ local function openCatalogEditor(index)
     catalogOverlay.Visible = true
 end
 local function runCatalogEntry(entry)
+    if entry.BuiltInId == "mm2" and game.PlaceId ~= entry.PlaceId then
+        showToast("This script can only run inside Murder Mystery 2")
+        return
+    end
     if not capabilities.LoadString then
         showToast("Executor cannot compile scripts")
         return
@@ -5297,18 +5159,34 @@ updateCatalogStatus = function()
         viewIcon.Size = UDim2.fromOffset(17, 17)
         UI.BindActionIcon(edit, "CatalogEdit")
         UI.BindActionIcon(deleteButton, "CatalogDelete")
+        local builtIn = entry.BuiltInId ~= nil
         edit.Visible = false
         deleteButton.Visible = false
         card.MouseEnter:Connect(function()
-            edit.Visible = true
-            deleteButton.Visible = true
+            edit.Visible = not builtIn
+            deleteButton.Visible = not builtIn
         end)
         card.MouseLeave:Connect(function()
             edit.Visible = false
             deleteButton.Visible = false
         end)
         run.Activated:Connect(function() runCatalogEntry(entry) end)
-        view.Activated:Connect(function() openCatalogEditor(index) end)
+        view.Activated:Connect(function()
+            if entry.BuiltInId == "mm2" then
+                if game.PlaceId ~= entry.PlaceId then
+                    showToast("Open Murder Mystery 2 before viewing this menu")
+                    return
+                end
+                local mm2 = env.TasuHubMM2
+                if mm2 and type(mm2.Open) == "function" then
+                    mm2.Open()
+                else
+                    showToast("Run the MM2 catalog script first")
+                end
+            else
+                openCatalogEditor(index)
+            end
+        end)
         edit.Activated:Connect(function() openCatalogEditor(index) end)
         deleteButton.Activated:Connect(function()
             UI.ShowConfirm("Delete Script", "Delete “" .. tostring(entry.Name) .. "”? This cannot be undone.", function()
@@ -5356,6 +5234,7 @@ catalogSave.Activated:Connect(function()
 end)
 updateCatalogStatus()
 end
+setupCatalog()
 
 local function configPayload()
     local payload = deepCopy(State)
@@ -5423,12 +5302,14 @@ local function loadConfig(name)
         )
     end
     merge(State, decoded)
+    ensureBuiltinCatalogEntries()
     Theme = State.Interface
     UI.ApplyTheme(State.Interface.ThemeName or "Tasu Light", true)
     applyWorld()
     TopTitle.Text = State.Interface.Title or Theme.Title
     updateCatalogStatus()
     refreshControls()
+    UI.RefreshStatsWindow()
     UI.RefreshWaypointList()
     return true, path
 end
@@ -5524,6 +5405,7 @@ addAction(ConfigCard, "Reset to Defaults", function()
     TopTitle.Text = State.Interface.Title
     if env.TasuHub then env.TasuHub.State = State end
     refreshControls()
+    UI.RefreshStatsWindow()
     UI.RefreshWaypointList()
     UI.RefreshOrbitPlayers()
     updateCatalogStatus()
@@ -5704,10 +5586,6 @@ unload = function()
     unloaded = true
     State.Aim.Enabled = false
     State.Visuals.Enabled = false
-    State.MM2Security.Enabled = false
-    State.MM2Security.AutoPickupTest = false
-    State.MM2Security.AutoFireTest = false
-    MM2SecurityClient.ClearSilentAim()
     State.Movement.Fly = false
     State.Movement.Fling = false
     State.Movement.Noclip = false
@@ -5747,6 +5625,7 @@ unload = function()
     LocalPlayer.CameraMode = originalCameraMode
     for _, player in ipairs(Players:GetPlayers()) do destroyESP(player) end
     RunService:UnbindFromRenderStep("TasuHubESP")
+    RunService:UnbindFromRenderStep("TasuHubThirdPerson")
     UI.PlayUnloadScreen()
     for _, list in pairs(featureConnections) do
         for _, connection in ipairs(list) do pcall(function() connection:Disconnect() end) end
@@ -5780,11 +5659,6 @@ env.TasuHub = {
     ShowCategory = showCategory,
     SaveConfig = saveConfig,
     LoadConfig = loadConfig,
-    MM2Security = {
-        RequestPickup = MM2SecurityClient.RequestPickup,
-        RequestShot = MM2SecurityClient.RequestShot,
-        RefreshObservations = MM2SecurityClient.RefreshObservations
-    },
     Unload = unload
 }
 
