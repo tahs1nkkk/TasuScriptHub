@@ -4740,6 +4740,7 @@ addSlider(OrbitCard, "Orbit Radius", 2, 30, function() return State.Movement.Orb
 addSlider(OrbitCard, "Orbit Speed", 0.2, 30, function() return State.Movement.OrbitSpeed end, function(value) State.Movement.OrbitSpeed = value end, 1, function() return State.Movement.Orbit end)
 end
 
+do
 local WorldPage = pages.World
 local LightingCard = createCard(WorldPage, "Lighting")
 addCycle(LightingCard, "Vision Mode", {"Default", "Glow", "RGB Vision", "Manual"}, function() return State.World.LightingMode end, function(value)
@@ -4920,7 +4921,9 @@ UI.Register("Misc/Waypoints/Save Current Position", {Instance = UI.WaypointSave}
 UI.Register("Misc/Waypoints/Teleport to Waypoint", {Instance = UI.WaypointTeleport})
 UI.Register("Misc/Waypoints/Delete Selected Waypoint", {Instance = UI.WaypointDelete})
 UI.RefreshWaypointList()
+end
 
+do
 local PlayersPage = pages.Players
 PlayersPage.ScrollingEnabled = false
 PlayersPage.ScrollBarThickness = 0
@@ -5095,6 +5098,7 @@ trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
     playerStatusClock = 0
     refreshPlayerRows()
 end))
+end
 
 local function sanitizeName(value)
     return string.gsub(tostring(value), "[^%w_%-]", "_")
@@ -5219,14 +5223,23 @@ local function openCatalogEditor(index)
     catalogOverlay.Visible = true
 end
 local function runCatalogEntry(entry)
-    if not capabilities.LoadString then showToast("Executor cannot compile scripts") return end
+    if not capabilities.LoadString then
+        showToast("Executor cannot compile scripts")
+        return
+    end
     local source = entry.Source
     if (not source or source == "") and type(entry.Url) == "string" and entry.Url:match("^https://") then
         source = httpGet(entry.Url)
     end
-    if type(source) ~= "string" or source == "" then showToast("This save has no script") return end
+    if type(source) ~= "string" or source == "" then
+        showToast("This save has no script")
+        return
+    end
     local chunk, compileError = loadstring(source, "TasuCatalog:" .. tostring(entry.Name))
-    if not chunk then showToast(tostring(compileError)) return end
+    if not chunk then
+        showToast(tostring(compileError))
+        return
+    end
     local ok, runtimeError = pcall(chunk)
     showToast(ok and "Script completed" or tostring(runtimeError))
 end
@@ -5326,7 +5339,10 @@ end
 catalogCancel.Activated:Connect(closeCatalogEditor)
 catalogSave.Activated:Connect(function()
     local placeId = parsePlaceId(catalogPlace.Text)
-    if catalogName.Text:gsub("%s", "") == "" or not placeId then showToast("Name and valid PlaceId required") return end
+    if catalogName.Text:gsub("%s", "") == "" or not placeId then
+        showToast("Name and valid PlaceId required")
+        return
+    end
     local entry = catalogEditingIndex and State.Catalog[catalogEditingIndex] or {}
     entry.Name = catalogName.Text
     entry.PlaceId = placeId
