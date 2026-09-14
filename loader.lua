@@ -374,7 +374,8 @@ local Theme = State.Interface
 local UI = {
     Version = "0.1",
     Ready = false,
-    TopBarBaseWidth = 840,
+    -- 9 category buttons: 148 brand + 495 categories + 6 gap + 48 search + 6 gap + 70 version + 12 padding.
+    TopBarBaseWidth = 785,
     -- ShadowSpread / 2 is roughly the visible edge in pixels. Offset moves it right/down.
     ShadowOffsetX = 3,
     ShadowOffsetY = 0,
@@ -959,32 +960,6 @@ round(TopBar, 14)
 gradient(TopBar, "Surface", "Surface2", 75)
 addShadow(TopBar, UI.ShadowTransparency).ZIndex = 3
 
-local TopBarGlow = Instance.new("ImageLabel")
-TopBarGlow.Name = "CategoryBarGlow"
-TopBarGlow.AnchorPoint = TopBar.AnchorPoint
-TopBarGlow.BackgroundTransparency = 1
-TopBarGlow.Image = "rbxassetid://1316045217"
-TopBarGlow.ImageColor3 = Theme.Accent
-TopBarGlow.ImageTransparency = 0.38
-TopBarGlow.ScaleType = Enum.ScaleType.Slice
-TopBarGlow.SliceCenter = Rect.new(10, 10, 118, 118)
-TopBarGlow.ZIndex = 4
-TopBarGlow.Parent = InterfaceRoot
-UI.BindTheme(TopBarGlow, "ImageColor3", "Accent")
-local TopBarGlowGradient = Instance.new("UIGradient")
-TopBarGlowGradient.Rotation = 0
-TopBarGlowGradient.Transparency = NumberSequence.new(0)
-TopBarGlowGradient.Parent = TopBarGlow
-local function syncTopBarGlow()
-    TopBarGlow.Position = TopBar.Position
-    TopBarGlow.Size = TopBar.Size + UDim2.fromOffset(34, 34)
-    TopBarGlow.Visible = TopBar.Visible
-end
-syncTopBarGlow()
-trackConnection(TopBar:GetPropertyChangedSignal("Position"):Connect(syncTopBarGlow))
-trackConnection(TopBar:GetPropertyChangedSignal("Size"):Connect(syncTopBarGlow))
-trackConnection(TopBar:GetPropertyChangedSignal("Visible"):Connect(syncTopBarGlow))
-
 local DragGrip = Instance.new("Frame")
 DragGrip.Name = "BrandButton"
 DragGrip.BackgroundTransparency = 1
@@ -1006,7 +981,7 @@ local TopTitle = textLabel(DragGrip, Theme.Title, UDim2.new(1, -56, 1, 0), UDim2
 TopTitle.TextSize = 16
 TopTitle.FontFace = UI.Fonts.HeadingHeavy
 
-UI.GlobalSearchButton = button(TopBar, "", UDim2.fromOffset(48, 48), UDim2.fromOffset(704, 5))
+UI.GlobalSearchButton = button(TopBar, "", UDim2.fromOffset(48, 48), UDim2.fromOffset(649, 5))
 UI.GlobalSearchButton.Name = "GlobalSearchButton"
 UI.GlobalSearchButton.ZIndex = 5
 do
@@ -1033,7 +1008,7 @@ do
     UI.BindActionIcon(UI.GlobalSearchButton, "Search", {ring, handle})
 end
 
-UI.VersionLabel = textLabel(TopBar, "v" .. UI.Version, UDim2.fromOffset(70, 58), UDim2.fromOffset(758, 0), 11, Theme.Muted, Enum.TextXAlignment.Center)
+UI.VersionLabel = textLabel(TopBar, "v" .. UI.Version, UDim2.fromOffset(70, 58), UDim2.fromOffset(703, 0), 11, Theme.Muted, Enum.TextXAlignment.Center)
 UI.VersionLabel.Name = "VersionLabel"
 UI.VersionLabel.FontFace = UI.Fonts.Description
 
@@ -1041,7 +1016,7 @@ UI.GlobalSearchClip = Instance.new("Frame")
 UI.GlobalSearchClip.Name = "GlobalSearchClip"
 UI.GlobalSearchClip.BackgroundTransparency = 1
 UI.GlobalSearchClip.ClipsDescendants = true
-UI.GlobalSearchClip.Position = UDim2.fromOffset(758, 14)
+UI.GlobalSearchClip.Position = UDim2.fromOffset(703, 14)
 UI.GlobalSearchClip.Size = UDim2.fromOffset(0, 30)
 UI.GlobalSearchClip.Visible = false
 UI.GlobalSearchClip.ZIndex = 5
@@ -1079,9 +1054,9 @@ CategoryScroller.BorderSizePixel = 0
 CategoryScroller.ScrollBarThickness = 0
 CategoryScroller.ScrollBarImageColor3 = Theme.Accent
 CategoryScroller.ScrollingDirection = Enum.ScrollingDirection.X
-CategoryScroller.Size = UDim2.fromOffset(550, 58)
+CategoryScroller.Size = UDim2.fromOffset(495, 58)
 CategoryScroller.Position = UDim2.fromOffset(148, 0)
-CategoryScroller.CanvasSize = UDim2.fromOffset(543, 0)
+CategoryScroller.CanvasSize = UDim2.fromOffset(488, 0)
 CategoryScroller.Parent = TopBar
 
 local CategoryLayout = Instance.new("UIListLayout")
@@ -1292,13 +1267,6 @@ local function toggleTopBarCollapsed()
         UI.CloseGlobalSearch(true)
     end
     topBarCollapsed = not topBarCollapsed
-    TopBarGlowGradient.Transparency = topBarCollapsed and NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 1),
-        NumberSequenceKeypoint.new(0.38, 1),
-        NumberSequenceKeypoint.new(0.64, 0.08),
-        NumberSequenceKeypoint.new(0.82, 0.55),
-        NumberSequenceKeypoint.new(1, 1)
-    }) or NumberSequence.new(0)
     topBarTransition = topBarTransition + 1
     local transition = topBarTransition
     if not topBarCollapsed then
@@ -2793,17 +2761,10 @@ trackConnection(RunService.RenderStepped:Connect(function()
     keepGuiOnScreen(TopBar)
     if UI.GlobalSearchResults.Visible then
         local barPosition = getLocalPosition(TopBar)
-        UI.GlobalSearchResults.Position = UDim2.fromOffset(barPosition.X + 758, barPosition.Y + 64)
+        UI.GlobalSearchResults.Position = UDim2.fromOffset(barPosition.X + 703, barPosition.Y + 64)
     end
     if ContentWindow.Visible then
         keepGuiOnScreen(ContentWindow)
-    end
-    if topBarCollapsed then
-        TopBarGlowGradient.Rotation = (os.clock() * 24) % 360
-        TopBarGlow.ImageTransparency = 0.42
-    else
-        TopBarGlowGradient.Rotation = 0
-        TopBarGlow.ImageTransparency = 0.5 + math.sin(os.clock() * 1.35) * 0.09
     end
 end))
 
