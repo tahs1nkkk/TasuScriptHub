@@ -11,7 +11,8 @@ local Defaults = {
         ControlOff = Color3.fromRGB(217, 231, 244),
         Track = Color3.fromRGB(205, 220, 235),
         Text = Color3.fromRGB(22, 27, 34),
-        Muted = Color3.fromRGB(82, 94, 108)
+        Muted = Color3.fromRGB(82, 94, 108),
+        Section = Color3.fromRGB(214, 122, 38)
     },
     Aim = {
         Enabled = false,
@@ -441,19 +442,22 @@ local UI = {
             Accent = Color3.fromRGB(113, 180, 255), AccentSoft = Color3.fromRGB(218, 239, 255),
             Background = Color3.fromRGB(242, 248, 255), Surface = Color3.fromRGB(255, 255, 255),
             Surface2 = Color3.fromRGB(235, 245, 255), Hover = Color3.fromRGB(224, 241, 255), ControlOff = Color3.fromRGB(217, 231, 244),
-            Track = Color3.fromRGB(205, 220, 235), Text = Color3.fromRGB(22, 27, 34), Muted = Color3.fromRGB(82, 94, 108)
+            Track = Color3.fromRGB(205, 220, 235), Text = Color3.fromRGB(22, 27, 34), Muted = Color3.fromRGB(82, 94, 108),
+            Section = Color3.fromRGB(214, 122, 38)
         },
         Midnight = {
             Accent = Color3.fromRGB(82, 174, 255), AccentSoft = Color3.fromRGB(28, 75, 122),
             Background = Color3.fromRGB(6, 12, 23), Surface = Color3.fromRGB(10, 22, 39),
             Surface2 = Color3.fromRGB(16, 36, 61), Hover = Color3.fromRGB(24, 54, 88), ControlOff = Color3.fromRGB(42, 78, 113),
-            Track = Color3.fromRGB(34, 68, 103), Text = Color3.fromRGB(255, 255, 255), Muted = Color3.fromRGB(190, 218, 246)
+            Track = Color3.fromRGB(34, 68, 103), Text = Color3.fromRGB(255, 255, 255), Muted = Color3.fromRGB(190, 218, 246),
+            Section = Color3.fromRGB(91, 224, 207)
         },
         Amethyst = {
             Accent = Color3.fromRGB(178, 126, 255), AccentSoft = Color3.fromRGB(235, 220, 255),
             Background = Color3.fromRGB(247, 242, 255), Surface = Color3.fromRGB(255, 255, 255),
             Surface2 = Color3.fromRGB(242, 232, 255), Hover = Color3.fromRGB(235, 219, 255), ControlOff = Color3.fromRGB(226, 211, 243),
-            Track = Color3.fromRGB(217, 199, 238), Text = Color3.fromRGB(39, 27, 55), Muted = Color3.fromRGB(102, 82, 125)
+            Track = Color3.fromRGB(217, 199, 238), Text = Color3.fromRGB(39, 27, 55), Muted = Color3.fromRGB(102, 82, 125),
+            Section = Color3.fromRGB(202, 75, 153)
         }
     }
 }
@@ -981,38 +985,28 @@ round(TopBar, 14)
 gradient(TopBar, "Surface", "Surface2", 75)
 
 do
-    UI.CategoryGlow = Instance.new("Frame")
+    UI.CategoryGlow = Instance.new("ImageLabel")
     UI.CategoryGlow.Name = "CategoryGlow"
     UI.CategoryGlow.BackgroundTransparency = 1
     UI.CategoryGlow.BorderSizePixel = 0
-    UI.CategoryGlow.Position = TopBar.Position
-    UI.CategoryGlow.Size = TopBar.Size
+    UI.CategoryGlow.Image = "rbxassetid://1316045217"
+    UI.CategoryGlow.ImageColor3 = Theme.Accent
+    UI.CategoryGlow.ImageTransparency = 0.38
+    UI.CategoryGlow.ScaleType = Enum.ScaleType.Slice
+    UI.CategoryGlow.SliceCenter = Rect.new(10, 10, 118, 118)
     UI.CategoryGlow.Visible = false
     UI.CategoryGlow.ZIndex = 4
     UI.CategoryGlow.Parent = InterfaceRoot
-    round(UI.CategoryGlow, 14)
-    UI.CategoryGlowOuter = stroke(UI.CategoryGlow, nil, 7, 0.8)
-    UI.CategoryGlowInner = stroke(UI.CategoryGlow, nil, 3, 0.42)
-    UI.CategoryGlowOuter.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    UI.CategoryGlowInner.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    UI.CategoryGlowOuter.LineJoinMode = Enum.LineJoinMode.Round
-    UI.CategoryGlowInner.LineJoinMode = Enum.LineJoinMode.Round
+    UI.BindTheme(UI.CategoryGlow, "ImageColor3", "Accent")
     local function syncCategoryGlow()
-        UI.CategoryGlow.Position = TopBar.Position
-        UI.CategoryGlow.Size = TopBar.Size
+        UI.CategoryGlow.Position = TopBar.Position + UDim2.fromOffset(-14, -14)
+        UI.CategoryGlow.Size = TopBar.Size + UDim2.fromOffset(28, 28)
         UI.CategoryGlow.Visible = TopBar.Visible
     end
     syncCategoryGlow()
     trackConnection(TopBar:GetPropertyChangedSignal("Position"):Connect(syncCategoryGlow))
     trackConnection(TopBar:GetPropertyChangedSignal("Size"):Connect(syncCategoryGlow))
     trackConnection(TopBar:GetPropertyChangedSignal("Visible"):Connect(syncCategoryGlow))
-    trackFeature("InterfaceGlow", RunService.RenderStepped:Connect(function()
-        local pulse = (math.sin(os.clock() * 1.35) + 1) * 0.5
-        UI.CategoryGlowOuter.Transparency = 0.86 - pulse * 0.12
-        UI.CategoryGlowOuter.Thickness = 6 + pulse * 3
-        UI.CategoryGlowInner.Transparency = 0.5 - pulse * 0.16
-        UI.CategoryGlowInner.Thickness = 2.4 + pulse * 1.2
-    end))
 end
 
 local DragGrip = Instance.new("Frame")
@@ -2767,7 +2761,12 @@ UI.RebuildGlobalSearch = function(rawQuery)
             resultButton.FontFace = UI.Fonts.HeadingHeavy
             resultButton.TextColor3 = Theme.Accent
             UI.BindTheme(resultButton, "TextColor3", "Accent")
-        elseif match.Type == "Section" or match.Type == "CatalogGame" then
+        elseif match.Type == "Section" then
+            resultButton.TextSize = 19
+            resultButton.FontFace = UI.Fonts.HeadingHeavy
+            resultButton.TextColor3 = Theme.Section
+            UI.BindTheme(resultButton, "TextColor3", "Section")
+        elseif match.Type == "CatalogGame" then
             resultButton.TextSize = 18
             resultButton.FontFace = UI.Fonts.HeadingHeavy
             resultButton.TextColor3 = Theme.Muted
@@ -3044,7 +3043,7 @@ local espRecords = {}
 
 local function newLine(parent, color)
     local line = Instance.new("Frame")
-    line.AnchorPoint = Vector2.new(0, 0.5)
+    line.AnchorPoint = Vector2.new(0.5, 0.5)
     line.BorderSizePixel = 0
     line.BackgroundColor3 = color or Theme.Accent
     line.Size = UDim2.fromOffset(0, State.Visuals.Thickness)
@@ -3057,34 +3056,44 @@ end
 local function setLine(line, from, to, thickness)
     local difference = to - from
     local length = difference.Magnitude
-    line.Position = UDim2.fromOffset(from.X, from.Y)
+    local center = (from + to) * 0.5
+    line.Position = UDim2.fromOffset(center.X, center.Y)
     line.Size = UDim2.fromOffset(length, thickness or 1)
     line.Rotation = math.deg(math.atan2(difference.Y, difference.X))
     line.Visible = true
 end
 
-local function getBoundingScreenBox(character, camera)
-    local cframe, size = character:GetBoundingBox()
+local function getBoundingScreenBox(character, camera, viewportOverride, partOverride)
     local minimumX, minimumY = math.huge, math.huge
     local maximumX, maximumY = -math.huge, -math.huge
     local visibleCorners = 0
-    for _, x in ipairs({-0.5, 0.5}) do
-        for _, y in ipairs({-0.5, 0.5}) do
-            for _, z in ipairs({-0.5, 0.5}) do
-                local point = cframe:PointToWorldSpace(Vector3.new(size.X * x, size.Y * y, size.Z * z))
-                local screen = camera:WorldToViewportPoint(point)
-                if screen.Z > 0 then
-                    visibleCorners = visibleCorners + 1
-                    minimumX = math.min(minimumX, screen.X)
-                    minimumY = math.min(minimumY, screen.Y)
-                    maximumX = math.max(maximumX, screen.X)
-                    maximumY = math.max(maximumY, screen.Y)
+    for _, part in ipairs(partOverride or character:GetDescendants()) do
+        if part:IsA("BasePart") and part:IsDescendantOf(character) and not part:FindFirstAncestorOfClass("Accessory") and not part:FindFirstAncestorOfClass("Tool") then
+            local half = part.Size * 0.5
+            for x = -1, 1, 2 do
+                for y = -1, 1, 2 do
+                    for z = -1, 1, 2 do
+                        local point = part.CFrame:PointToWorldSpace(Vector3.new(half.X * x, half.Y * y, half.Z * z))
+                        local screen
+                        if camera == Workspace.CurrentCamera then
+                            screen = camera:WorldToScreenPoint(point)
+                        else
+                            screen = camera:WorldToViewportPoint(point)
+                        end
+                        if screen.Z > 0 then
+                            visibleCorners = visibleCorners + 1
+                            minimumX = math.min(minimumX, screen.X)
+                            minimumY = math.min(minimumY, screen.Y)
+                            maximumX = math.max(maximumX, screen.X)
+                            maximumY = math.max(maximumY, screen.Y)
+                        end
+                    end
                 end
             end
         end
     end
     if visibleCorners == 0 then return nil end
-    local viewport = camera.ViewportSize
+    local viewport = viewportOverride or (camera == Workspace.CurrentCamera and getCanvasSize() or camera.ViewportSize)
     if maximumX < 0 or minimumX > viewport.X or maximumY < 0 or minimumY > viewport.Y then return nil end
     local left = math.clamp(minimumX, 0, viewport.X)
     local right = math.clamp(maximumX, 0, viewport.X)
@@ -3156,6 +3165,7 @@ local function createESP(player)
     record.Arrow.ZIndex = 4
     record.Label.AnchorPoint = Vector2.new(0.5, 1)
     record.Label.RichText = true
+    record.Label.TextYAlignment = Enum.TextYAlignment.Bottom
     record.Label.Visible = false
     record.Label.ZIndex = 3
     record.Highlight.FillColor = Theme.Accent
@@ -3221,8 +3231,15 @@ local function updateSkeleton(record, character, camera, color)
     local used = 0
     for _, pair in ipairs(points) do
         if pair[1] and pair[2] then
-            local a, visibleA = camera:WorldToViewportPoint(pair[1])
-            local b, visibleB = camera:WorldToViewportPoint(pair[2])
+            local a, visibleA
+            local b, visibleB
+            if camera == Workspace.CurrentCamera then
+                a, visibleA = camera:WorldToScreenPoint(pair[1])
+                b, visibleB = camera:WorldToScreenPoint(pair[2])
+            else
+                a, visibleA = camera:WorldToViewportPoint(pair[1])
+                b, visibleB = camera:WorldToViewportPoint(pair[2])
+            end
             if visibleA and visibleB and a.Z > 0 and b.Z > 0 then
                 used = used + 1
                 local line = lines[used]
@@ -3251,11 +3268,7 @@ local function hideRecord(record)
 end
 
 
-local espRenderAccumulator = 0
-RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, function(deltaTime)
-    espRenderAccumulator = espRenderAccumulator + deltaTime
-    if espRenderAccumulator < 1 / 30 then return end
-    espRenderAccumulator = 0
+RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Camera.Value + 50, function()
     local camera = Workspace.CurrentCamera
     if not camera then
         return
@@ -3277,12 +3290,21 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, functi
                 if not allowed or distance > State.Visuals.MaxDistance then
                     hideRecord(record)
                 else
-                    local left, right, top, bottom = getBoundingScreenBox(character, camera)
+                    if record.BoundsCharacter ~= character then
+                        record.BoundsCharacter = character
+                        record.BoundsParts = {}
+                        for _, part in ipairs(character:GetDescendants()) do
+                            if part:IsA("BasePart") and not part:FindFirstAncestorOfClass("Accessory") and not part:FindFirstAncestorOfClass("Tool") then
+                                table.insert(record.BoundsParts, part)
+                            end
+                        end
+                    end
+                    local left, right, top, bottom = getBoundingScreenBox(character, camera, nil, record.BoundsParts)
                     if not left then
                         hideRecord(record)
                         if State.Visuals.Offscreen then
-                            local rootScreen = camera:WorldToViewportPoint(root.Position)
-                            local center = camera.ViewportSize * 0.5
+                            local rootScreen = camera:WorldToScreenPoint(root.Position)
+                            local center = getCanvasSize() * 0.5
                             local direction = Vector2.new(rootScreen.X, rootScreen.Y) - center
                             if rootScreen.Z < 0 then direction = -direction end
                             if direction.Magnitude > 0 then
@@ -3309,16 +3331,8 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, functi
                         if State.Visuals.Boxes then
                             setLine(record.BoxTop, Vector2.new(left, top), Vector2.new(right, top), State.Visuals.Thickness)
                             setLine(record.BoxBottom, Vector2.new(left, bottom), Vector2.new(right, bottom), State.Visuals.Thickness)
-                            record.BoxLeft.AnchorPoint = Vector2.zero
-                            record.BoxLeft.Position = UDim2.fromOffset(left, top)
-                            record.BoxLeft.Size = UDim2.fromOffset(State.Visuals.Thickness, height)
-                            record.BoxLeft.Rotation = 0
-                            record.BoxLeft.Visible = true
-                            record.BoxRight.AnchorPoint = Vector2.zero
-                            record.BoxRight.Position = UDim2.fromOffset(right - State.Visuals.Thickness, top)
-                            record.BoxRight.Size = UDim2.fromOffset(State.Visuals.Thickness, height)
-                            record.BoxRight.Rotation = 0
-                            record.BoxRight.Visible = true
+                            setLine(record.BoxLeft, Vector2.new(left, top), Vector2.new(left, bottom), State.Visuals.Thickness)
+                            setLine(record.BoxRight, Vector2.new(right, top), Vector2.new(right, bottom), State.Visuals.Thickness)
                         else
                             record.BoxTop.Visible = false
                             record.BoxBottom.Visible = false
@@ -3349,14 +3363,15 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, functi
                         end
                         local nameText = State.Visuals.Names and player.DisplayName or ""
                         local distanceColor = State.World.RGB.ESP.Enabled and color or Color3.fromRGB(255, 196, 74)
-                        local distanceText = State.Visuals.Distance and string.format("  <font color=\"%s\">[%.0f]</font>", colorToHex(distanceColor), distance) or ""
-                        record.Label.Text = nameText .. distanceText
+                        local distanceText = State.Visuals.Distance and string.format("<font color=\"%s\">[%.0f studs]</font>", colorToHex(distanceColor), distance) or ""
+                        record.Label.Text = nameText ~= "" and distanceText ~= "" and nameText .. "\n" .. distanceText or nameText .. distanceText
                         record.Label.TextColor3 = color
-                        record.Label.Position = UDim2.fromOffset(centerX, top - 3)
+                        record.Label.Size = UDim2.fromOffset(240, 38)
+                        record.Label.Position = UDim2.fromOffset(centerX, top - 4)
                         record.Label.Visible = State.Visuals.Names or State.Visuals.Distance
                         local head = character:FindFirstChild("Head")
                         if State.Visuals.HeadDot and head then
-                            local headScreen, headVisible = camera:WorldToViewportPoint(head.Position)
+                            local headScreen, headVisible = camera:WorldToScreenPoint(head.Position)
                             record.HeadDot.Position = UDim2.fromOffset(headScreen.X, headScreen.Y)
                             record.HeadDot.BackgroundColor3 = color
                             record.HeadDot.Visible = headVisible and headScreen.Z > 0
@@ -3369,8 +3384,13 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, functi
                             record.SkeletonLayer.Visible = false
                         end
                         if State.Visuals.Tracers then
-                            local cursorPosition = UserInputService:GetMouseLocation()
-                            setLine(record.Tracer, Vector2.new(cursorPosition.X, cursorPosition.Y), Vector2.new(centerX, bottom), State.Visuals.Thickness)
+                            local rootScreen = camera:WorldToScreenPoint(root.Position)
+                            local canvas = getCanvasSize()
+                            if rootScreen.Z > 0 then
+                                setLine(record.Tracer, Vector2.new(canvas.X * 0.5, canvas.Y - 3), Vector2.new(rootScreen.X, rootScreen.Y), State.Visuals.Thickness)
+                            else
+                                record.Tracer.Visible = false
+                            end
                         else
                             record.Tracer.Visible = false
                         end
@@ -4289,7 +4309,7 @@ local StatusText = addNote(StatusCard, "")
 do
     UI.UpdateLog = {
         "Hover search with indexed results",
-        "Stable R6/R15 skeleton and viewport-correct tracers",
+        "Frame-synchronous body bounds, names and bottom-center tracers",
         "Glow, Neon Glow, scoped RGB, Manual and reversible Flat Texture modes",
         "Freecam player teleport and conditional movement controls",
         "Overlay dropdowns, catalog-aware search and rounded synchronized shadows",
@@ -4549,7 +4569,7 @@ local function createPreviewModel()
     previewModel = clone
     previewSourceCharacter = character
     local boundsCFrame, size = clone:GetBoundingBox()
-    local distance = math.max(size.Y * 1.2, size.X * 2.1, 7)
+    local distance = math.max(size.Y * 1.02, size.X * 1.8, 6)
     local target = boundsCFrame.Position
     PreviewCamera.CFrame = CFrame.lookAt(target + Vector3.new(0, size.Y * 0.03, distance), target)
     PreviewHighlight = Instance.new("Highlight")
@@ -4580,8 +4600,8 @@ local function setPreviewOpen(value)
     if previewOpen then
         PreviewPanel:SetAttribute("ShadowSuppressed", false)
         PreviewTitle.Visible = true
-        createPreviewModel()
         PreviewViewport.Visible = true
+        createPreviewModel()
         animate(PreviewPanel, {BackgroundTransparency = 0.06}, 0.3, Enum.EasingStyle.Quint)
     else
         PreviewPanel:SetAttribute("ShadowSuppressed", true)
@@ -4639,26 +4659,22 @@ local function hidePreviewOverlays()
     PreviewSkeletonLayer.Visible = false
 end
 
-local previewClock = 0
-trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
+trackConnection(RunService.RenderStepped:Connect(function()
     if not previewOpen or not previewModel or not PreviewPanel.Visible then return end
-    previewClock = previewClock + deltaTime
-    if previewClock < 1 / 30 then return end
-    previewClock = 0
     if LocalPlayer.Character ~= previewSourceCharacter then
         createPreviewModel()
         if not previewModel then return end
     end
     local color = State.World.RGB.ESP.Enabled and getRGBColor("ESP", 0)
         or (State.Visuals.TeamColors and ((LocalPlayer.Team and LocalPlayer.Team.TeamColor.Color) or LocalPlayer.TeamColor.Color) or Theme.Accent)
-    local visualsEnabled = State.Visuals.Enabled
+    local visualsEnabled = true
     applyPreviewChams(visualsEnabled and State.Visuals.Chams, color)
     if PreviewHighlight then
         PreviewHighlight.FillColor = color
         PreviewHighlight.OutlineColor = color
         PreviewHighlight.Enabled = visualsEnabled and State.Visuals.Chams
     end
-    local left, right, top, bottom = getBoundingScreenBox(previewModel, PreviewCamera)
+    local left, right, top, bottom = getBoundingScreenBox(previewModel, PreviewCamera, PreviewViewport.AbsoluteSize)
     if not left then
         hidePreviewOverlays()
         return
