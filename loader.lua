@@ -11,11 +11,7 @@ local Defaults = {
         ControlOff = Color3.fromRGB(217, 231, 244),
         Track = Color3.fromRGB(205, 220, 235),
         Text = Color3.fromRGB(22, 27, 34),
-        Muted = Color3.fromRGB(82, 94, 108),
-        RGBEnabled = false,
-        RGBSpeed = 0.18,
-        RGBSaturation = 0.9,
-        RGBBrightness = 1
+        Muted = Color3.fromRGB(82, 94, 108)
     },
     Aim = {
         Enabled = false,
@@ -87,6 +83,9 @@ local Defaults = {
         FreecamSpeed = 1.5,
         LightingMode = "Default",
         GlowIntensity = 1.2,
+        NeonIntensity = 2.2,
+        NeonSize = 48,
+        NeonThreshold = 0.42,
         ManualRed = 255,
         ManualGreen = 255,
         ManualBlue = 255,
@@ -94,9 +93,11 @@ local Defaults = {
         ManualContrast = 0,
         ManualSaturation = 0,
         FlatTextures = false,
-        FlatRed = 145,
-        FlatGreen = 150,
-        FlatBlue = 160
+        RGB = {
+            ESP = {Enabled = false, Speed = 0.18, Saturation = 0.9, Brightness = 1},
+            Aim = {Enabled = false, Speed = 0.18, Saturation = 0.9, Brightness = 1},
+            World = {Enabled = false, Speed = 0.18, Saturation = 0.9, Brightness = 1}
+        }
     },
     Players = {
         Sort = "Nearest"
@@ -241,13 +242,15 @@ local function areTeammates(first, second)
     return firstToken ~= nil and firstToken == secondToken
 end
 
-local function getRGBColor(offset)
-    return Color3.fromHSV(((os.clock() + (offset or 0)) * State.Interface.RGBSpeed) % 1, State.Interface.RGBSaturation, State.Interface.RGBBrightness)
+local function getRGBColor(scope, offset)
+    local rgb = type(State.World.RGB) == "table" and State.World.RGB or Defaults.World.RGB
+    local settings = type(rgb[scope]) == "table" and rgb[scope] or Defaults.World.RGB[scope]
+    return Color3.fromHSV(((os.clock() + (offset or 0)) * settings.Speed) % 1, settings.Saturation, settings.Brightness)
 end
 
 local function getPlayerVisualColor(player)
-    if State.Interface.RGBEnabled then
-        return getRGBColor((player.UserId % 17) * 0.035)
+    if State.World.RGB.ESP.Enabled then
+        return getRGBColor("ESP", (player.UserId % 17) * 0.035)
     end
     if State.Visuals.TeamColors then
         if player.Team then return player.Team.TeamColor.Color end
@@ -386,6 +389,7 @@ local UI = {
     RefreshOrbitPlayers = function() end,
     RefreshVisualPreview = function() end,
     CloseGlobalSearch = function(_force) end,
+    CloseActiveDropdown = function() end,
     ScheduleSearchHoverClose = function() end,
     OpenConfigSaveModal = function() end,
     AddStaticCard = function(_page, _title) return game end,
@@ -581,6 +585,15 @@ local function addShadow(object, transparency)
     shadow.ScaleType = Enum.ScaleType.Slice
     shadow.SliceCenter = Rect.new(10, 10, 118, 118)
     shadow.ZIndex = math.max(0, object.ZIndex - 1)
+    local sourceCorner = object:FindFirstChildOfClass("UICorner")
+    local shadowCorner = Instance.new("UICorner")
+    shadowCorner.CornerRadius = sourceCorner and sourceCorner.CornerRadius or UDim.new(0, 0)
+    shadowCorner.Parent = shadow
+    if sourceCorner then
+        trackConnection(sourceCorner:GetPropertyChangedSignal("CornerRadius"):Connect(function()
+            shadowCorner.CornerRadius = sourceCorner.CornerRadius
+        end))
+    end
     if object.ClipsDescendants and object.Parent then
         shadow.AnchorPoint = object.AnchorPoint
         local function sync()
@@ -1414,6 +1427,7 @@ UI.AddAccordion = function(page, title, defaultOpen)
     local open = false
     local function setOpen(value)
         open = value == true
+        if not open then UI.CloseActiveDropdown() end
         header.Text = title .. (open and "   ▲" or "   ▼")
         if open then
             body.Visible = true
@@ -1708,13 +1722,8 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
     holder.BackgroundTransparency = 1
     local forceFullWidth = card:GetAttribute("ForceFullWidth") == true
     holder.Size = forceFullWidth and UDim2.new(1, 0, 0, 38) or UDim2.new(0.5, -4, 0, 38)
-    holder.AutomaticSize = Enum.AutomaticSize.Y
     holder.Parent = forceFullWidth and card or compactParent(card, 38)
     holder:SetAttribute("SearchText", string.lower(text .. " " .. table.concat(values, " ")))
-    local holderLayout = Instance.new("UIListLayout")
-    holderLayout.Padding = UDim.new(0, 5)
-    holderLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    holderLayout.Parent = holder
     local selector = button(holder, "", UDim2.new(1, 0, 0, 38))
     selector.TextSize = 17
     selector.LayoutOrder = 0
@@ -1730,8 +1739,8 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
     options.Size = UDim2.new(1, 0, 0, 0)
     options.GroupTransparency = 1
     options.Visible = false
-    options.LayoutOrder = 1
-    options.Parent = holder
+    options.ZIndex = 80
+    options.Parent = InterfaceRoot
     round(options, 9)
     UI.BindTheme(options, "BackgroundColor3", "Surface2")
     local optionsLayout = Instance.new("UIListLayout")
@@ -1746,8 +1755,20 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
     optionsPadding.Parent = options
     local open = false
     local controller
+    local closeDropdown
     local function optionsHeight()
         return #values > 0 and (#values * 34 + math.max(0, #values - 1) * 4 + 10) or 0
+    end
+    local function placeOptions(height)
+        local rootPosition = InterfaceRoot.AbsolutePosition
+        local selectorPosition = selector.AbsolutePosition - rootPosition
+        local selectorSize = selector.AbsoluteSize
+        local canvas = getCanvasSize()
+        local targetHeight = height or optionsHeight()
+        local below = selectorPosition.Y + selectorSize.Y + 5
+        local y = below + targetHeight <= canvas.Y - 8 and below or math.max(8, selectorPosition.Y - targetHeight - 5)
+        options.Position = UDim2.fromOffset(selectorPosition.X, y)
+        return selectorSize.X, targetHeight
     end
     local function selectedValues()
         local current = getter()
@@ -1769,19 +1790,27 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
         end
     end
     local function setOpen(value)
-        open = value
-        if open then
+        if value then
+            if UI.CloseActiveDropdown ~= closeDropdown then UI.CloseActiveDropdown() end
+            open = true
+            UI.CloseActiveDropdown = closeDropdown
+            local width, height = placeOptions()
             options.Visible = true
             options.GroupTransparency = 1
-            options.Size = UDim2.new(1, 0, 0, 0)
-            animate(options, {Size = UDim2.new(1, 0, 0, optionsHeight()), GroupTransparency = 0}, 0.36, Enum.EasingStyle.Quint)
+            options.Size = UDim2.fromOffset(width, 0)
+            animate(options, {Size = UDim2.fromOffset(width, height), GroupTransparency = 0}, 0.36, Enum.EasingStyle.Quint)
         else
-            animate(options, {Size = UDim2.new(1, 0, 0, 0), GroupTransparency = 1}, 0.3, Enum.EasingStyle.Quint)
+            open = false
+            local width = math.max(1, options.AbsoluteSize.X, selector.AbsoluteSize.X)
+            animate(options, {Size = UDim2.fromOffset(width, 0), GroupTransparency = 1}, 0.3, Enum.EasingStyle.Quint)
             task.delay(0.3, function()
                 if not open and options.Parent then options.Visible = false end
             end)
         end
         render()
+    end
+    closeDropdown = function()
+        if open then setOpen(false) end
     end
     local function rebuildOptions()
         for _, child in ipairs(options:GetChildren()) do
@@ -1791,6 +1820,7 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
         for index, value in ipairs(values) do
             local optionButton = button(options, tostring(value), UDim2.new(1, 0, 0, 34))
             optionButton.TextSize = 16
+            optionButton.ZIndex = 81
             optionButton.LayoutOrder = index
             optionButton:SetAttribute("Value", value)
             optionButton.Activated:Connect(function()
@@ -1816,6 +1846,15 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
     selector.Activated:Connect(function()
         setOpen(not open)
     end)
+    trackConnection(selector:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+        if open then placeOptions() end
+    end))
+    trackConnection(selector:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        if open then
+            local width, height = placeOptions()
+            options.Size = UDim2.fromOffset(width, height)
+        end
+    end))
     local flag = UI.ControlFlag(card, text)
     controller = UI.Register(flag, {
         Holder = holder,
@@ -1835,7 +1874,10 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
         SetOptions = function(_, nextOptions)
             values = type(nextOptions) == "table" and nextOptions or {}
             rebuildOptions()
-            if open then options.Size = UDim2.new(1, 0, 0, optionsHeight()) end
+            if open then
+                local width, height = placeOptions()
+                options.Size = UDim2.fromOffset(width, height)
+            end
             render()
         end
     })
@@ -1850,13 +1892,8 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
     holder.Name = string.gsub(text, "[^%w]", "") .. "PlayerDropdown"
     holder.BackgroundTransparency = 1
     holder.Size = UDim2.new(1, 0, 0, 42)
-    holder.AutomaticSize = Enum.AutomaticSize.Y
     holder.Parent = card
     holder:SetAttribute("SearchText", string.lower(text .. " player avatar target"))
-    local holderLayout = Instance.new("UIListLayout")
-    holderLayout.Padding = UDim.new(0, 5)
-    holderLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    holderLayout.Parent = holder
 
     local selector = button(holder, "", UDim2.new(1, 0, 0, 42))
     selector.LayoutOrder = 0
@@ -1880,7 +1917,8 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
     options.LayoutOrder = 1
     options.Size = UDim2.new(1, 0, 0, 0)
     options.Visible = false
-    options.Parent = holder
+    options.ZIndex = 80
+    options.Parent = InterfaceRoot
     round(options, 9)
     UI.BindTheme(options, "BackgroundColor3", "Surface2")
     local list = Instance.new("ScrollingFrame")
@@ -1907,9 +1945,21 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
     local open = false
     local playerCount = 0
     local controller
+    local closeDropdown
     local function targetHeight()
         local visible = math.min(5, playerCount)
         return visible > 0 and visible * 50 + math.max(0, visible - 1) * 5 + 12 or 0
+    end
+    local function placeOptions(height)
+        local rootPosition = InterfaceRoot.AbsolutePosition
+        local selectorPosition = selector.AbsolutePosition - rootPosition
+        local selectorSize = selector.AbsoluteSize
+        local canvas = getCanvasSize()
+        local target = height or targetHeight()
+        local below = selectorPosition.Y + selectorSize.Y + 5
+        local y = below + target <= canvas.Y - 8 and below or math.max(8, selectorPosition.Y - target - 5)
+        options.Position = UDim2.fromOffset(selectorPosition.X, y)
+        return selectorSize.X, target
     end
     local function render()
         local player = getter()
@@ -1924,18 +1974,27 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
         end
     end
     local function setOpen(value)
-        open = value == true and playerCount > 0
-        if open then
+        local shouldOpen = value == true and playerCount > 0
+        if shouldOpen then
+            if UI.CloseActiveDropdown ~= closeDropdown then UI.CloseActiveDropdown() end
+            open = true
+            UI.CloseActiveDropdown = closeDropdown
+            local width, height = placeOptions()
             options.Visible = true
             options.GroupTransparency = 1
-            options.Size = UDim2.new(1, 0, 0, 0)
-            animate(options, {Size = UDim2.new(1, 0, 0, targetHeight()), GroupTransparency = 0}, 0.36, Enum.EasingStyle.Quint)
+            options.Size = UDim2.fromOffset(width, 0)
+            animate(options, {Size = UDim2.fromOffset(width, height), GroupTransparency = 0}, 0.36, Enum.EasingStyle.Quint)
         else
-            animate(options, {Size = UDim2.new(1, 0, 0, 0), GroupTransparency = 1}, 0.3, Enum.EasingStyle.Quint)
+            open = false
+            local width = math.max(1, options.AbsoluteSize.X, selector.AbsoluteSize.X)
+            animate(options, {Size = UDim2.fromOffset(width, 0), GroupTransparency = 1}, 0.3, Enum.EasingStyle.Quint)
             task.delay(0.3, function()
                 if not open and options.Parent then options.Visible = false end
             end)
         end
+    end
+    closeDropdown = function()
+        if open then setOpen(false) end
     end
     local function rebuild()
         for _, child in ipairs(list:GetChildren()) do
@@ -1953,6 +2012,7 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
             local row = button(list, "", UDim2.new(1, -4, 0, 50))
             row.Name = "PlayerOption"
             row.LayoutOrder = index
+            row.ZIndex = 81
             local avatar = Instance.new("ImageLabel")
             avatar.BackgroundColor3 = Theme.AccentSoft
             avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=150&h=150"
@@ -1972,10 +2032,22 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
                 setOpen(false)
             end)
         end
-        if open then options.Size = UDim2.new(1, 0, 0, targetHeight()) end
+        if open then
+            local width, height = placeOptions()
+            options.Size = UDim2.fromOffset(width, height)
+        end
         render()
     end
     selector.Activated:Connect(function() setOpen(not open) end)
+    trackConnection(selector:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+        if open then placeOptions() end
+    end))
+    trackConnection(selector:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        if open then
+            local width, height = placeOptions()
+            options.Size = UDim2.fromOffset(width, height)
+        end
+    end))
     controller = UI.Register(UI.ControlFlag(card, text), {
         Holder = holder,
         Instance = selector,
@@ -2512,6 +2584,7 @@ end
 
 local function closeContentWindow()
     if not ContentWindow.Visible then return end
+    UI.CloseActiveDropdown()
     windowTransition = windowTransition + 1
     local transition = windowTransition
     UI.ActiveCategory = nil
@@ -2537,6 +2610,7 @@ local function showCategory(name)
     if not UI.Ready or not pages[name] or name == "SearchResults" then
         return
     end
+    UI.CloseActiveDropdown()
     currentCategory = name
     UI.ActiveCategory = name
     UI.SearchMode = false
@@ -2594,6 +2668,21 @@ UI.RebuildGlobalSearch = function(rawQuery)
             table.insert(matches, {Flag = category .. "/" .. cardName, Category = category, CardName = cardName, Instance = body, Type = "Section", Priority = 2})
         end
     end
+    for catalogIndex, entry in ipairs(State.Catalog) do
+        local catalogName = tostring(entry.Name or "Untitled")
+        local catalogPlace = tostring(entry.PlaceId or "")
+        local catalogId = tostring(entry.BuiltInId or "")
+        if string.find(string.lower(catalogName .. " " .. catalogPlace .. " " .. catalogId .. " catalog game script"), query, 1, true) then
+            table.insert(matches, {
+                Flag = "Catalog/" .. catalogName,
+                Category = "Catalog",
+                CatalogIndex = catalogIndex,
+                CatalogName = catalogName,
+                Type = "CatalogGame",
+                Priority = 2
+            })
+        end
+    end
     for flag, control in pairs(UI.Controls) do
         local searchable = string.lower(flag)
         local instance = control.Instance or control.Holder or control.Row
@@ -2623,13 +2712,27 @@ UI.RebuildGlobalSearch = function(rawQuery)
             displayText = "CATEGORY\n" .. (categoryMeta[category] and categoryMeta[category].Hint or category)
         elseif match.Type == "Section" then
             displayText = "SECTION\n" .. category .. "  ›  " .. cardName
+        elseif match.Type == "CatalogGame" then
+            displayText = "CATALOG GAME\n" .. tostring(match.CatalogName or optionName)
         else
             displayText = optionName .. "\n" .. category .. "  ›  " .. cardName
         end
         local resultButton = button(UI.GlobalSearchList, displayText, UDim2.new(1, -4, 0, 56))
         resultButton.Name = "IndexedResult"
         resultButton.LayoutOrder = index
-        resultButton.TextSize = 17
+        if match.Type == "Category" then
+            resultButton.TextSize = 20
+            resultButton.FontFace = UI.Fonts.HeadingHeavy
+            resultButton.TextColor3 = Theme.Accent
+            UI.BindTheme(resultButton, "TextColor3", "Accent")
+        elseif match.Type == "Section" or match.Type == "CatalogGame" then
+            resultButton.TextSize = 18
+            resultButton.FontFace = UI.Fonts.HeadingHeavy
+            resultButton.TextColor3 = Theme.Muted
+            UI.BindTheme(resultButton, "TextColor3", "Muted")
+        else
+            resultButton.TextSize = 16
+        end
         resultButton.TextWrapped = true
         resultButton.TextXAlignment = Enum.TextXAlignment.Left
         resultButton.ZIndex = 47
@@ -2640,7 +2743,7 @@ UI.RebuildGlobalSearch = function(rawQuery)
         resultButton.Activated:Connect(function()
             UI.GlobalSearchResults.Visible = false
             showCategory(category)
-            if match.Type == "Category" then return end
+            if match.Type == "Category" or match.Type == "CatalogGame" then return end
             if match.Type == "Section" then
                 local opener = UI.AccordionOpeners[match.Instance]
                 if opener then opener(true) end
@@ -2818,7 +2921,7 @@ local function chooseTarget()
                     local screen, onScreen = camera:WorldToViewportPoint(targetPart.Position)
                     if onScreen and screen.Z > 0 and (rage or worldDistance <= State.Aim.MaxDistance) then
                         local score = (Vector2.new(screen.X, screen.Y) - mousePosition).Magnitude
-                        if score < bestScore and (rage or isVisibleTarget(character, targetPart)) then
+                        if score < bestScore and isVisibleTarget(character, targetPart) then
                             bestScore = score
                             best = {Player = player, Character = character, Humanoid = humanoid, Root = root, Part = targetPart, LastPosition = root.Position}
                         end
@@ -2834,8 +2937,8 @@ local currentTarget
 local mousemoverel = resolveGlobal("mousemoverel")
 trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
     local mousePosition = getMousePosition()
-    FOVStroke.Color = State.Interface.RGBEnabled and getRGBColor(0) or Theme.Accent
-    local diameter = State.Aim.Rage and math.max(Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize.X or 1200, 1200) * 2 or State.Aim.FOV * 2
+    FOVStroke.Color = State.World.RGB.Aim.Enabled and getRGBColor("Aim", 0) or Theme.Accent
+    local diameter = State.Aim.FOV * 2
     FOVCircle.Size = UDim2.fromOffset(diameter, diameter)
     FOVCircle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
     FOVCircle.Visible = State.Aim.Enabled and State.Aim.ShowFOV
@@ -3198,7 +3301,7 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, functi
                             record.HealthBar.Visible = false
                         end
                         local nameText = State.Visuals.Names and player.DisplayName or ""
-                        local distanceColor = State.Interface.RGBEnabled and color or Color3.fromRGB(255, 196, 74)
+                        local distanceColor = State.World.RGB.ESP.Enabled and color or Color3.fromRGB(255, 196, 74)
                         local distanceText = State.Visuals.Distance and string.format("  <font color=\"%s\">[%.0f]</font>", colorToHex(distanceColor), distance) or ""
                         record.Label.Text = nameText .. distanceText
                         record.Label.TextColor3 = color
@@ -3717,20 +3820,14 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
     end
 end))
 
-local flatScanClock = 0
 trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
     local camera = Workspace.CurrentCamera
     if not camera then
         return
     end
     camera.FieldOfView = State.World.CameraFOV
-    if State.World.LightingMode == "RGB Vision" then
-        colorCorrection.TintColor = getRGBColor(0)
-    end
-    flatScanClock = flatScanClock + deltaTime
-    if State.World.FlatTextures and flatScanClock >= 0.75 then
-        flatScanClock = 0
-        applyFlatTextures()
+    if State.World.RGB.World.Enabled then
+        colorCorrection.TintColor = getRGBColor("World", 0)
     end
     if State.World.Freecam then
         if not freecamState then
@@ -3947,15 +4044,14 @@ local function rememberFlatProperties(object, properties)
 end
 
 local function flattenObject(object)
-    local flatColor = Color3.fromRGB(State.World.FlatRed, State.World.FlatGreen, State.World.FlatBlue)
+    if flatObjectDefaults[object] then return end
     if object:IsA("BasePart") then
-        local properties = {"Material", "MaterialVariant", "Color", "Reflectance"}
+        local properties = {"Material", "MaterialVariant", "Reflectance"}
         if object:IsA("MeshPart") then table.insert(properties, "TextureID") end
         rememberFlatProperties(object, properties)
         pcall(function()
             object.Material = Enum.Material.SmoothPlastic
             object.MaterialVariant = ""
-            object.Color = flatColor
             object.Reflectance = 0
             if object:IsA("MeshPart") then object.TextureID = "" end
         end)
@@ -4022,9 +4118,18 @@ local function applyWorld()
         Lighting.FogEnd = originalLighting.FogEnd
     end
     local lightingMode = State.World.LightingMode
-    colorCorrection.Enabled = lightingMode ~= "Default"
-    bloom.Enabled = lightingMode == "Glow" or lightingMode == "RGB Vision"
-    if lightingMode == "Glow" then
+    local worldRGB = State.World.RGB.World.Enabled or lightingMode == "RGB Vision"
+    colorCorrection.Enabled = lightingMode ~= "Default" or worldRGB
+    bloom.Enabled = lightingMode == "Glow" or lightingMode == "Neon Glow" or worldRGB
+    if worldRGB then
+        bloom.Intensity = State.World.GlowIntensity * 0.65
+        bloom.Size = 28
+        bloom.Threshold = 0.9
+        colorCorrection.TintColor = getRGBColor("World", 0)
+        colorCorrection.Brightness = 0.04
+        colorCorrection.Contrast = 0.08
+        colorCorrection.Saturation = 0.28
+    elseif lightingMode == "Glow" then
         bloom.Intensity = State.World.GlowIntensity
         bloom.Size = 36
         bloom.Threshold = 0.78
@@ -4032,14 +4137,14 @@ local function applyWorld()
         colorCorrection.Brightness = 0.08
         colorCorrection.Contrast = 0.14
         colorCorrection.Saturation = 0.18
-    elseif lightingMode == "RGB Vision" then
-        bloom.Intensity = State.World.GlowIntensity * 0.65
-        bloom.Size = 28
-        bloom.Threshold = 0.9
-        colorCorrection.TintColor = getRGBColor(0)
-        colorCorrection.Brightness = 0.04
-        colorCorrection.Contrast = 0.08
-        colorCorrection.Saturation = 0.28
+    elseif lightingMode == "Neon Glow" then
+        bloom.Intensity = State.World.NeonIntensity
+        bloom.Size = State.World.NeonSize
+        bloom.Threshold = State.World.NeonThreshold
+        colorCorrection.TintColor = Color3.new(1, 1, 1)
+        colorCorrection.Brightness = 0.1
+        colorCorrection.Contrast = 0.24
+        colorCorrection.Saturation = 0.5
     elseif lightingMode == "Manual" then
         colorCorrection.TintColor = Color3.fromRGB(State.World.ManualRed, State.World.ManualGreen, State.World.ManualBlue)
         colorCorrection.Brightness = State.World.ManualBrightness
@@ -4087,9 +4192,9 @@ do
     UI.UpdateLog = {
         "Hover search with indexed results",
         "Stable R6/R15 skeleton and viewport-correct tracers",
-        "Glow, RGB Vision, Manual and Flat Texture lighting modes",
+        "Glow, Neon Glow, scoped RGB, Manual and reversible Flat Texture modes",
         "Freecam player teleport and conditional movement controls",
-        "Theme RGB controls, synced window shadows and category glow",
+        "Overlay dropdowns, catalog-aware search and rounded synchronized shadows",
         "Remote icon slots for category and action buttons"
     }
     local updateCard = createCard(HomePage, "Update Log  ·  v" .. UI.Version)
@@ -4127,6 +4232,7 @@ addToggle(AimCard, "Rage Mode", function() return State.Aim.Rage end, function(v
     currentTarget = nil
 end)
 addToggle(AimCard, "Show FOV", function() return State.Aim.ShowFOV end, function(value) State.Aim.ShowFOV = value end)
+addToggle(AimCard, "Wall Check", function() return State.Aim.WallCheck end, function(value) State.Aim.WallCheck = value end)
 local aimSliderVisible = function() return State.Aim.Enabled and not State.Aim.Rage end
 addSlider(AimCard, "FOV Radius", 20, 600, function() return State.Aim.FOV end, function(value) State.Aim.FOV = value end, nil, aimSliderVisible)
 addSlider(AimCard, "Smoothing", 0, 0.95, function() return State.Aim.Smoothing end, function(value) State.Aim.Smoothing = value end, 2, aimSliderVisible)
@@ -4141,7 +4247,6 @@ local aimAdjustables = {
     addCycle(AimCard, "Method", {"Camera", "Mouse"}, function() return State.Aim.Method end, function(value) State.Aim.Method = value end),
     addCycle(AimCard, "Target Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso"}, function() return State.Aim.TargetPart end, function(value) State.Aim.TargetPart = value end),
     addToggle(AimCard, "Team Check", function() return State.Aim.TeamCheck end, function(value) State.Aim.TeamCheck = value end),
-    addToggle(AimCard, "Wall Check", function() return State.Aim.WallCheck end, function(value) State.Aim.WallCheck = value end),
     addToggle(AimCard, "Prediction", function() return State.Aim.Prediction end, function(value) State.Aim.Prediction = value end)
 }
 table.insert(controlRefreshers, function()
@@ -4446,8 +4551,8 @@ trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
         createPreviewModel()
         if not previewModel then return end
     end
-    local color = State.Visuals.TeamColors and ((LocalPlayer.Team and LocalPlayer.Team.TeamColor.Color) or LocalPlayer.TeamColor.Color)
-        or (State.Interface.RGBEnabled and getRGBColor(0) or Theme.Accent)
+    local color = State.World.RGB.ESP.Enabled and getRGBColor("ESP", 0)
+        or (State.Visuals.TeamColors and ((LocalPlayer.Team and LocalPlayer.Team.TeamColor.Color) or LocalPlayer.TeamColor.Color) or Theme.Accent)
     local visualsEnabled = State.Visuals.Enabled
     applyPreviewChams(visualsEnabled and State.Visuals.Chams, color)
     if PreviewHighlight then
@@ -4519,8 +4624,8 @@ addToggle(MoveCard, "Speed", function() return State.Movement.Speed end, functio
         if humanoid then humanoid.WalkSpeed = humanoidDefaults[humanoid] and humanoidDefaults[humanoid].WalkSpeed or 16 end
     end
     refreshControls()
-end)
-addSlider(MoveCard, "Speed Value", 16, 200, function() return State.Movement.SpeedValue end, function(value) State.Movement.SpeedValue = value end, nil, function() return State.Movement.Speed end)
+end, true)
+addSlider(MoveCard, "Speed Value", 0, 1000, function() return State.Movement.SpeedValue end, function(value) State.Movement.SpeedValue = value end, nil, function() return State.Movement.Speed end)
 local speedMethodControl = addCycle(MoveCard, "Speed Method", {"WalkSpeed", "Velocity", "CFrame"}, function() return State.Movement.SpeedMethod end, function(value) State.Movement.SpeedMethod = value end)
 table.insert(controlRefreshers, function()
     speedMethodControl.Holder.Visible = State.Movement.Speed
@@ -4535,7 +4640,7 @@ addToggle(MoveCard, "Jump Power", function() return State.Movement.Jump end, fun
             humanoid.UseJumpPower = defaults.UseJumpPower
         end
     end
-end)
+end, true)
 addSlider(MoveCard, "Jump Value", 50, 300, function() return State.Movement.JumpValue end, function(value) State.Movement.JumpValue = value end, nil, function() return State.Movement.Jump end)
 local FlyCard = createCard(MovementPage, "Flight and Collision")
 addToggle(FlyCard, "Fly", function() return State.Movement.Fly end, function(value)
@@ -4551,7 +4656,7 @@ addNote(FlyCard, "WASD follows the camera. Space or E moves up; Ctrl, Q or C mov
 addToggle(FlyCard, "Noclip", function() return State.Movement.Noclip end, function(value)
     State.Movement.Noclip = value
     if not value then restoreCollision() end
-end)
+end, true)
 local MobilityCard = createCard(MiscPage, "Mobility Utilities")
 addToggle(MobilityCard, "Infinite Jump", function() return State.Movement.InfiniteJump end, function(value) State.Movement.InfiniteJump = value end, true)
 addToggle(MobilityCard, "Bunny Hop", function() return State.Movement.BunnyHop end, function(value) State.Movement.BunnyHop = value end, true)
@@ -4593,8 +4698,8 @@ local GravityCard = createCard(MovementPage, "World Physics")
 addToggle(GravityCard, "Custom Gravity", function() return State.Movement.Gravity end, function(value)
     State.Movement.Gravity = value
     Workspace.Gravity = value and State.Movement.GravityValue or originalGravity
-end)
-addSlider(GravityCard, "Gravity", 0, 300, function() return State.Movement.GravityValue end, function(value)
+end, true)
+addSlider(GravityCard, "Gravity", 0, 1000, function() return State.Movement.GravityValue end, function(value)
     State.Movement.GravityValue = value
     if State.Movement.Gravity then Workspace.Gravity = value end
 end, 1, function() return State.Movement.Gravity end)
@@ -4660,7 +4765,19 @@ local LightingCard = createCard(WorldPage, "Lighting")
 addSlider(LightingCard, "Glow Strength", 0, 4, function() return State.World.GlowIntensity end, function(value)
     State.World.GlowIntensity = value
     applyWorld()
-end, 2, function() return State.World.LightingMode == "Glow" or State.World.LightingMode == "RGB Vision" end)
+end, 2, function() return State.World.LightingMode == "Glow" end)
+addSlider(LightingCard, "Neon Intensity", 0, 5, function() return State.World.NeonIntensity end, function(value)
+    State.World.NeonIntensity = value
+    applyWorld()
+end, 2, function() return State.World.LightingMode == "Neon Glow" end)
+addSlider(LightingCard, "Neon Size", 0, 56, function() return State.World.NeonSize end, function(value)
+    State.World.NeonSize = value
+    applyWorld()
+end, nil, function() return State.World.LightingMode == "Neon Glow" end)
+addSlider(LightingCard, "Neon Threshold", 0, 1, function() return State.World.NeonThreshold end, function(value)
+    State.World.NeonThreshold = value
+    applyWorld()
+end, 2, function() return State.World.LightingMode == "Neon Glow" end)
 for _, channel in ipairs({{"Red", "ManualRed"}, {"Green", "ManualGreen"}, {"Blue", "ManualBlue"}}) do
     local labelName, propertyName = channel[1], channel[2]
     addSlider(LightingCard, "Manual " .. labelName, 0, 255, function() return State.World[propertyName] end, function(value)
@@ -4680,7 +4797,7 @@ addSlider(LightingCard, "Manual Saturation", -1, 1, function() return State.Worl
     State.World.ManualSaturation = value
     applyWorld()
 end, 2, function() return State.World.LightingMode == "Manual" end)
-addCycle(LightingCard, "Vision Mode", {"Default", "Glow", "RGB Vision", "Manual"}, function() return State.World.LightingMode end, function(value)
+addCycle(LightingCard, "Vision Mode", {"Default", "Glow", "Neon Glow", "Manual"}, function() return State.World.LightingMode end, function(value)
     State.World.LightingMode = value
     applyWorld()
     refreshControls()
@@ -4688,32 +4805,43 @@ end)
 addToggle(LightingCard, "Fullbright", function() return State.World.Fullbright end, function(value)
     State.World.Fullbright = value
     applyWorld()
-end)
+end, true)
 addToggle(LightingCard, "Remove Fog", function() return State.World.NoFog end, function(value)
     State.World.NoFog = value
     applyWorld()
-end)
+end, true)
 addToggle(LightingCard, "Flat Textures", function() return State.World.FlatTextures end, function(value)
     State.World.FlatTextures = value
     applyWorld()
     refreshControls()
-end)
-for _, channel in ipairs({{"Red", "FlatRed"}, {"Green", "FlatGreen"}, {"Blue", "FlatBlue"}}) do
-    local labelName, propertyName = channel[1], channel[2]
-    addSlider(LightingCard, "Flat " .. labelName, 0, 255, function() return State.World[propertyName] end, function(value)
-        State.World[propertyName] = value
-        applyFlatTextures()
-    end, nil, function() return State.World.FlatTextures end)
+end, true)
+addNote(LightingCard, "Flat Textures removes texture maps while preserving each object's own color. Disabling it restores every saved material and texture client-side.")
+local RGBCard = createCard(WorldPage, "RGB Effects")
+for _, scopeName in ipairs({"ESP", "Aim", "World"}) do
+    local scope = scopeName
+    addToggle(RGBCard, scope .. " RGB", function() return State.World.RGB[scope].Enabled end, function(value)
+        State.World.RGB[scope].Enabled = value
+        if scope == "World" then applyWorld() end
+        refreshControls()
+    end)
+    addSlider(RGBCard, scope .. " Speed", 0.02, 1.2, function() return State.World.RGB[scope].Speed end, function(value)
+        State.World.RGB[scope].Speed = value
+    end, 2, function() return State.World.RGB[scope].Enabled end)
+    addSlider(RGBCard, scope .. " Saturation", 0, 1, function() return State.World.RGB[scope].Saturation end, function(value)
+        State.World.RGB[scope].Saturation = value
+    end, 2, function() return State.World.RGB[scope].Enabled end)
+    addSlider(RGBCard, scope .. " Brightness", 0.2, 1, function() return State.World.RGB[scope].Brightness end, function(value)
+        State.World.RGB[scope].Brightness = value
+    end, 2, function() return State.World.RGB[scope].Enabled end)
 end
-addNote(LightingCard, "Flat Textures hides texture maps client-side and flattens new streamed parts. Roblox may already have downloaded assets before this switch is enabled.")
 local CameraCard = createCard(WorldPage, "Camera")
 addSlider(CameraCard, "Field of View", 40, 120, function() return State.World.CameraFOV end, function(value) State.World.CameraFOV = value end)
-addToggle(CameraCard, "Third Person", function() return State.World.ThirdPerson end, function(value) State.World.ThirdPerson = value end)
+addToggle(CameraCard, "Third Person", function() return State.World.ThirdPerson end, function(value) State.World.ThirdPerson = value end, true)
 local FreecamCard = createCard(WorldPage, "Freecam")
 addToggle(FreecamCard, "Freecam", function() return State.World.Freecam end, function(value)
     State.World.Freecam = value
     refreshControls()
-end)
+end, true)
 addSlider(FreecamCard, "Freecam Speed", 0.2, 8, function() return State.World.FreecamSpeed end, function(value) State.World.FreecamSpeed = value end, 1, function() return State.World.Freecam end)
 local freecamTeleportButton = addAction(FreecamCard, "Teleport Player to Freecam", function()
     local camera = Workspace.CurrentCamera
@@ -5406,6 +5534,20 @@ local function loadConfig(name)
         )
     end
     merge(State, decoded)
+    State.Interface.RGBEnabled = nil
+    State.Interface.RGBSpeed = nil
+    State.Interface.RGBSaturation = nil
+    State.Interface.RGBBrightness = nil
+    local decodedRGB = type(decoded.World) == "table" and type(decoded.World.RGB) == "table" and decoded.World.RGB or {}
+    if type(State.World.RGB) ~= "table" then State.World.RGB = {} end
+    for _, scope in ipairs({"ESP", "Aim", "World"}) do
+        State.World.RGB[scope] = deepCopy(Defaults.World.RGB[scope])
+        if type(decodedRGB[scope]) == "table" then merge(State.World.RGB[scope], decodedRGB[scope]) end
+    end
+    if State.World.LightingMode == "RGB Vision" then
+        State.World.LightingMode = "Default"
+        State.World.RGB.World.Enabled = true
+    end
     ensureBuiltinCatalogEntries()
     Theme = State.Interface
     UI.ApplyTheme(State.Interface.ThemeName or "Tasu Light", true)
@@ -5436,13 +5578,6 @@ do
         State.Interface.Accent = value
         UI.RefreshTheme()
     end)
-    addToggle(appearanceCard, "RGB Mode", function() return State.Interface.RGBEnabled end, function(value)
-        State.Interface.RGBEnabled = value
-        refreshControls()
-    end)
-    addSlider(appearanceCard, "RGB Speed", 0.02, 1.2, function() return State.Interface.RGBSpeed end, function(value) State.Interface.RGBSpeed = value end, 2, function() return State.Interface.RGBEnabled end)
-    addSlider(appearanceCard, "RGB Saturation", 0, 1, function() return State.Interface.RGBSaturation end, function(value) State.Interface.RGBSaturation = value end, 2, function() return State.Interface.RGBEnabled end)
-    addSlider(appearanceCard, "RGB Brightness", 0.2, 1, function() return State.Interface.RGBBrightness end, function(value) State.Interface.RGBBrightness = value end, 2, function() return State.Interface.RGBEnabled end)
 end
 local ConfigCard = createCard(ConfigPage, "Manual Config Storage")
 addNote(ConfigCard, "Files are stored in the executor's configs folder. Selecting a file loads it immediately.")
