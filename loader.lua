@@ -376,21 +376,24 @@ local UI = {
     Ready = false,
     TopBarBaseWidth = 840,
     -- ShadowSpread / 2 is roughly the visible edge in pixels. Offset moves it right/down.
-    ShadowOffsetX = 2,
-    ShadowOffsetY = 2,
-    ShadowSpread = 38,
-    ShadowTransparency = 0.6,
+    ShadowOffsetX = 3,
+    ShadowOffsetY = 0,
+    ShadowSpread = 15,
+    ShadowTransparency = 0.8,
     RefreshControls = function() end,
     RefreshNavigation = function() end,
     RefreshOrbitPlayers = function() end,
     RefreshVisualPreview = function() end,
     CloseGlobalSearch = function(_force) end,
+    ScheduleSearchHoverClose = function() end,
     OpenConfigSaveModal = function() end,
     AddStaticCard = function(_page, _title) return game end,
     ClearAntiFlingState = function() end,
     FlingTarget = function(_player, _protectLocal) return false end,
     GetTouchingPlayers = function(_character) return {} end,
     FlingCooldowns = {},
+    AimDiscardedCharacters = {},
+    GlobalSearchPointerInside = false,
     SearchReturnVisible = false,
     SearchReturnCategory = "Home",
     SearchMode = false,
@@ -571,7 +574,7 @@ local function addShadow(object, transparency)
     shadow.AnchorPoint = Vector2.new(0.5, 0.5)
     shadow.BackgroundTransparency = 1
     shadow.Image = "rbxassetid://1316045217"
-    shadow.ImageColor3 = Color3.fromRGB(10, 18, 28)
+    shadow.ImageColor3 = Color3.new(0, 0, 0)
     local baseTransparency = transparency or 0.72
     shadow.ImageTransparency = baseTransparency
     shadow.ScaleType = Enum.ScaleType.Slice
@@ -582,7 +585,7 @@ local function addShadow(object, transparency)
         local function sync()
             shadow.Position = object.Position + UDim2.fromOffset(UI.ShadowOffsetX, UI.ShadowOffsetY)
             shadow.Size = object.Size + UDim2.fromOffset(UI.ShadowSpread, UI.ShadowSpread)
-            shadow.Visible = object.Visible
+            shadow.Visible = object.Visible and object:GetAttribute("ShadowSuppressed") ~= true
             if object:IsA("CanvasGroup") then
                 shadow.ImageTransparency = baseTransparency + (1 - baseTransparency) * object.GroupTransparency
             end
@@ -592,6 +595,7 @@ local function addShadow(object, transparency)
         trackConnection(object:GetPropertyChangedSignal("Position"):Connect(sync))
         trackConnection(object:GetPropertyChangedSignal("Size"):Connect(sync))
         trackConnection(object:GetPropertyChangedSignal("Visible"):Connect(sync))
+        trackConnection(object:GetAttributeChangedSignal("ShadowSuppressed"):Connect(sync))
         if object:IsA("CanvasGroup") then
             trackConnection(object:GetPropertyChangedSignal("GroupTransparency"):Connect(sync))
         end
@@ -953,6 +957,7 @@ TopBar.Parent = InterfaceRoot
 UI.BindTheme(TopBar, "BackgroundColor3", "Background")
 round(TopBar, 14)
 gradient(TopBar, "Surface", "Surface2", 75)
+addShadow(TopBar, UI.ShadowTransparency).ZIndex = 3
 
 local TopBarGlow = Instance.new("ImageLabel")
 TopBarGlow.Name = "CategoryBarGlow"
@@ -2541,6 +2546,7 @@ local function closeContentWindow()
     if not ContentWindow.Visible then return end
     windowTransition = windowTransition + 1
     local transition = windowTransition
+    UI.ActiveCategory = nil
     for buttonName, item in pairs(categoryButtons) do
         item:SetAttribute("Selected", false)
         animate(item, {BackgroundColor3 = Theme.Surface2, TextColor3 = Theme.Text}, 0.12)
@@ -2731,12 +2737,30 @@ UI.OpenGlobalSearch = function()
         animate(TopBar, {Size = UDim2.fromOffset(UI.TopBarBaseWidth + 150, 58)}, 0.38, Enum.EasingStyle.Quint)
         animate(UI.GlobalSearchClip, {Size = UDim2.fromOffset(224, 30)}, 0.38, Enum.EasingStyle.Quint)
     end
-    task.defer(function()
-        if UI.GlobalSearchOpen then UI.GlobalSearchBox:CaptureFocus() end
-    end)
 end
 
-UI.GlobalSearchButton.MouseEnter:Connect(UI.OpenGlobalSearch)
+UI.ScheduleSearchHoverClose = function()
+    task.delay(0.08, function()
+        if UI.GlobalSearchOpen and not UI.GlobalSearchPointerInside and not UI.GlobalSearchBox:IsFocused() and UI.GlobalSearchBox.Text:gsub("%s", "") == "" then
+            UI.CloseGlobalSearch(false)
+        end
+    end)
+end
+UI.GlobalSearchButton.MouseEnter:Connect(function()
+    UI.GlobalSearchPointerInside = true
+    UI.OpenGlobalSearch()
+end)
+UI.GlobalSearchButton.MouseLeave:Connect(function()
+    UI.GlobalSearchPointerInside = false
+    UI.ScheduleSearchHoverClose()
+end)
+UI.GlobalSearchClip.MouseEnter:Connect(function()
+    UI.GlobalSearchPointerInside = true
+end)
+UI.GlobalSearchClip.MouseLeave:Connect(function()
+    UI.GlobalSearchPointerInside = false
+    UI.ScheduleSearchHoverClose()
+end)
 UI.GlobalSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     UI.RebuildGlobalSearch(UI.GlobalSearchBox.Text)
 end)
@@ -2744,9 +2768,7 @@ UI.GlobalSearchBox.Focused:Connect(function()
     UI.RebuildGlobalSearch(UI.GlobalSearchBox.Text)
 end)
 UI.GlobalSearchBox.FocusLost:Connect(function()
-    if UI.GlobalSearchBox.Text:gsub("%s", "") == "" then
-        UI.CloseGlobalSearch(false)
-    end
+    UI.ScheduleSearchHoverClose()
 end)
 
 for name, item in pairs(categoryButtons) do
@@ -2812,7 +2834,6 @@ local function isVisibleTarget(character, targetPart)
     return not result or result.Instance:IsDescendantOf(character)
 end
 
-UI.AimDiscardedCharacters = setmetatable({}, {__mode = "k"})
 local function chooseTarget()
     local camera = Workspace.CurrentCamera
     if not camera then
@@ -3308,7 +3329,6 @@ UI.ClearAntiFlingState = function()
     antiFlingState.SafeCFrame = nil
 end
 
-UI.FlingCooldowns = setmetatable({}, {__mode = "k"})
 UI.FlingTarget = function(player, protectLocal)
     if player == LocalPlayer or UI.FlingCooldowns[player] then return false end
     local targetAlive, targetCharacter, targetHumanoid, targetRoot = getAlive(player)
@@ -4193,11 +4213,10 @@ addSlider(VisualCard, "Line Thickness", 1, 4, function() return State.Visuals.Th
 local function setupVisualPreview()
 local previewOpen = false
 local previewModel
-local previewRotation = 0
 local PreviewPanel = Instance.new("CanvasGroup")
 PreviewPanel.Name = "VisualPreviewPanel"
 PreviewPanel.BackgroundColor3 = Theme.Surface
-PreviewPanel.BackgroundTransparency = 0.06
+PreviewPanel.BackgroundTransparency = 1
 PreviewPanel.ClipsDescendants = true
 PreviewPanel.GroupTransparency = 1
 PreviewPanel.Size = UDim2.fromOffset(300, 440)
@@ -4207,11 +4226,13 @@ PreviewPanel.Parent = InterfaceRoot
 UI.BindTheme(PreviewPanel, "BackgroundColor3", "Surface")
 round(PreviewPanel, 16)
 gradient(PreviewPanel, "Surface", "Surface2", 90)
+PreviewPanel:SetAttribute("ShadowSuppressed", true)
 local PreviewShadow = addShadow(PreviewPanel, 0.72)
 PreviewShadow.ZIndex = 1
 local PreviewTitle = textLabel(PreviewPanel, "Live Visual Preview", UDim2.new(1, -36, 0, 42), UDim2.fromOffset(14, 4), 17, Theme.Text)
 PreviewTitle.FontFace = UI.Fonts.HeadingHeavy
 PreviewTitle.ZIndex = 9
+PreviewTitle.Visible = false
 local PreviewToggle = button(PreviewPanel, "Ⅱ", UDim2.fromOffset(20, 390), UDim2.new(1, -22, 0, 25))
 PreviewToggle.TextSize = 13
 PreviewToggle.ZIndex = 12
@@ -4225,6 +4246,7 @@ PreviewViewport.LightColor = Color3.fromRGB(255, 255, 255)
 PreviewViewport.LightDirection = Vector3.new(-1, -1, -1)
 PreviewViewport.ZIndex = 9
 PreviewViewport.Parent = PreviewPanel
+PreviewViewport.Visible = false
 UI.BindTheme(PreviewViewport, "BackgroundColor3", "Surface2")
 round(PreviewViewport, 12)
 local PreviewWorld = Instance.new("WorldModel")
@@ -4244,13 +4266,20 @@ local PreviewName = textLabel(PreviewViewport, LocalPlayer.DisplayName, UDim2.fr
 PreviewName.ZIndex = 12
 local PreviewDistance = textLabel(PreviewViewport, "[25]", UDim2.fromOffset(70, 20), UDim2.fromScale(0.68, 0.08), 13, Color3.fromRGB(255, 196, 74), Enum.TextXAlignment.Center)
 PreviewDistance.ZIndex = 12
+local PreviewHealthBg = Instance.new("Frame")
+PreviewHealthBg.BackgroundColor3 = Color3.fromRGB(18, 22, 28)
+PreviewHealthBg.BorderSizePixel = 0
+PreviewHealthBg.ClipsDescendants = true
+PreviewHealthBg.Visible = false
+PreviewHealthBg.ZIndex = 12
+PreviewHealthBg.Parent = PreviewViewport
 local PreviewHealth = Instance.new("Frame")
 PreviewHealth.AnchorPoint = Vector2.new(0, 1)
 PreviewHealth.BackgroundColor3 = Color3.fromRGB(80, 235, 120)
-PreviewHealth.Position = UDim2.fromScale(0.77, 0.87)
-PreviewHealth.Size = UDim2.fromScale(0.025, 0.64)
 PreviewHealth.ZIndex = 12
-PreviewHealth.Parent = PreviewViewport
+PreviewHealth.Parent = PreviewHealthBg
+round(PreviewHealthBg, 3)
+round(PreviewHealth, 2)
 local PreviewHead = Instance.new("Frame")
 PreviewHead.AnchorPoint = Vector2.new(0.5, 0.5)
 PreviewHead.BackgroundColor3 = Theme.Accent
@@ -4259,17 +4288,24 @@ PreviewHead.Size = UDim2.fromOffset(7, 7)
 PreviewHead.ZIndex = 12
 PreviewHead.Parent = PreviewViewport
 round(PreviewHead, 7)
-local PreviewTracer = newLine(PreviewViewport)
-PreviewTracer.ZIndex = 11
+local PreviewSkeletonLayer = Instance.new("Frame")
+PreviewSkeletonLayer.BackgroundTransparency = 1
+PreviewSkeletonLayer.Size = UDim2.fromScale(1, 1)
+PreviewSkeletonLayer.Visible = false
+PreviewSkeletonLayer.ZIndex = 11
+PreviewSkeletonLayer.Parent = PreviewViewport
 local PreviewSkeleton = {}
-for _ = 1, 6 do
-    local skeletonLine = newLine(PreviewViewport)
-    skeletonLine.ZIndex = 11
+for _ = 1, 16 do
+    local skeletonLine = newLine(PreviewSkeletonLayer)
+    skeletonLine.ZIndex = 12
     table.insert(PreviewSkeleton, skeletonLine)
 end
-local PreviewArrow = textLabel(PreviewViewport, "▲", UDim2.fromOffset(34, 34), UDim2.fromScale(0.86, 0.46), 28, Theme.Accent, Enum.TextXAlignment.Center)
-PreviewArrow.ZIndex = 12
+local PreviewSkeletonRecord = {SkeletonLayer = PreviewSkeletonLayer, SkeletonLines = PreviewSkeleton}
 local PreviewHighlight
+local previewIdleTrack
+local previewSourceCharacter
+local previewPartStyles = {}
+local previewCosmeticStyles = {}
 
 local function placePreviewPanel(animated)
     local position = getLocalPosition(ContentWindow)
@@ -4282,17 +4318,36 @@ local function placePreviewPanel(animated)
 end
 
 local function destroyPreviewModel()
+    if previewIdleTrack then
+        pcall(function() previewIdleTrack:Stop(0) end)
+        previewIdleTrack = nil
+    end
     if previewModel then
         previewModel:Destroy()
         previewModel = nil
     end
     PreviewHighlight = nil
+    previewSourceCharacter = nil
+    previewPartStyles = {}
+    previewCosmeticStyles = {}
+    PreviewSkeletonRecord.SkeletonCharacter = nil
+    PreviewSkeletonRecord.SkeletonMotors = nil
+end
+
+local function getIdleAnimationId(character, humanoid)
+    local animateScript = character:FindFirstChild("Animate")
+    local idleFolder = animateScript and animateScript:FindFirstChild("idle")
+    local idleAnimation = idleFolder and idleFolder:FindFirstChildWhichIsA("Animation", true)
+    if idleAnimation and idleAnimation.AnimationId ~= "" then return idleAnimation.AnimationId end
+    return humanoid and humanoid.RigType == Enum.HumanoidRigType.R6 and "rbxassetid://180435571" or "rbxassetid://507766666"
 end
 
 local function createPreviewModel()
     destroyPreviewModel()
     local character = LocalPlayer.Character
     if not character then return end
+    local sourceHumanoid = character:FindFirstChildOfClass("Humanoid")
+    local idleAnimationId = getIdleAnimationId(character, sourceHumanoid)
     local archivable = character.Archivable
     character.Archivable = true
     local ok, clone = pcall(function() return character:Clone() end)
@@ -4302,30 +4357,72 @@ local function createPreviewModel()
         if object:IsA("Script") or object:IsA("LocalScript") or object:IsA("Tool") then
             object:Destroy()
         elseif object:IsA("BasePart") then
-            object.Anchored = true
+            object.Anchored = object.Name == "HumanoidRootPart"
             object.CanCollide = false
+            object.Massless = true
+            object.AssemblyLinearVelocity = Vector3.zero
+            object.AssemblyAngularVelocity = Vector3.zero
+            previewPartStyles[object] = {
+                Color = object.Color,
+                Material = object.Material,
+                Transparency = object.Transparency,
+                TextureID = object:IsA("MeshPart") and object.TextureID or nil
+            }
+        elseif object:IsA("Motor6D") then
+            object.Transform = CFrame.identity
+        elseif object:IsA("Shirt") then
+            table.insert(previewCosmeticStyles, {Object = object, Property = "ShirtTemplate", Value = object.ShirtTemplate})
+        elseif object:IsA("Pants") then
+            table.insert(previewCosmeticStyles, {Object = object, Property = "PantsTemplate", Value = object.PantsTemplate})
+        elseif object:IsA("ShirtGraphic") then
+            table.insert(previewCosmeticStyles, {Object = object, Property = "Graphic", Value = object.Graphic})
+        elseif object:IsA("Decal") or object:IsA("Texture") then
+            table.insert(previewCosmeticStyles, {Object = object, Property = "Transparency", Value = object.Transparency})
         end
     end
-    clone:PivotTo(CFrame.new())
+    clone:PivotTo(CFrame.Angles(0, math.pi, 0))
     clone.Parent = PreviewWorld
     previewModel = clone
-    local _, size = clone:GetBoundingBox()
-    local distance = math.max(size.X, size.Y, size.Z) * 1.7
-    PreviewCamera.CFrame = CFrame.lookAt(Vector3.new(0, size.Y * 0.05, distance), Vector3.new(0, size.Y * 0.05, 0))
+    previewSourceCharacter = character
+    local boundsCFrame, size = clone:GetBoundingBox()
+    local distance = math.max(size.Y * 1.2, size.X * 2.1, 7)
+    local target = boundsCFrame.Position
+    PreviewCamera.CFrame = CFrame.lookAt(target + Vector3.new(0, size.Y * 0.03, distance), target)
     PreviewHighlight = Instance.new("Highlight")
     PreviewHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    PreviewHighlight.FillTransparency = 0.72
-    PreviewHighlight.OutlineTransparency = 0.08
+    PreviewHighlight.FillTransparency = 0.48
+    PreviewHighlight.OutlineTransparency = 0.04
     PreviewHighlight.Adornee = clone
-    PreviewHighlight.Parent = PreviewWorld
+    PreviewHighlight.Parent = clone
+    local cloneHumanoid = clone:FindFirstChildOfClass("Humanoid")
+    if cloneHumanoid then
+        cloneHumanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        local animator = cloneHumanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", cloneHumanoid)
+        local animation = Instance.new("Animation")
+        animation.AnimationId = idleAnimationId
+        animation.Parent = clone
+        local loaded, track = pcall(function() return animator:LoadAnimation(animation) end)
+        if loaded and track then
+            previewIdleTrack = track
+            track.Looped = true
+            track.Priority = Enum.AnimationPriority.Idle
+            track:Play(0.18, 1, 1)
+        end
+    end
 end
 
 local function setPreviewOpen(value)
     previewOpen = value == true
     if previewOpen then
+        PreviewPanel:SetAttribute("ShadowSuppressed", false)
+        PreviewTitle.Visible = true
         createPreviewModel()
         PreviewViewport.Visible = true
+        animate(PreviewPanel, {BackgroundTransparency = 0.06}, 0.3, Enum.EasingStyle.Quint)
     else
+        PreviewPanel:SetAttribute("ShadowSuppressed", true)
+        PreviewPanel.BackgroundTransparency = 1
+        PreviewTitle.Visible = false
         PreviewViewport.Visible = false
         destroyPreviewModel()
     end
@@ -4339,8 +4436,7 @@ UI.RefreshVisualPreview = function()
         placePreviewPanel(false)
         animate(PreviewPanel, {GroupTransparency = 0}, 0.28, Enum.EasingStyle.Quint)
     else
-        previewOpen = false
-        destroyPreviewModel()
+        setPreviewOpen(false)
         animate(PreviewPanel, {GroupTransparency = 1}, 0.2, Enum.EasingStyle.Quint)
         task.delay(0.21, function()
             if (UI.ActiveCategory ~= "Visuals" or not ContentWindow.Visible) and PreviewPanel.Parent then PreviewPanel.Visible = false end
@@ -4348,55 +4444,102 @@ UI.RefreshVisualPreview = function()
     end
 end
 trackConnection(ContentWindow:GetPropertyChangedSignal("Position"):Connect(function() placePreviewPanel(false) end))
+
+local function applyPreviewChams(enabled, color)
+    for part, style in pairs(previewPartStyles) do
+        if part.Parent then
+            part.Color = enabled and color or style.Color
+            part.Material = enabled and Enum.Material.Neon or style.Material
+            part.Transparency = style.Transparency
+            if part:IsA("MeshPart") and style.TextureID ~= nil then
+                part.TextureID = enabled and "" or style.TextureID
+            end
+        end
+    end
+    for _, style in ipairs(previewCosmeticStyles) do
+        local object = style.Object
+        if object and object.Parent then
+            pcall(function()
+                object[style.Property] = enabled and (style.Property == "Transparency" and 1 or "") or style.Value
+            end)
+        end
+    end
+end
+
+local function hidePreviewOverlays()
+    PreviewBox.Visible = false
+    PreviewName.Visible = false
+    PreviewDistance.Visible = false
+    PreviewHealthBg.Visible = false
+    PreviewHead.Visible = false
+    PreviewSkeletonLayer.Visible = false
+end
+
 local previewClock = 0
 trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
     if not previewOpen or not previewModel or not PreviewPanel.Visible then return end
     previewClock = previewClock + deltaTime
     if previewClock < 1 / 30 then return end
-    previewRotation = previewRotation + previewClock * 0.45
     previewClock = 0
-    previewModel:PivotTo(CFrame.Angles(0, previewRotation, 0))
-    local color = State.Interface.RGBEnabled and getRGBColor(0) or Theme.Accent
-    PreviewBox.BackgroundColor3 = color
-    PreviewBox.BackgroundTransparency = State.Visuals.BoxFilled and 0.82 or 1
-    PreviewBoxStroke.Color = color
-    PreviewBoxStroke.Thickness = State.Visuals.Thickness
-    PreviewBox.Visible = State.Visuals.Boxes
-    PreviewName.TextColor3 = color
-    PreviewName.Visible = State.Visuals.Names
-    PreviewDistance.Visible = State.Visuals.Distance
-    PreviewHealth.Visible = State.Visuals.Health
-    PreviewHead.BackgroundColor3 = color
-    PreviewHead.Visible = State.Visuals.HeadDot
-    PreviewTracer.BackgroundColor3 = color
-    if State.Visuals.Tracers then
-        setLine(PreviewTracer, Vector2.new(PreviewViewport.AbsoluteSize.X * 0.5, PreviewViewport.AbsoluteSize.Y), Vector2.new(PreviewViewport.AbsoluteSize.X * 0.5, PreviewViewport.AbsoluteSize.Y * 0.83), State.Visuals.Thickness)
-    else
-        PreviewTracer.Visible = false
+    if LocalPlayer.Character ~= previewSourceCharacter then
+        createPreviewModel()
+        if not previewModel then return end
     end
-    local width, height = PreviewViewport.AbsoluteSize.X, PreviewViewport.AbsoluteSize.Y
-    local skeletonPoints = {
-        {Vector2.new(width * 0.5, height * 0.24), Vector2.new(width * 0.5, height * 0.58)},
-        {Vector2.new(width * 0.34, height * 0.37), Vector2.new(width * 0.66, height * 0.37)},
-        {Vector2.new(width * 0.34, height * 0.37), Vector2.new(width * 0.27, height * 0.61)},
-        {Vector2.new(width * 0.66, height * 0.37), Vector2.new(width * 0.73, height * 0.61)},
-        {Vector2.new(width * 0.5, height * 0.58), Vector2.new(width * 0.39, height * 0.84)},
-        {Vector2.new(width * 0.5, height * 0.58), Vector2.new(width * 0.61, height * 0.84)}
-    }
-    for index, skeletonLine in ipairs(PreviewSkeleton) do
-        skeletonLine.BackgroundColor3 = color
-        if State.Visuals.Skeleton then
-            setLine(skeletonLine, skeletonPoints[index][1], skeletonPoints[index][2], State.Visuals.Thickness)
-        else
-            skeletonLine.Visible = false
-        end
-    end
-    PreviewArrow.TextColor3 = color
-    PreviewArrow.Visible = State.Visuals.Offscreen
+    local color = State.Visuals.TeamColors and ((LocalPlayer.Team and LocalPlayer.Team.TeamColor.Color) or LocalPlayer.TeamColor.Color)
+        or (State.Interface.RGBEnabled and getRGBColor(0) or Theme.Accent)
+    local visualsEnabled = State.Visuals.Enabled
+    applyPreviewChams(visualsEnabled and State.Visuals.Chams, color)
     if PreviewHighlight then
         PreviewHighlight.FillColor = color
         PreviewHighlight.OutlineColor = color
-        PreviewHighlight.Enabled = State.Visuals.Chams
+        PreviewHighlight.Enabled = visualsEnabled and State.Visuals.Chams
+    end
+    local left, right, top, bottom = getBoundingScreenBox(previewModel, PreviewCamera)
+    if not left then
+        hidePreviewOverlays()
+        return
+    end
+    local width, height = right - left, bottom - top
+    local centerX = left + width * 0.5
+    PreviewBox.BackgroundColor3 = color
+    PreviewBox.BackgroundTransparency = State.Visuals.BoxFilled and 0.82 or 1
+    PreviewBox.Position = UDim2.fromOffset(left, top)
+    PreviewBox.Size = UDim2.fromOffset(width, height)
+    PreviewBoxStroke.Color = color
+    PreviewBoxStroke.Thickness = State.Visuals.Thickness
+    PreviewBox.Visible = visualsEnabled and State.Visuals.Boxes
+    PreviewName.Text = LocalPlayer.DisplayName
+    PreviewName.TextColor3 = color
+    PreviewName.Position = UDim2.fromOffset(centerX - 90, top - 38)
+    PreviewName.Size = UDim2.fromOffset(180, 20)
+    PreviewName.Visible = visualsEnabled and State.Visuals.Names
+    local boundsCFrame = previewModel:GetBoundingBox()
+    PreviewDistance.Text = tostring(math.floor((PreviewCamera.CFrame.Position - boundsCFrame.Position).Magnitude + 0.5)) .. " studs"
+    PreviewDistance.Position = UDim2.fromOffset(centerX - 45, top - 19)
+    PreviewDistance.Size = UDim2.fromOffset(90, 18)
+    PreviewDistance.Visible = visualsEnabled and State.Visuals.Distance
+    local sourceHumanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    local healthRatio = sourceHumanoid and math.clamp(sourceHumanoid.Health / math.max(1, sourceHumanoid.MaxHealth), 0, 1) or 0
+    PreviewHealthBg.Position = UDim2.fromOffset(right + 5, top)
+    PreviewHealthBg.Size = UDim2.fromOffset(8, height)
+    PreviewHealthBg.Visible = visualsEnabled and State.Visuals.Health
+    PreviewHealth.Position = UDim2.fromOffset(1, height - 1)
+    PreviewHealth.Size = UDim2.fromOffset(6, math.max(0, (height - 2) * healthRatio))
+    PreviewHealth.BackgroundColor3 = Color3.fromRGB(math.floor(255 * (1 - healthRatio)), math.floor(235 * healthRatio), 70)
+    PreviewHealth.Visible = PreviewHealthBg.Visible
+    local previewHeadPart = previewModel:FindFirstChild("Head")
+    local headScreen = previewHeadPart and PreviewCamera:WorldToViewportPoint(previewHeadPart.Position)
+    PreviewHead.BackgroundColor3 = color
+    if visualsEnabled and State.Visuals.HeadDot and headScreen and headScreen.Z > 0 then
+        PreviewHead.Position = UDim2.fromOffset(headScreen.X, headScreen.Y)
+        PreviewHead.Visible = true
+    else
+        PreviewHead.Visible = false
+    end
+    if visualsEnabled and State.Visuals.Skeleton then
+        updateSkeleton(PreviewSkeletonRecord, previewModel, PreviewCamera, color)
+    else
+        PreviewSkeletonLayer.Visible = false
     end
 end))
 end
