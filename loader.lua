@@ -395,6 +395,7 @@ local UI = {
     AddStaticCard = function(_page, _title) return game end,
     ClearAntiFlingState = function() end,
     FlingTarget = function(_player, _protectLocal) return false end,
+    StartFlingLoop = function() end,
     GetTouchingPlayers = function(_character) return {} end,
     FlingCooldowns = {},
     AimDiscardedCharacters = {},
@@ -443,10 +444,10 @@ local UI = {
             Track = Color3.fromRGB(205, 220, 235), Text = Color3.fromRGB(22, 27, 34), Muted = Color3.fromRGB(82, 94, 108)
         },
         Midnight = {
-            Accent = Color3.fromRGB(87, 166, 255), AccentSoft = Color3.fromRGB(32, 67, 105),
-            Background = Color3.fromRGB(13, 19, 28), Surface = Color3.fromRGB(21, 29, 40),
-            Surface2 = Color3.fromRGB(28, 40, 55), Hover = Color3.fromRGB(36, 52, 72), ControlOff = Color3.fromRGB(54, 69, 88),
-            Track = Color3.fromRGB(62, 78, 98), Text = Color3.fromRGB(244, 248, 255), Muted = Color3.fromRGB(205, 216, 232)
+            Accent = Color3.fromRGB(82, 174, 255), AccentSoft = Color3.fromRGB(28, 75, 122),
+            Background = Color3.fromRGB(6, 12, 23), Surface = Color3.fromRGB(10, 22, 39),
+            Surface2 = Color3.fromRGB(16, 36, 61), Hover = Color3.fromRGB(24, 54, 88), ControlOff = Color3.fromRGB(42, 78, 113),
+            Track = Color3.fromRGB(34, 68, 103), Text = Color3.fromRGB(255, 255, 255), Muted = Color3.fromRGB(190, 218, 246)
         },
         Amethyst = {
             Accent = Color3.fromRGB(178, 126, 255), AccentSoft = Color3.fromRGB(235, 220, 255),
@@ -459,8 +460,17 @@ local UI = {
 
 UI.BindTheme = function(object, property, token)
     table.insert(UI.ThemeBindings, {Object = object, Property = property, Token = token})
+    if property == "BackgroundColor3" and object:GetAttribute("ThemeBaseTransparency") == nil then
+        object:SetAttribute("ThemeBaseTransparency", object.BackgroundTransparency)
+    end
     if Theme[token] ~= nil then
         object[property] = Theme[token]
+    end
+    if property == "BackgroundColor3" then
+        local baseTransparency = object:GetAttribute("ThemeBaseTransparency")
+        if type(baseTransparency) == "number" then
+            object.BackgroundTransparency = Theme.ThemeName == "Midnight" and math.min(baseTransparency, 0.025) or baseTransparency
+        end
     end
     return object
 end
@@ -473,6 +483,12 @@ UI.RefreshTheme = function()
         elseif Theme[binding.Token] ~= nil then
             pcall(function()
                 binding.Object[binding.Property] = Theme[binding.Token]
+                if binding.Property == "BackgroundColor3" then
+                    local baseTransparency = binding.Object:GetAttribute("ThemeBaseTransparency")
+                    if type(baseTransparency) == "number" then
+                        binding.Object.BackgroundTransparency = Theme.ThemeName == "Midnight" and math.min(baseTransparency, 0.025) or baseTransparency
+                    end
+                end
             end)
         end
     end
@@ -963,6 +979,41 @@ TopBar.Parent = InterfaceRoot
 UI.BindTheme(TopBar, "BackgroundColor3", "Background")
 round(TopBar, 14)
 gradient(TopBar, "Surface", "Surface2", 75)
+
+do
+    UI.CategoryGlow = Instance.new("Frame")
+    UI.CategoryGlow.Name = "CategoryGlow"
+    UI.CategoryGlow.BackgroundTransparency = 1
+    UI.CategoryGlow.BorderSizePixel = 0
+    UI.CategoryGlow.Position = TopBar.Position
+    UI.CategoryGlow.Size = TopBar.Size
+    UI.CategoryGlow.Visible = false
+    UI.CategoryGlow.ZIndex = 4
+    UI.CategoryGlow.Parent = InterfaceRoot
+    round(UI.CategoryGlow, 14)
+    UI.CategoryGlowOuter = stroke(UI.CategoryGlow, nil, 7, 0.8)
+    UI.CategoryGlowInner = stroke(UI.CategoryGlow, nil, 3, 0.42)
+    UI.CategoryGlowOuter.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    UI.CategoryGlowInner.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    UI.CategoryGlowOuter.LineJoinMode = Enum.LineJoinMode.Round
+    UI.CategoryGlowInner.LineJoinMode = Enum.LineJoinMode.Round
+    local function syncCategoryGlow()
+        UI.CategoryGlow.Position = TopBar.Position
+        UI.CategoryGlow.Size = TopBar.Size
+        UI.CategoryGlow.Visible = TopBar.Visible
+    end
+    syncCategoryGlow()
+    trackConnection(TopBar:GetPropertyChangedSignal("Position"):Connect(syncCategoryGlow))
+    trackConnection(TopBar:GetPropertyChangedSignal("Size"):Connect(syncCategoryGlow))
+    trackConnection(TopBar:GetPropertyChangedSignal("Visible"):Connect(syncCategoryGlow))
+    trackFeature("InterfaceGlow", RunService.RenderStepped:Connect(function()
+        local pulse = (math.sin(os.clock() * 1.35) + 1) * 0.5
+        UI.CategoryGlowOuter.Transparency = 0.86 - pulse * 0.12
+        UI.CategoryGlowOuter.Thickness = 6 + pulse * 3
+        UI.CategoryGlowInner.Transparency = 0.5 - pulse * 0.16
+        UI.CategoryGlowInner.Thickness = 2.4 + pulse * 1.2
+    end))
+end
 
 local DragGrip = Instance.new("Frame")
 DragGrip.Name = "BrandButton"
@@ -2928,10 +2979,11 @@ local currentTarget
 local mousemoverel = resolveGlobal("mousemoverel")
 trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
     local mousePosition = getMousePosition()
+    local cursorPosition = UserInputService:GetMouseLocation()
     FOVStroke.Color = State.World.RGB.Aim.Enabled and getRGBColor("Aim", 0) or Theme.Accent
     local diameter = State.Aim.FOV * 2
     FOVCircle.Size = UDim2.fromOffset(diameter, diameter)
-    FOVCircle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
+    FOVCircle.Position = UDim2.fromOffset(cursorPosition.X, cursorPosition.Y)
     FOVCircle.Visible = State.Aim.Enabled and State.Aim.ShowFOV
     if not State.Aim.Enabled then
         currentTarget = nil
@@ -2958,6 +3010,7 @@ trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
             currentTarget.Root = root
             currentTarget.Part = character:FindFirstChild(State.Aim.Rage and "Head" or State.Aim.TargetPart) or character:FindFirstChild("Head") or root
             currentTarget.LastPosition = root.Position
+            currentTarget.Occluded = not isVisibleTarget(character, currentTarget.Part)
         else
             UI.AimDiscardedCharacters[currentTarget.Player] = currentTarget.Character
             currentTarget = nil
@@ -2966,6 +3019,9 @@ trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
     if not currentTarget then currentTarget = chooseTarget() end
     local camera = Workspace.CurrentCamera
     if not currentTarget or not camera then
+        return
+    end
+    if currentTarget.Occluded then
         return
     end
     local aimPosition = currentTarget.Part.Position
@@ -3313,7 +3369,8 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Last.Value, functi
                             record.SkeletonLayer.Visible = false
                         end
                         if State.Visuals.Tracers then
-                            setLine(record.Tracer, getMousePosition(), Vector2.new(centerX, bottom), State.Visuals.Thickness)
+                            local cursorPosition = UserInputService:GetMouseLocation()
+                            setLine(record.Tracer, Vector2.new(cursorPosition.X, cursorPosition.Y), Vector2.new(centerX, bottom), State.Visuals.Thickness)
                         else
                             record.Tracer.Visible = false
                         end
@@ -3349,7 +3406,7 @@ local antiFlingState = {
     FallingDownEnabled = true,
     RagdollEnabled = true
 }
-local flingState = {Humanoid = nil, Root = nil, AutoRotate = true}
+local flingState = {Humanoid = nil, Root = nil, AutoRotate = true, Running = false, MoveLift = 0.1}
 local orbitState = {Root = nil, Active = false}
 
 local function clearFlingState()
@@ -3412,23 +3469,32 @@ UI.FlingTarget = function(player, protectLocal)
         local safeAutoRotate = localHumanoid.AutoRotate
         local pulse = math.clamp(State.Movement.FlingPower, 1000, 100000)
         local offsetSign = 1
-        for _ = 1, protectLocal and 3 or 18 do
+        local moveLift = 0.1
+        local savedFlyForce = flyVelocity and flyVelocity.Parent and flyVelocity.MaxForce or nil
+        if savedFlyForce then flyVelocity.MaxForce = Vector3.zero end
+        for _ = 1, protectLocal and 4 or 18 do
             if unloaded or not localRoot.Parent or not targetCharacter.Parent or not targetRoot.Parent or targetHumanoid.Health <= 0 then break end
-            RunService.PreSimulation:Wait()
+            RunService.Heartbeat:Wait()
+            local stepCFrame = localRoot.CFrame
+            local stepVelocity = protectLocal and localRoot.AssemblyLinearVelocity or safeVelocity
             if not protectLocal then
                 localRoot.CFrame = targetRoot.CFrame * CFrame.new(offsetSign * 0.7, 0, 0)
                 offsetSign = -offsetSign
             end
-            -- Adapted from the supplied hidden-touch-fling pulse: spike velocity for
-            -- one physics step, then restore before the next rendered frame.
+            localHumanoid.AutoRotate = false
             localRoot.AssemblyAngularVelocity = Vector3.zero
-            localRoot.Velocity = safeVelocity * 10000 + Vector3.new(pulse, 10000, pulse)
-            RunService.PostSimulation:Wait()
-            localRoot.CFrame = safeCFrame
-            localRoot.Velocity = safeVelocity
+            localRoot.Velocity = stepVelocity * 10000 + Vector3.new(0, pulse, 0)
+            RunService.RenderStepped:Wait()
+            localRoot.CFrame = protectLocal and stepCFrame or safeCFrame
+            localRoot.Velocity = stepVelocity
             localRoot.AssemblyAngularVelocity = Vector3.zero
-            localHumanoid.AutoRotate = safeAutoRotate
+            RunService.Stepped:Wait()
+            localRoot.CFrame = protectLocal and stepCFrame or safeCFrame
+            localRoot.Velocity = stepVelocity + Vector3.new(0, moveLift, 0)
+            localRoot.AssemblyAngularVelocity = Vector3.zero
+            moveLift = -moveLift
         end
+        if savedFlyForce and flyVelocity and flyVelocity.Parent then flyVelocity.MaxForce = savedFlyForce end
         if localRoot.Parent then
             localRoot.CFrame = safeCFrame
             localRoot.AssemblyLinearVelocity = safeVelocity
@@ -3438,6 +3504,47 @@ UI.FlingTarget = function(player, protectLocal)
         end
     end)
     return true
+end
+
+UI.StartFlingLoop = function()
+    if flingState.Running then return end
+    flingState.Running = true
+    task.spawn(function()
+        while not unloaded and State.Movement.Fling do
+            RunService.Heartbeat:Wait()
+            local alive, character, humanoid, root = getAlive(LocalPlayer)
+            if alive then
+                local mode = State.Movement.FlingMode
+                local shouldPulse = mode ~= "Contact Fling" or next(UI.GetTouchingPlayers(character)) ~= nil
+                if shouldPulse then
+                    local safeCFrame = root.CFrame
+                    local safeVelocity = root.AssemblyLinearVelocity
+                    local safeAutoRotate = humanoid.AutoRotate
+                    local savedFlyForce = flyVelocity and flyVelocity.Parent and flyVelocity.MaxForce or nil
+                    if savedFlyForce then flyVelocity.MaxForce = Vector3.zero end
+                    humanoid.AutoRotate = false
+                    root.AssemblyAngularVelocity = Vector3.zero
+                    root.Velocity = safeVelocity * 10000 + Vector3.new(0, math.clamp(State.Movement.FlingPower, 1000, 100000), 0)
+                    RunService.RenderStepped:Wait()
+                    if root.Parent then
+                        root.CFrame = safeCFrame
+                        root.Velocity = safeVelocity
+                        root.AssemblyAngularVelocity = Vector3.zero
+                        humanoid.AutoRotate = safeAutoRotate
+                    end
+                    if savedFlyForce and flyVelocity and flyVelocity.Parent then flyVelocity.MaxForce = savedFlyForce end
+                    RunService.Stepped:Wait()
+                    if root.Parent then
+                        root.CFrame = safeCFrame
+                        root.Velocity = safeVelocity + Vector3.new(0, flingState.MoveLift, 0)
+                        root.AssemblyAngularVelocity = Vector3.zero
+                    end
+                    flingState.MoveLift = -flingState.MoveLift
+                end
+            end
+        end
+        flingState.Running = false
+    end)
 end
 
 UI.GetTouchingPlayers = function(character)
@@ -3601,14 +3708,14 @@ local function ensureFlyController(root)
     clearFlyController()
     flyRoot = root
     flyVelocity = Instance.new("BodyVelocity")
-    flyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
-    flyVelocity.P = 3000
+    flyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    flyVelocity.P = 12500
     flyVelocity.Velocity = Vector3.zero
     flyVelocity.Parent = root
     flyGyro = Instance.new("BodyGyro")
-    flyGyro.MaxTorque = Vector3.new(100000, 100000, 100000)
-    flyGyro.P = 3000
-    flyGyro.D = 250
+    flyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    flyGyro.P = 9000
+    flyGyro.D = 500
     flyGyro.Parent = root
 end
 
@@ -3680,7 +3787,8 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
         humanoid.Jump = true
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
     end
-    if State.Movement.Fly and not State.Movement.Fling then
+    local flingFly = State.Movement.Fling and State.Movement.FlingMode == "Fly Fling"
+    if (State.Movement.Fly and not State.Movement.Fling) or flingFly then
         local camera = Workspace.CurrentCamera
         if camera then
             ensureFlyController(root)
@@ -3700,20 +3808,38 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
                 direction = direction - Vector3.yAxis
             end
             if direction.Magnitude > 0 then direction = direction.Unit end
+            humanoid.Sit = false
             humanoid.PlatformStand = true
             flyApplied = true
-            flyGyro.CFrame = CFrame.lookAt(root.Position, root.Position + camera.CFrame.LookVector)
-            if State.Movement.FlyMethod == "CFrame" then
+            local facing = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+            if facing.Magnitude < 0.01 then facing = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z) end
+            flyGyro.CFrame = CFrame.lookAt(root.Position, root.Position + facing.Unit)
+            local flySpeed = flingFly and State.Movement.FlingFlySpeed or State.Movement.FlySpeed
+            if not flingFly and State.Movement.FlyMethod == "CFrame" then
                 flyVelocity.Velocity = Vector3.zero
-                root.CFrame = root.CFrame + direction * State.Movement.FlySpeed * deltaTime
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.CFrame = root.CFrame + direction * flySpeed * deltaTime
             else
-                flyVelocity.Velocity = direction * State.Movement.FlySpeed
+                flyVelocity.Velocity = direction * flySpeed
+                root.AssemblyLinearVelocity = direction * flySpeed
+            end
+            for _, descendant in ipairs(character:GetDescendants()) do
+                if descendant:IsA("BasePart") then
+                    if originalCollision[descendant] == nil then originalCollision[descendant] = descendant.CanCollide end
+                    descendant.CanCollide = false
+                end
             end
         end
     elseif flyApplied then
         clearFlyController()
         humanoid.PlatformStand = humanoidDefaults[humanoid] and humanoidDefaults[humanoid].PlatformStand or false
         flyApplied = false
+        if not State.Movement.Noclip then
+            for part, canCollide in pairs(originalCollision) do
+                if part and part.Parent then pcall(function() part.CanCollide = canCollide end) end
+            end
+            table.clear(originalCollision)
+        end
     end
     if State.Movement.Noclip then
         for _, descendant in ipairs(character:GetDescendants()) do
@@ -3726,6 +3852,7 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
         end
     end
     if State.Movement.Fling then
+        UI.StartFlingLoop()
         if flingState.Root ~= root then
             clearFlingState()
             flingState.Root = root
@@ -3734,26 +3861,6 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
         end
         humanoid.AutoRotate = flingState.AutoRotate
         root.AssemblyAngularVelocity = Vector3.zero
-        local mode = State.Movement.FlingMode
-        if mode == "Fly Fling" then
-            local camera = Workspace.CurrentCamera
-            if camera then
-                local direction = Vector3.zero
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + camera.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - camera.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + camera.CFrame.RightVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - camera.CFrame.RightVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then direction = direction + Vector3.yAxis end
-                if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then direction = direction - Vector3.yAxis end
-                root.AssemblyLinearVelocity = Vector3.zero
-                if direction.Magnitude > 0 then
-                    root.CFrame = root.CFrame + direction.Unit * State.Movement.FlingFlySpeed * deltaTime
-                end
-            end
-        end
-        for player in pairs(UI.GetTouchingPlayers(character)) do
-            UI.FlingTarget(player, true)
-        end
     elseif flingState.Root then
         clearFlingState()
     end
@@ -4186,7 +4293,7 @@ do
         "Glow, Neon Glow, scoped RGB, Manual and reversible Flat Texture modes",
         "Freecam player teleport and conditional movement controls",
         "Overlay dropdowns, catalog-aware search and rounded synchronized shadows",
-        "Remote icon slots for category and action buttons"
+        "Stable R6/R15 flight, reference-timed fling pulses and target wall memory"
     }
     local updateCard = createCard(HomePage, "Update Log  ·  v" .. UI.Version)
     updateCard.Parent.LayoutOrder = 3
@@ -4684,7 +4791,7 @@ end, true)
 addSlider(FlingCard, "Fling Power", 1000, 100000, function() return State.Movement.FlingPower end, function(value) State.Movement.FlingPower = value end, nil, function() return State.Movement.Fling end)
 addSlider(FlingCard, "Fly Fling Speed", 10, 300, function() return State.Movement.FlingFlySpeed end, function(value) State.Movement.FlingFlySpeed = value end, nil, function() return State.Movement.Fling and State.Movement.FlingMode == "Fly Fling" end)
 addCycle(FlingCard, "Fling Mode", {"Walk Fling", "Fly Fling", "Contact Fling"}, function() return State.Movement.FlingMode end, function(value) State.Movement.FlingMode = value end)
-addNote(FlingCard, "Your avatar never spins. Walk and Contact pulse only on physical touch; Fly uses WASD/Space/Ctrl. Each pulse is restored before the next rendered frame.")
+addNote(FlingCard, "Your avatar never spins. Walk uses a continuous hidden pulse, Contact pulses only while touching a player, and Fly uses WASD/Space/Ctrl. Local position is restored every pulse.")
 local GravityCard = createCard(MovementPage, "World Physics")
 addToggle(GravityCard, "Custom Gravity", function() return State.Movement.Gravity end, function(value)
     State.Movement.Gravity = value
@@ -4996,15 +5103,22 @@ end, function(value)
     State.Players.Sort = value
 end, false)
 local playerSearch = addInput(PlayerCard, "Search username or display name", "")
-local PlayerList = Instance.new("Frame")
+local PlayerList = Instance.new("ScrollingFrame")
 PlayerList.BackgroundColor3 = Theme.Surface2
 PlayerList.BackgroundTransparency = 0.2
 PlayerList.BorderSizePixel = 0
 PlayerList.ClipsDescendants = true
+PlayerList.Active = true
+PlayerList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+PlayerList.CanvasSize = UDim2.new()
+PlayerList.ScrollingDirection = Enum.ScrollingDirection.Y
+PlayerList.ScrollBarThickness = 4
+PlayerList.ScrollBarImageColor3 = Theme.Accent
 PlayerList.Size = UDim2.new(1, 0, 0, 220)
 PlayerList.Parent = PlayerCard
 round(PlayerList, 10)
 UI.BindTheme(PlayerList, "BackgroundColor3", "Surface2")
+UI.BindTheme(PlayerList, "ScrollBarImageColor3", "Accent")
 local PlayerListLayout = Instance.new("UIListLayout")
 PlayerListLayout.Padding = UDim.new(0, 5)
 PlayerListLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -5355,6 +5469,7 @@ updateCatalogStatus = function()
         local card = Instance.new("Frame")
         card.Name = "CatalogTile"
         card.LayoutOrder = index
+        card.Active = true
         card.BackgroundColor3 = Theme.Surface2
         card.Parent = CatalogGrid
         round(card, 15)
@@ -5374,6 +5489,8 @@ updateCatalogStatus = function()
         local view = button(card, "◉  VIEW", UDim2.fromOffset(84, 38), UDim2.new(1, -92, 0, 184))
         local edit = button(card, "✎", UDim2.fromOffset(34, 34), UDim2.new(1, -78, 0, 4))
         local deleteButton = button(card, "▣", UDim2.fromOffset(34, 34), UDim2.new(1, -40, 0, 4))
+        edit.ZIndex = 6
+        deleteButton.ZIndex = 6
         local runIcon = UI.BindActionIcon(run, "CatalogRun", nil, "      RUN")
         runIcon.Position = UDim2.fromOffset(17, 19)
         runIcon.Size = UDim2.fromOffset(17, 17)
@@ -5795,19 +5912,21 @@ UI.PlayUnloadScreen = function()
     image.Parent = pivot
     image.Image = UI.UnloadIconUrl ~= "" and (loadRemoteAsset(UI.UnloadIconUrl, "TasuHub/Icons/Unload.png") or UI.UnloadIconUrl) or HubIcon.Image
 
-    animate(screen, {GroupTransparency = 0}, 0.34, Enum.EasingStyle.Quint)
-    animate(cardScale, {Scale = 1}, 0.48, Enum.EasingStyle.Back)
-    task.wait(0.28)
+    animate(screen, {GroupTransparency = 0}, 0.58, Enum.EasingStyle.Quint)
+    animate(cardScale, {Scale = 1}, 0.78, Enum.EasingStyle.Back)
+    task.wait(0.62)
     pivot.Rotation = -12
-    animate(pivot, {Rotation = 12}, 0.52, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-    task.wait(0.52)
-    animate(pivot, {Rotation = -10}, 0.48, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-    task.wait(0.48)
-    animate(pivot, {Rotation = 0}, 0.38, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-    task.wait(0.44)
-    animate(screen, {GroupTransparency = 1}, 0.38, Enum.EasingStyle.Quint)
-    animate(cardScale, {Scale = 0.9}, 0.38, Enum.EasingStyle.Quint)
-    task.wait(0.38)
+    animate(pivot, {Rotation = 12}, 0.82, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+    task.wait(0.82)
+    animate(pivot, {Rotation = -10}, 0.76, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+    task.wait(0.76)
+    animate(pivot, {Rotation = 8}, 0.68, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+    task.wait(0.68)
+    animate(pivot, {Rotation = 0}, 0.58, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+    task.wait(0.85)
+    animate(screen, {GroupTransparency = 1}, 0.66, Enum.EasingStyle.Quint)
+    animate(cardScale, {Scale = 0.9}, 0.66, Enum.EasingStyle.Quint)
+    task.wait(0.66)
     screen:Destroy()
 end
 
@@ -5896,11 +6015,11 @@ UI.SetLoading(1, "Welcome to TasuHub")
 task.wait(math.random(10, 30) / 10)
 UI.LoaderStatus.Text = "Done!"
 task.wait(1.5)
-UI.Ready = true
 animate(UI.LoaderCard, {Position = UDim2.fromScale(0.5, 1.3)}, 0.8, Enum.EasingStyle.Quint)
-task.wait(0.35)
+task.wait(0.82)
 TopBar.Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, -72)
 TopBar.Visible = true
-animate(TopBar, {Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, 44)}, 0.75, Enum.EasingStyle.Quint)
-task.wait(0.48)
+animate(TopBar, {Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, 44)}, 1.18, Enum.EasingStyle.Quint)
+task.wait(1.2)
+UI.Ready = true
 if UI.Loader then UI.Loader:Destroy() end
