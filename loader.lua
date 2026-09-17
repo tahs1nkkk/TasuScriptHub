@@ -3121,35 +3121,12 @@ end
 local function createESP(player)
     destroyESP(player)
     local record = {
-        BoxTop = newLine(ScreenGui),
-        BoxBottom = newLine(ScreenGui),
-        BoxLeft = newLine(ScreenGui),
-        BoxRight = newLine(ScreenGui),
-        BoxFill = Instance.new("Frame"),
-        HealthBg = newLine(ScreenGui, Color3.fromRGB(25, 25, 27)),
-        HealthBar = newLine(ScreenGui, Color3.fromRGB(100, 230, 130)),
         Tracer = newLine(ScreenGui),
-        HeadDot = Instance.new("Frame"),
         SkeletonLayer = Instance.new("Frame"),
         SkeletonLines = {},
         Arrow = textLabel(ScreenGui, "▲", UDim2.fromOffset(32, 32), nil, 28, Theme.Accent, Enum.TextXAlignment.Center),
-        Label = textLabel(ScreenGui, "", UDim2.fromOffset(220, 20), nil, 13, Theme.Text, Enum.TextXAlignment.Center),
         Highlight = Instance.new("Highlight")
     }
-    record.BoxFill.BorderSizePixel = 0
-    record.BoxFill.BackgroundColor3 = Theme.Accent
-    record.BoxFill.BackgroundTransparency = 0.82
-    record.BoxFill.Visible = false
-    record.BoxFill.ZIndex = 1
-    record.BoxFill.Parent = ScreenGui
-    record.HeadDot.AnchorPoint = Vector2.new(0.5, 0.5)
-    record.HeadDot.BorderSizePixel = 0
-    record.HeadDot.BackgroundColor3 = Theme.Accent
-    record.HeadDot.Size = UDim2.fromOffset(6, 6)
-    record.HeadDot.Visible = false
-    record.HeadDot.ZIndex = 3
-    record.HeadDot.Parent = ScreenGui
-    round(record.HeadDot, 6)
     record.SkeletonLayer.BackgroundTransparency = 1
     record.SkeletonLayer.Size = UDim2.fromScale(1, 1)
     record.SkeletonLayer.Visible = false
@@ -3163,11 +3140,6 @@ local function createESP(player)
     record.Arrow.TextStrokeTransparency = 0.15
     record.Arrow.Visible = false
     record.Arrow.ZIndex = 4
-    record.Label.AnchorPoint = Vector2.new(0.5, 1)
-    record.Label.RichText = true
-    record.Label.TextYAlignment = Enum.TextYAlignment.Bottom
-    record.Label.Visible = false
-    record.Label.ZIndex = 3
     record.Highlight.FillColor = Theme.Accent
     record.Highlight.OutlineColor = Theme.Text
     record.Highlight.FillTransparency = 0.75
@@ -3177,6 +3149,107 @@ local function createESP(player)
     record.Highlight.Parent = ScreenGui
     espRecords[player] = record
     return record
+end
+
+local function ensureWorldESP(record, character, root)
+    if record.WorldCharacter == character and record.BoxProxy and record.BoxProxy.Parent then return end
+    for _, key in ipairs({"BoxProxy", "NameBillboard", "HealthBillboard", "HeadAdornment"}) do
+        local object = record[key]
+        if object then pcall(function() object:Destroy() end) end
+        record[key] = nil
+    end
+    local boundsCFrame, boundsSize = character:GetBoundingBox()
+    local proxy = Instance.new("Part")
+    proxy.Name = "TasuESPBounds"
+    proxy.Size = boundsSize + Vector3.new(0.18, 0.18, 0.18)
+    proxy.CFrame = boundsCFrame
+    proxy.Transparency = 1
+    proxy.CanCollide = false
+    proxy.CanTouch = false
+    proxy.CanQuery = false
+    proxy.CastShadow = false
+    proxy.Massless = true
+    proxy.Parent = character
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = root
+    weld.Part1 = proxy
+    weld.Parent = proxy
+
+    local box = Instance.new("SelectionBox")
+    box.Name = "TasuESP3DBox"
+    box.Adornee = proxy
+    box.Color3 = Theme.Accent
+    box.SurfaceColor3 = Theme.Accent
+    box.SurfaceTransparency = 1
+    box.LineThickness = 0.025
+    box.Visible = false
+    box.Parent = proxy
+
+    local nameBillboard = Instance.new("BillboardGui")
+    nameBillboard.Name = "TasuESPName"
+    nameBillboard.Adornee = proxy
+    nameBillboard.AlwaysOnTop = true
+    nameBillboard.Enabled = false
+    nameBillboard.LightInfluence = 0
+    nameBillboard.MaxDistance = State.Visuals.MaxDistance
+    nameBillboard.Size = UDim2.fromOffset(240, 42)
+    nameBillboard.StudsOffsetWorldSpace = Vector3.new(0, boundsSize.Y * 0.5 + 0.75, 0)
+    nameBillboard.Parent = ScreenGui
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.FontFace = UI.Fonts.Option
+    label.RichText = true
+    label.Size = UDim2.fromScale(1, 1)
+    label.TextColor3 = Theme.Accent
+    label.TextSize = 14
+    label.TextStrokeColor3 = Color3.fromRGB(8, 12, 18)
+    label.TextStrokeTransparency = 0.25
+    label.TextWrapped = true
+    label.Parent = nameBillboard
+
+    local healthBillboard = Instance.new("BillboardGui")
+    healthBillboard.Name = "TasuESPHealth"
+    healthBillboard.Adornee = proxy
+    healthBillboard.AlwaysOnTop = true
+    healthBillboard.Enabled = false
+    healthBillboard.LightInfluence = 0
+    healthBillboard.MaxDistance = State.Visuals.MaxDistance
+    healthBillboard.Size = UDim2.fromOffset(8, math.clamp(math.floor(boundsSize.Y * 14), 54, 104))
+    healthBillboard.StudsOffset = Vector3.new(boundsSize.X * 0.5 + 0.4, 0, 0)
+    healthBillboard.Parent = ScreenGui
+    local healthBackground = Instance.new("Frame")
+    healthBackground.BackgroundColor3 = Color3.fromRGB(22, 24, 29)
+    healthBackground.BorderSizePixel = 0
+    healthBackground.Size = UDim2.fromScale(1, 1)
+    healthBackground.Parent = healthBillboard
+    local healthFill = Instance.new("Frame")
+    healthFill.AnchorPoint = Vector2.new(0, 1)
+    healthFill.BackgroundColor3 = Color3.fromRGB(80, 235, 120)
+    healthFill.BorderSizePixel = 0
+    healthFill.Position = UDim2.fromScale(0, 1)
+    healthFill.Size = UDim2.fromScale(1, 1)
+    healthFill.Parent = healthBackground
+
+    local headAdornment = Instance.new("SphereHandleAdornment")
+    headAdornment.Name = "TasuESPHeadDot"
+    headAdornment.Adornee = character:FindFirstChild("Head")
+    headAdornment.AlwaysOnTop = true
+    headAdornment.Color3 = Theme.Accent
+    headAdornment.Radius = 0.16
+    headAdornment.Transparency = 0.08
+    headAdornment.Visible = false
+    headAdornment.ZIndex = 3
+    headAdornment.Parent = ScreenGui
+
+    record.WorldCharacter = character
+    record.BoxProxy = proxy
+    record.Box3D = box
+    record.NameBillboard = nameBillboard
+    record.Label = label
+    record.HealthBillboard = healthBillboard
+    record.HealthBar = healthFill
+    record.HeadAdornment = headAdornment
+    record.LastInfoUpdate = 0
 end
 
 local function updateSkeleton(record, character, camera, color)
@@ -3261,6 +3334,12 @@ local function hideRecord(record)
         if key == "Highlight" then
             object.Enabled = false
             object.Adornee = nil
+        elseif typeof(object) == "Instance" and object:IsA("SelectionBox") then
+            object.Visible = false
+        elseif typeof(object) == "Instance" and object:IsA("BillboardGui") then
+            object.Enabled = false
+        elseif typeof(object) == "Instance" and object:IsA("HandleAdornment") then
+            object.Visible = false
         elseif typeof(object) == "Instance" and object:IsA("GuiObject") then
             object.Visible = false
         end
@@ -3278,127 +3357,87 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Camera.Value + 50,
         return
     end
     local localAlive, _, _, localRoot = getAlive(LocalPlayer)
+    local now = os.clock()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
             local record = espRecords[player] or createESP(player)
-            if not State.Visuals.Enabled then
+            local alive, character, humanoid, root = getAlive(player)
+            local distance = localAlive and localRoot and root and (root.Position - localRoot.Position).Magnitude or math.huge
+            if not alive or distance > State.Visuals.MaxDistance then
                 hideRecord(record)
             else
-                local alive, character, humanoid, root = getAlive(player)
-                local allowed = alive
-                local distance = localAlive and localRoot and root and (root.Position - localRoot.Position).Magnitude or math.huge
-                if not allowed or distance > State.Visuals.MaxDistance then
-                    hideRecord(record)
+                ensureWorldESP(record, character, root)
+                local color = getPlayerVisualColor(player)
+                local rootScreen = nil
+                local visibleOnScreen = false
+                if State.Visuals.Tracers or State.Visuals.Skeleton or State.Visuals.Offscreen then
+                    local projectedRoot, onScreen = camera:WorldToScreenPoint(root.Position)
+                    rootScreen = projectedRoot
+                    visibleOnScreen = onScreen and projectedRoot.Z > 0
+                end
+
+                record.Box3D.Color3 = color
+                record.Box3D.SurfaceColor3 = color
+                record.Box3D.LineThickness = math.clamp(State.Visuals.Thickness * 0.0125, 0.0125, 0.06)
+                record.Box3D.SurfaceTransparency = State.Visuals.BoxFilled and 0.82 or 1
+                record.Box3D.Visible = State.Visuals.Boxes
+
+                record.NameBillboard.MaxDistance = State.Visuals.MaxDistance
+                record.NameBillboard.Enabled = State.Visuals.Names or State.Visuals.Distance
+                record.HealthBillboard.MaxDistance = State.Visuals.MaxDistance
+                record.HealthBillboard.Enabled = State.Visuals.Health
+                record.HeadAdornment.Color3 = color
+                record.HeadAdornment.Adornee = character:FindFirstChild("Head")
+                record.HeadAdornment.Visible = State.Visuals.HeadDot and record.HeadAdornment.Adornee ~= nil
+
+                if now - (record.LastInfoUpdate or 0) >= 0.12 then
+                    record.LastInfoUpdate = now
+                    local nameText = State.Visuals.Names and player.DisplayName or ""
+                    local distanceColor = State.World.RGB.ESP.Enabled and color or Color3.fromRGB(255, 196, 74)
+                    local distanceText = State.Visuals.Distance and string.format("<font color=\"%s\">[%.0f studs]</font>", colorToHex(distanceColor), distance) or ""
+                    record.Label.Text = nameText ~= "" and distanceText ~= "" and nameText .. "\n" .. distanceText or nameText .. distanceText
+                    record.Label.TextColor3 = color
+                    local ratio = math.clamp(humanoid.Health / math.max(1, humanoid.MaxHealth), 0, 1)
+                    record.HealthBar.Size = UDim2.fromScale(1, ratio)
+                    record.HealthBar.BackgroundColor3 = Color3.fromRGB(235, 70, 70):Lerp(Color3.fromRGB(80, 235, 120), ratio)
+                end
+
+                record.Tracer.BackgroundColor3 = color
+                if State.Visuals.Tracers and visibleOnScreen and rootScreen then
+                    local canvas = getCanvasSize()
+                    setLine(record.Tracer, Vector2.new(canvas.X * 0.5, canvas.Y - 3), Vector2.new(rootScreen.X, rootScreen.Y), State.Visuals.Thickness)
                 else
-                    if record.BoundsCharacter ~= character then
-                        record.BoundsCharacter = character
-                        record.BoundsParts = {}
-                        for _, part in ipairs(character:GetDescendants()) do
-                            if part:IsA("BasePart") and not part:FindFirstAncestorOfClass("Accessory") and not part:FindFirstAncestorOfClass("Tool") then
-                                table.insert(record.BoundsParts, part)
-                            end
-                        end
-                    end
-                    local left, right, top, bottom = getBoundingScreenBox(character, camera, nil, record.BoundsParts)
-                    if not left then
-                        hideRecord(record)
-                        if State.Visuals.Offscreen then
-                            local rootScreen = camera:WorldToScreenPoint(root.Position)
-                            local center = getCanvasSize() * 0.5
-                            local direction = Vector2.new(rootScreen.X, rootScreen.Y) - center
-                            if rootScreen.Z < 0 then direction = -direction end
-                            if direction.Magnitude > 0 then
-                                local edge = center + direction.Unit * math.min(center.X, center.Y) * 0.82
-                                local distanceRatio = math.clamp(distance / math.max(25, State.Visuals.MaxDistance), 0, 1)
-                                local arrowSize = math.floor(18 + distanceRatio * 30)
-                                record.Arrow.Size = UDim2.fromOffset(arrowSize, arrowSize)
-                                record.Arrow.TextSize = math.floor(16 + distanceRatio * 24)
-                                record.Arrow.Position = UDim2.fromOffset(edge.X, edge.Y)
-                                record.Arrow.Rotation = math.deg(math.atan2(direction.Y, direction.X)) + 90
-                                record.Arrow.TextColor3 = getPlayerVisualColor(player)
-                                record.Arrow.Visible = true
-                            end
-                        end
-                    else
-                        local width = right - left
-                        local height = bottom - top
-                        local centerX = left + width * 0.5
-                        local color = getPlayerVisualColor(player)
-                        record.Arrow.Visible = false
-                        for _, line in ipairs({record.BoxTop, record.BoxBottom, record.BoxLeft, record.BoxRight, record.Tracer}) do
-                            line.BackgroundColor3 = color
-                        end
-                        if State.Visuals.Boxes then
-                            setLine(record.BoxTop, Vector2.new(left, top), Vector2.new(right, top), State.Visuals.Thickness)
-                            setLine(record.BoxBottom, Vector2.new(left, bottom), Vector2.new(right, bottom), State.Visuals.Thickness)
-                            setLine(record.BoxLeft, Vector2.new(left, top), Vector2.new(left, bottom), State.Visuals.Thickness)
-                            setLine(record.BoxRight, Vector2.new(right, top), Vector2.new(right, bottom), State.Visuals.Thickness)
-                        else
-                            record.BoxTop.Visible = false
-                            record.BoxBottom.Visible = false
-                            record.BoxLeft.Visible = false
-                            record.BoxRight.Visible = false
-                        end
-                        record.BoxFill.Position = UDim2.fromOffset(left, top)
-                        record.BoxFill.Size = UDim2.fromOffset(width, height)
-                        record.BoxFill.BackgroundColor3 = color
-                        record.BoxFill.Visible = State.Visuals.Boxes and State.Visuals.BoxFilled
-                        if State.Visuals.Health then
-                            local ratio = math.clamp(humanoid.Health / math.max(1, humanoid.MaxHealth), 0, 1)
-                            local barX = right + 4
-                            record.HealthBg.AnchorPoint = Vector2.zero
-                            record.HealthBg.Position = UDim2.fromOffset(barX, top)
-                            record.HealthBg.Size = UDim2.fromOffset(6, height)
-                            record.HealthBg.Rotation = 0
-                            record.HealthBg.Visible = true
-                            record.HealthBar.AnchorPoint = Vector2.new(0, 1)
-                            record.HealthBar.Position = UDim2.fromOffset(barX + 1, bottom - 1)
-                            record.HealthBar.Size = UDim2.fromOffset(4, math.max(0, (height - 2) * ratio))
-                            record.HealthBar.Rotation = 0
-                            record.HealthBar.Visible = true
-                            record.HealthBar.BackgroundColor3 = Color3.fromRGB(235, 70, 70):Lerp(Color3.fromRGB(80, 235, 120), ratio)
-                        else
-                            record.HealthBg.Visible = false
-                            record.HealthBar.Visible = false
-                        end
-                        local nameText = State.Visuals.Names and player.DisplayName or ""
-                        local distanceColor = State.World.RGB.ESP.Enabled and color or Color3.fromRGB(255, 196, 74)
-                        local distanceText = State.Visuals.Distance and string.format("<font color=\"%s\">[%.0f studs]</font>", colorToHex(distanceColor), distance) or ""
-                        record.Label.Text = nameText ~= "" and distanceText ~= "" and nameText .. "\n" .. distanceText or nameText .. distanceText
-                        record.Label.TextColor3 = color
-                        record.Label.Size = UDim2.fromOffset(240, 38)
-                        record.Label.Position = UDim2.fromOffset(centerX, top - 4)
-                        record.Label.Visible = State.Visuals.Names or State.Visuals.Distance
-                        local head = character:FindFirstChild("Head")
-                        if State.Visuals.HeadDot and head then
-                            local headScreen, headVisible = camera:WorldToScreenPoint(head.Position)
-                            record.HeadDot.Position = UDim2.fromOffset(headScreen.X, headScreen.Y)
-                            record.HeadDot.BackgroundColor3 = color
-                            record.HeadDot.Visible = headVisible and headScreen.Z > 0
-                        else
-                            record.HeadDot.Visible = false
-                        end
-                        if State.Visuals.Skeleton then
-                            updateSkeleton(record, character, camera, color)
-                        else
-                            record.SkeletonLayer.Visible = false
-                        end
-                        if State.Visuals.Tracers then
-                            local rootScreen = camera:WorldToScreenPoint(root.Position)
-                            local canvas = getCanvasSize()
-                            if rootScreen.Z > 0 then
-                                setLine(record.Tracer, Vector2.new(canvas.X * 0.5, canvas.Y - 3), Vector2.new(rootScreen.X, rootScreen.Y), State.Visuals.Thickness)
-                            else
-                                record.Tracer.Visible = false
-                            end
-                        else
-                            record.Tracer.Visible = false
-                        end
-                        record.Highlight.Adornee = character
-                        record.Highlight.FillColor = color
-                        record.Highlight.Enabled = State.Visuals.Chams
+                    record.Tracer.Visible = false
+                end
+
+                if State.Visuals.Skeleton and visibleOnScreen then
+                    updateSkeleton(record, character, camera, color)
+                else
+                    record.SkeletonLayer.Visible = false
+                end
+
+                record.Arrow.Visible = false
+                if State.Visuals.Offscreen and not visibleOnScreen and rootScreen then
+                    local center = getCanvasSize() * 0.5
+                    local direction = Vector2.new(rootScreen.X, rootScreen.Y) - center
+                    if rootScreen.Z < 0 then direction = -direction end
+                    if direction.Magnitude > 0 then
+                        local edge = center + direction.Unit * math.min(center.X, center.Y) * 0.82
+                        local distanceRatio = math.clamp(distance / math.max(25, State.Visuals.MaxDistance), 0, 1)
+                        local arrowSize = math.floor(18 + distanceRatio * 30)
+                        record.Arrow.Size = UDim2.fromOffset(arrowSize, arrowSize)
+                        record.Arrow.TextSize = math.floor(16 + distanceRatio * 24)
+                        record.Arrow.Position = UDim2.fromOffset(edge.X, edge.Y)
+                        record.Arrow.Rotation = math.deg(math.atan2(direction.Y, direction.X)) + 90
+                        record.Arrow.TextColor3 = color
+                        record.Arrow.Visible = true
                     end
                 end
+
+                record.Highlight.Adornee = character
+                record.Highlight.FillColor = color
+                record.Highlight.OutlineColor = color
+                record.Highlight.Enabled = State.Visuals.Chams
             end
         end
     end
