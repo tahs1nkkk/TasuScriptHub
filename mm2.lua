@@ -7,10 +7,6 @@ local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then return end
-if game.PlaceId ~= 142823291 then
-    warn("TasuHub MM2: bu modul yalnizca Murder Mystery 2 icinde calisir")
-    return
-end
 
 local env = getgenv and getgenv() or _G
 if env.TasuHubMM2 and type(env.TasuHubMM2.Unload) == "function" then
@@ -340,48 +336,3 @@ env.TasuHubMM2 = {
     end,
     Unload = unload
 }
-
--- Discord telemetry is optional. The MM2 menu always loads, even when the
--- local Node bridge is closed. If the user starts it manually later, this
--- background probe connects without blocking the menu.
-local function getHttpRequest()
-    local request = env.request or env.http_request
-    if not request and type(env.syn) == "table" then request = env.syn.request end
-    return request
-end
-
-local function requestTelemetry(request)
-    local ok, response = pcall(request, {
-        Url = "http://127.0.0.1:8787/client/mm2-telemetry.lua",
-        Method = "GET",
-        Headers = { ["Cache-Control"] = "no-cache" }
-    })
-    local statusCode = ok and type(response) == "table" and tonumber(response.StatusCode or response.Status)
-    local source = ok and type(response) == "table" and (response.Body or response.body)
-    if statusCode and statusCode >= 200 and statusCode < 300 and type(source) == "string" and source ~= "" then
-        return source
-    end
-    return nil
-end
-
-local function startLocalMM2LiveCard()
-    local request = getHttpRequest()
-    if type(request) ~= "function" then return end
-    local owner = env.TasuHubMM2
-    while not unloaded and env.TasuHubMM2 == owner do
-        local source = requestTelemetry(request)
-        if source then
-            local chunk, compileError = loadstring(source, "TasuHubMM2LiveCard")
-            if not chunk then
-                warn("TasuHub Live Card derlenemedi:", compileError)
-                return
-            end
-            local started, runtimeError = pcall(chunk)
-            if not started then warn("TasuHub Live Card baslatilamadi:", runtimeError) end
-            return
-        end
-        task.wait(5)
-    end
-end
-
-task.spawn(startLocalMM2LiveCard)
