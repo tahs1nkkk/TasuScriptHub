@@ -341,9 +341,9 @@ env.TasuHubMM2 = {
     Unload = unload
 }
 
--- The live card belongs to the MM2 catalog module, not to the main TasuHub
--- loader. Ask the tiny localhost launcher to start the private Node bridge,
--- then fetch telemetry after the bridge becomes healthy.
+-- Discord telemetry is optional. The MM2 menu always loads, even when the
+-- local Node bridge is closed. If the user starts it manually later, this
+-- background probe connects without blocking the menu.
 local function getHttpRequest()
     local request = env.request or env.http_request
     if not request and type(env.syn) == "table" then request = env.syn.request end
@@ -366,37 +366,22 @@ end
 
 local function startLocalMM2LiveCard()
     local request = getHttpRequest()
-    if type(request) ~= "function" then
-        warn("TasuHub Live Card: executor localhost HTTP request desteklemiyor")
-        return
-    end
-
-    local source = requestTelemetry(request)
-    if not source then
-        pcall(request, {
-            Url = "http://127.0.0.1:8786/start",
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = "{}"
-        })
-        for _ = 1, 24 do
-            task.wait(0.25)
-            source = requestTelemetry(request)
-            if source then break end
+    if type(request) ~= "function" then return end
+    local owner = env.TasuHubMM2
+    while not unloaded and env.TasuHubMM2 == owner do
+        local source = requestTelemetry(request)
+        if source then
+            local chunk, compileError = loadstring(source, "TasuHubMM2LiveCard")
+            if not chunk then
+                warn("TasuHub Live Card derlenemedi:", compileError)
+                return
+            end
+            local started, runtimeError = pcall(chunk)
+            if not started then warn("TasuHub Live Card baslatilamadi:", runtimeError) end
+            return
         end
+        task.wait(5)
     end
-
-    if not source then
-        warn("TasuHub Live Card: yerel baslaticiya ulasilamadi. install-launcher.ps1 dosyasini bir kez calistirin.")
-        return
-    end
-    local chunk, compileError = loadstring(source, "TasuHubMM2LiveCard")
-    if not chunk then
-        warn("TasuHub Live Card derlenemedi:", compileError)
-        return
-    end
-    local started, runtimeError = pcall(chunk)
-    if not started then warn("TasuHub Live Card baslatilamadi:", runtimeError) end
 end
 
 task.spawn(startLocalMM2LiveCard)

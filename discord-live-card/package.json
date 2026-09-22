@@ -6,11 +6,10 @@
   "description": "Roblox sunucu durumunu canli PNG karta cevirip Discord webhook mesajinda gunceller.",
   "scripts": {
     "start": "node src/server.mjs",
-    "launcher": "node src/launcher.mjs",
     "dev": "node --watch src/server.mjs",
     "demo": "node scripts/demo.mjs",
     "check:discord": "node scripts/check-discord.mjs",
-    "check": "node --check src/server.mjs && node --check src/launcher.mjs && node --check src/avatars.mjs && node --check src/card.mjs && node --check src/config.mjs && node --check src/discord.mjs && node --check src/state.mjs",
+    "check": "node --check src/server.mjs && node --check src/avatars.mjs && node --check src/card.mjs && node --check src/config.mjs && node --check src/discord.mjs && node --check src/state.mjs",
     "test": "node --test"
   },
   "engines": {
