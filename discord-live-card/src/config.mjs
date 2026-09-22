@@ -28,6 +28,7 @@ export function getConfig() {
   const port = integer(process.env.PORT, 8787, 1, 65535);
   const debounceMs = integer(process.env.PUBLISH_DEBOUNCE_MS, 750, 100, 10_000);
   const connectionTimeoutMs = integer(process.env.CONNECTION_TIMEOUT_MS, 15_000, 5_000, 300_000);
+  const autoShutdownMs = integer(process.env.AUTO_SHUTDOWN_MS, 30_000, connectionTimeoutMs + 1_000, 600_000);
   return {
     port,
     host: "127.0.0.1",
@@ -35,7 +36,8 @@ export function getConfig() {
     discordBotToken: process.env.DISCORD_BOT_TOKEN || "",
     discordChannelId: process.env.DISCORD_CHANNEL_ID || "",
     debounceMs,
-    connectionTimeoutMs
+    connectionTimeoutMs,
+    autoShutdownMs
   };
 }
 

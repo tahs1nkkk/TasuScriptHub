@@ -19,6 +19,7 @@ await mkdir(dataDir, { recursive: true });
 let stored = await loadStoredState();
 let publishTimer = null;
 let connectionTimer = null;
+let shutdownTimer = null;
 let publishChain = Promise.resolve();
 let shuttingDown = false;
 const seenEventIds = new Map();
@@ -37,7 +38,8 @@ const server = http.createServer(async (request, response) => {
         ingestTokenConfigured: config.ingestToken.length >= 32,
         hasState: Boolean(stored.snapshot),
         systemStatus: stored.snapshot?.systemStatus || "connected",
-        connectionTimeoutMs: config.connectionTimeoutMs
+        connectionTimeoutMs: config.connectionTimeoutMs,
+        autoShutdownMs: config.autoShutdownMs
       });
     }
 
@@ -80,6 +82,13 @@ const server = http.createServer(async (request, response) => {
       return json(response, 202, { ok: true, queued: true, eventId: snapshot.eventId });
     }
 
+    if (request.method === "POST" && url.pathname === "/control/shutdown") {
+      authenticate(request);
+      json(response, 202, { ok: true, shuttingDown: true });
+      setImmediate(() => void shutdown("MM2 module unloaded"));
+      return;
+    }
+
     return json(response, 404, { error: "Bulunamadi." });
   } catch (error) {
     const status = Number(error.statusCode) || 500;
@@ -94,6 +103,7 @@ server.listen(config.port, config.host, () => {
   console.log(`Discord modu: ${config.discordBotToken && config.discordChannelId ? "bot etkin" : "preview"}`);
   if (config.ingestToken.length < 32) console.warn("UYARI: INGEST_TOKEN en az 32 karakter olmadan POST istekleri reddedilir.");
   void setSystemState("waiting");
+  scheduleAutoShutdown();
 });
 
 function schedulePublish() {
@@ -141,6 +151,14 @@ function scheduleConnectionWatch() {
   connectionTimer = setTimeout(() => {
     if (!shuttingDown) void setSystemState("disconnected");
   }, config.connectionTimeoutMs);
+  scheduleAutoShutdown();
+}
+
+function scheduleAutoShutdown() {
+  clearTimeout(shutdownTimer);
+  shutdownTimer = setTimeout(() => {
+    if (!shuttingDown) void shutdown("MM2 heartbeat timeout");
+  }, config.autoShutdownMs);
 }
 
 function makeSystemSnapshot(systemStatus) {
@@ -166,6 +184,7 @@ async function shutdown(signal) {
   shuttingDown = true;
   clearTimeout(publishTimer);
   clearTimeout(connectionTimer);
+  clearTimeout(shutdownTimer);
   console.log(`${signal}: servis kapali karti yayinlaniyor...`);
   try {
     await setSystemState("offline");

@@ -33,7 +33,7 @@ Copy-Item .env.example .env
 1. En az 32 karakterlik rastgele `INGEST_TOKEN` belirleyin.
 2. Discord bot tokenini `DISCORD_BOT_TOKEN` alanina koyun.
 3. Hedef metin kanalinin kimligini `DISCORD_CHANNEL_ID` alanina koyun.
-4. `npm start` calistirin veya `start-local.cmd` dosyasina cift tiklayin.
+4. Bir kez `powershell -ExecutionPolicy Bypass -File .\install-launcher.ps1` calistirin. Bu, Windows oturumunda sessizce bekleyen yerel baslaticiyi kurar.
 
 Gercek tokenleri `.env.example` dosyasinda tutmayin. `.env.example` yalnizca bos sablondur; gizli bilgiler `.gitignore` tarafindan dislanan `.env` dosyasinda kalmalidir.
 
@@ -55,6 +55,7 @@ Bu servis slash command veya mesaj icerigi okumaz; dolayisiyla Message Content I
 - Uygulama acilinca: **BOT AKTIF / Oyun algilanmadi**
 - MM2 snapshot veya heartbeat gelince: normal canli tur karti
 - `CONNECTION_TIMEOUT_MS` boyunca heartbeat gelmezse: **MM2 BAGLANTISI YOK**
+- `AUTO_SHUTDOWN_MS` boyunca heartbeat gelmezse: **SERVIS KAPALI** karti yayinlanir ve asil bot sureci kapanir
 - `Ctrl+C`, `SIGTERM` veya normal uygulama kapatma sirasinda: kapatmadan once **SERVIS KAPALI** karti
 
 Ani elektrik kesintisi, bilgisayarin kilitlenmesi veya zorla `taskkill /F` durumunda uygulama kapanmadan Discord'a istek gonderemeyecegi icin kapali karti garanti edilemez. Normal kapatmada ayni Discord mesaji duzenlenir.
@@ -67,7 +68,7 @@ Yerel menu/GUI -> http://127.0.0.1:8787/v1/snapshot
                  -> Discord Bot API (disariya giden HTTPS)
 ```
 
-Bilgisayarinizda acik kalmasi gereken tek uygulama bu Node surecidir. Modem portu acma, domain, VPS, tunnel veya public IP gerekmez. Discord'a mesaj gonderebilmesi ve Roblox avatarlarini alabilmesi icin bilgisayarin normal internet baglantisi gerekir.
+Windows oturumunda yalnizca hafif yerel baslatici bekler. Asil Discord bot sureci Catalog'da MM2 **RUN** tiklaninca acilir ve oyun/MM2 heartbeat'i kesilince otomatik kapanir. Modem portu acma, domain, VPS, tunnel veya public IP gerekmez. Discord'a mesaj gonderebilmesi ve Roblox avatarlarini alabilmesi icin bilgisayarin normal internet baglantisi gerekir.
 
 Yerel fonksiyon testi:
 
@@ -153,10 +154,13 @@ Potassium varsayilan loader konumu:
 
 Calisma sirasi:
 
-1. Bu proje kokundeki `start-local.cmd` dosyasini acin.
-2. Roblox'ta Murder Mystery 2 oyununa girin.
-3. Potassium icinden `TasuHub.luau` dosyasini calistirin.
-4. Loader MM2'yi algilarsa `http://127.0.0.1:8787/client/mm2-telemetry.lua` modulunu otomatik yukler.
+1. Ilk kurulumda bir kez `install-launcher.ps1` dosyasini calistirin.
+2. Roblox'ta Murder Mystery 2 oyununa girin ve Potassium'dan `TasuHub.luau` dosyasini calistirin.
+3. TasuHub Catalog icindeki MM2 kartinda **RUN** secin.
+4. MM2 modulu `http://127.0.0.1:8786/start` ile asil bot surecini acip telemetry modulunu yukler.
 5. Modul her 5 saniyede bir katil, dedektif, dedektif olum durumu, dusen silah ve silahi alan oyuncu snapshot'ini yerel kopruye yollar.
+6. TasuHub'in ilk acilisi tek basina botu baslatmaz. Oyundan cikilinca veya MM2 modulu kapatilinca asil bot sureci otomatik kapanir.
+
+Yerel baslaticiyi kaldirmak icin `uninstall-launcher.ps1` calistirilabilir.
 
 Discord bot tokeni veya kanal kimligi Luau dosyasina konmaz. Yerel servis telemetry dosyasina yalnizca `INGEST_TOKEN` degerini calisma aninda enjekte eder. Baglanti durumu executor konsolundan ve `getgenv().TasuHubMM2LiveCard` tablosundan kontrol edilebilir.

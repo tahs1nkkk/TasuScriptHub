@@ -7,6 +7,10 @@ local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then return end
+if game.PlaceId ~= 142823291 then
+    warn("TasuHub MM2: bu modul yalnizca Murder Mystery 2 icinde calisir")
+    return
+end
 
 local env = getgenv and getgenv() or _G
 if env.TasuHubMM2 and type(env.TasuHubMM2.Unload) == "function" then
@@ -336,3 +340,63 @@ env.TasuHubMM2 = {
     end,
     Unload = unload
 }
+
+-- The live card belongs to the MM2 catalog module, not to the main TasuHub
+-- loader. Ask the tiny localhost launcher to start the private Node bridge,
+-- then fetch telemetry after the bridge becomes healthy.
+local function getHttpRequest()
+    local request = env.request or env.http_request
+    if not request and type(env.syn) == "table" then request = env.syn.request end
+    return request
+end
+
+local function requestTelemetry(request)
+    local ok, response = pcall(request, {
+        Url = "http://127.0.0.1:8787/client/mm2-telemetry.lua",
+        Method = "GET",
+        Headers = { ["Cache-Control"] = "no-cache" }
+    })
+    local statusCode = ok and type(response) == "table" and tonumber(response.StatusCode or response.Status)
+    local source = ok and type(response) == "table" and (response.Body or response.body)
+    if statusCode and statusCode >= 200 and statusCode < 300 and type(source) == "string" and source ~= "" then
+        return source
+    end
+    return nil
+end
+
+local function startLocalMM2LiveCard()
+    local request = getHttpRequest()
+    if type(request) ~= "function" then
+        warn("TasuHub Live Card: executor localhost HTTP request desteklemiyor")
+        return
+    end
+
+    local source = requestTelemetry(request)
+    if not source then
+        pcall(request, {
+            Url = "http://127.0.0.1:8786/start",
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = "{}"
+        })
+        for _ = 1, 24 do
+            task.wait(0.25)
+            source = requestTelemetry(request)
+            if source then break end
+        end
+    end
+
+    if not source then
+        warn("TasuHub Live Card: yerel baslaticiya ulasilamadi. install-launcher.ps1 dosyasini bir kez calistirin.")
+        return
+    end
+    local chunk, compileError = loadstring(source, "TasuHubMM2LiveCard")
+    if not chunk then
+        warn("TasuHub Live Card derlenemedi:", compileError)
+        return
+    end
+    local started, runtimeError = pcall(chunk)
+    if not started then warn("TasuHub Live Card baslatilamadi:", runtimeError) end
+end
+
+task.spawn(startLocalMM2LiveCard)

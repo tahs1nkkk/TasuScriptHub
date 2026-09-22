@@ -43,6 +43,7 @@ local bridge = {
 	LastStatusCode = nil,
 }
 env.TasuHubMM2LiveCard = bridge
+local owner = env.TasuHubMM2
 
 local function findTool(player: Player, toolName: string): Tool?
 	local character = player.Character
@@ -191,10 +192,18 @@ local function publish()
 	bridge.LastError = if bridge.Connected then nil else tostring(result.Body or result.StatusMessage or "HTTP error")
 end
 
-local function unload()
+local function unload(stopServer: boolean?)
 	if stopped then return end
 	stopped = true
 	bridge.Connected = false
+	if stopServer then
+		pcall(requestFunction, {
+			Url = "http://127.0.0.1:8787/control/shutdown",
+			Method = "POST",
+			Headers = { ["Authorization"] = "Bearer " .. INGEST_TOKEN },
+			Body = "{}",
+		})
+	end
 	if env.TasuHubMM2LiveCard == bridge then
 		env.TasuHubMM2LiveCard = nil
 	end
@@ -208,6 +217,12 @@ task.spawn(function()
 			task.wait(0.5)
 			if stopped then break end
 		end
-		if env.TasuHub == nil then unload() end
+		if env.TasuHub == nil then
+			unload(true)
+		elseif env.TasuHubMM2 ~= owner then
+			-- A Catalog re-run replaces the module briefly. Stop this reporter,
+			-- but let the replacement keep using the same local bot process.
+			unload(false)
+		end
 	end
 end)
