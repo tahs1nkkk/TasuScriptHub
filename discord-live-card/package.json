@@ -1,0 +1,21 @@
+{
+  "name": "roblox-discord-live-card",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Roblox sunucu durumunu canli PNG karta cevirip Discord webhook mesajinda gunceller.",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "node --watch src/server.mjs",
+    "demo": "node scripts/demo.mjs",
+    "check:discord": "node scripts/check-discord.mjs",
+    "check": "node --check src/server.mjs && node --check src/avatars.mjs && node --check src/card.mjs && node --check src/config.mjs && node --check src/discord.mjs && node --check src/state.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "sharp": "^0.35.4"
+  }
+}

@@ -6066,6 +6066,37 @@ env.TasuHub = {
     Unload = unload
 }
 
+-- The Discord live-card bridge stays on the user's PC. When MM2 is open,
+-- request the telemetry module from the loopback-only Node service. No bot
+-- token or Discord channel information is embedded in this loader.
+local function startLocalMM2LiveCard()
+    if game.PlaceId ~= 142823291 then return end
+    local request = getRequest()
+    if type(request) ~= "function" then
+        warn("TasuHub Live Card: executor localhost HTTP request desteklemiyor")
+        return
+    end
+    local ok, response = pcall(request, {
+        Url = "http://127.0.0.1:8787/client/mm2-telemetry.lua",
+        Method = "GET",
+        Headers = { ["Cache-Control"] = "no-cache" }
+    })
+    local statusCode = ok and type(response) == "table" and tonumber(response.StatusCode or response.Status)
+    local source = ok and type(response) == "table" and (response.Body or response.body)
+    if not statusCode or statusCode < 200 or statusCode >= 300 or type(source) ~= "string" or source == "" then
+        warn("TasuHub Live Card: yerel servis baglantisi yok. Once discord-live-card/start-local.cmd calistirin.")
+        return
+    end
+    local chunk, compileError = loadstring(source, "TasuHubMM2LiveCard")
+    if not chunk then
+        warn("TasuHub Live Card derlenemedi:", compileError)
+        return
+    end
+    local started, runtimeError = pcall(chunk)
+    if not started then warn("TasuHub Live Card baslatilamadi:", runtimeError) end
+end
+task.spawn(startLocalMM2LiveCard)
+
 UI.SetLoading(1, "Welcome to TasuHub")
 task.wait(math.random(10, 30) / 10)
 UI.LoaderStatus.Text = "Done!"

@@ -1,0 +1,28 @@
+{
+  "eventId": "server-job-id:round-12:revision-4",
+  "sessionId": "server-job-id",
+  "phase": "round",
+  "map": "Research Facility",
+  "round": 12,
+  "murderer": {
+    "userId": 123456,
+    "username": "MurdererUsername",
+    "displayName": "Murderer Display"
+  },
+  "detective": {
+    "userId": 654321,
+    "username": "DetectiveUsername",
+    "displayName": "Detective Display"
+  },
+  "detectiveAlive": false,
+  "gun": {
+    "status": "picked_up",
+    "holder": {
+      "userId": 987654,
+      "username": "HeroUsername",
+      "displayName": "Hero Display"
+    }
+  },
+  "winner": "none",
+  "sentAt": "2026-09-22T12:00:00Z"
+}
