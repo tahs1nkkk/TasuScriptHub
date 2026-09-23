@@ -5365,9 +5365,7 @@ local function parsePlaceId(value)
     return matched and tonumber(matched) or nil
 end
 
--- Pin the catalog module to the last known-good MM2 build. Discord telemetry
--- is attached separately after RUN, so it cannot break this menu module.
-local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/207c789c03ad5a38abe966e67536484d2121aba5/mm2.lua"
+local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/main/mm2.lua"
 local function ensureBuiltinCatalogEntries()
     for _, entry in ipairs(State.Catalog) do
         if entry.BuiltInId == "mm2" then
@@ -5474,22 +5472,6 @@ local function openCatalogEditor(index)
     catalogSource.Text = entry and tostring(entry.Source or "") or ""
     catalogOverlay.Visible = true
 end
-
-local function connectMM2TelemetryIfAvailable()
-    local request = getRequest()
-    if type(request) ~= "function" then return end
-    local ok, response = pcall(request, {
-        Url = "http://127.0.0.1:8787/client/mm2-telemetry.lua",
-        Method = "GET",
-        Headers = { ["Cache-Control"] = "no-cache" }
-    })
-    local statusCode = ok and type(response) == "table" and tonumber(response.StatusCode or response.Status)
-    local source = ok and type(response) == "table" and (response.Body or response.body)
-    if not statusCode or statusCode < 200 or statusCode >= 300 or type(source) ~= "string" or source == "" then return end
-    local telemetry = loadstring(source, "TasuHubMM2LiveCard")
-    if telemetry then pcall(telemetry) end
-end
-
 local function runCatalogEntry(entry)
     if entry.BuiltInId == "mm2" and game.PlaceId ~= entry.PlaceId then
         showToast("This script can only run inside Murder Mystery 2")
@@ -5513,7 +5495,6 @@ local function runCatalogEntry(entry)
         return
     end
     local ok, runtimeError = pcall(chunk)
-    if ok and entry.BuiltInId == "mm2" then task.spawn(connectMM2TelemetryIfAvailable) end
     showToast(ok and "Script completed" or tostring(runtimeError))
 end
 local function fetchBanner(entry)
@@ -6084,6 +6065,37 @@ env.TasuHub = {
     LoadConfig = loadConfig,
     Unload = unload
 }
+
+-- The Discord live-card bridge stays on the user's PC. When MM2 is open,
+-- request the telemetry module from the loopback-only Node service. No bot
+-- token or Discord channel information is embedded in this loader.
+local function startLocalMM2LiveCard()
+    if game.PlaceId ~= 142823291 then return end
+    local request = getRequest()
+    if type(request) ~= "function" then
+        warn("TasuHub Live Card: executor localhost HTTP request desteklemiyor")
+        return
+    end
+    local ok, response = pcall(request, {
+        Url = "http://127.0.0.1:8787/client/mm2-telemetry.lua",
+        Method = "GET",
+        Headers = { ["Cache-Control"] = "no-cache" }
+    })
+    local statusCode = ok and type(response) == "table" and tonumber(response.StatusCode or response.Status)
+    local source = ok and type(response) == "table" and (response.Body or response.body)
+    if not statusCode or statusCode < 200 or statusCode >= 300 or type(source) ~= "string" or source == "" then
+        warn("TasuHub Live Card: yerel servis baglantisi yok. Once discord-live-card/start-local.cmd calistirin.")
+        return
+    end
+    local chunk, compileError = loadstring(source, "TasuHubMM2LiveCard")
+    if not chunk then
+        warn("TasuHub Live Card derlenemedi:", compileError)
+        return
+    end
+    local started, runtimeError = pcall(chunk)
+    if not started then warn("TasuHub Live Card baslatilamadi:", runtimeError) end
+end
+task.spawn(startLocalMM2LiveCard)
 
 UI.SetLoading(1, "Welcome to TasuHub")
 task.wait(math.random(10, 30) / 10)
