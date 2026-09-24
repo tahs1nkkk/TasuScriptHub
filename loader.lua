@@ -466,16 +466,21 @@ local UI = {
         LoaderIconMaxScale = 1.08,
         LoaderReadyScale = 1.4,
         LoaderExitSoundDelay = 0,
-        CornerButtonSize = 78,
-        CornerButtonHoverSize = 84,
-        CornerButtonPressedSize = 74,
-        CornerButtonIconSize = 38,
+        CornerButtonSize = 70,
+        CornerButtonHoverSize = 76,
+        CornerButtonPressedSize = 67,
+        CornerButtonIconSize = 48,
+        CornerButtonHoverIconSize = 52,
+        CornerButtonPressedIconSize = 46,
         CornerButtonGap = 18,
         CornerButtonRadius = 16,
-        CornerButtonStroke = 3,
+        CornerButtonStroke = 6,
         CornerButtonBackgroundTransparency = 0.18,
-        CornerRailToggleSize = Vector2.new(30, 44),
+        CornerRailToggleThickness = 6,
+        CornerRailToggleLength = 64,
         CornerRailToggleGap = 10,
+        CornerDockTravelMargin = 8,
+        CornerDragThreshold = 6,
         MotionCornerReveal = 0.34,
         MotionCornerHover = 0.22,
         MotionCornerToggle = 0.44
@@ -484,7 +489,8 @@ local UI = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
         FadeOut = {Id = "rbxassetid://90657541635248", Volume = 0.09, PlaybackSpeed = 2 / 3, PitchCompensation = 1.5, TargetDuration = 3},
         PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
-        ButtonHover = {Id = "rbxassetid://113397864512278", Volume = 0.08, PlaybackSpeed = 1}
+        ButtonClick = {Id = "rbxassetid://113397864512278", Volume = 0.08, PlaybackSpeed = 1},
+        ButtonHover = {Id = "rbxassetid://10066936758", Volume = 0.045, PlaybackSpeed = 1.08}
     },
     Flags = {},
     Controls = {},
@@ -1349,34 +1355,58 @@ end
 
 do
     local tokens = UI.DesignTokens
-    local railHeight = tokens.CornerButtonHoverSize + tokens.CornerButtonSize + tokens.CornerButtonGap
-    local railWidth = tokens.CornerButtonHoverSize + tokens.CornerRailToggleGap + tokens.CornerRailToggleSize.X
-    local visibleStackPosition = UDim2.fromOffset(0, 0)
-    local hiddenStackPosition = UDim2.fromOffset(railWidth + 24, 0)
+    local stackPadding = tokens.CornerButtonStroke + 2
+    local stackWidth = tokens.CornerButtonHoverSize + stackPadding * 2
+    local stackHeight = tokens.CornerButtonHoverSize + tokens.CornerButtonSize + tokens.CornerButtonGap + stackPadding * 2
+    local sideRailWidth = stackWidth + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
+    local capRailHeight = stackHeight + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
+
+    UI.CornerDockSide = "Right"
+    UI.CornerDockRatio = 1
+    UI.CornerButtonsHidden = false
+    UI.CornerButtonToggleRevision = 0
+    UI.CornerRailSuppressClickUntil = 0
 
     UI.CornerActionRail = Instance.new("CanvasGroup")
     UI.CornerActionRail.Name = "CornerActionRail"
-    UI.CornerActionRail.AnchorPoint = Vector2.new(1, 1)
+    UI.CornerActionRail.AnchorPoint = Vector2.new(0, 0)
+    UI.CornerActionRail.Active = false
     UI.CornerActionRail.BackgroundTransparency = 1
     UI.CornerActionRail.BorderSizePixel = 0
     UI.CornerActionRail.ClipsDescendants = false
     UI.CornerActionRail.GroupTransparency = 1
-    UI.CornerActionRail.Position = UDim2.new(1, -24, 1, -24)
-    UI.CornerActionRail.Size = UDim2.fromOffset(railWidth, railHeight)
+    UI.CornerActionRail.Position = UDim2.fromOffset(0, 0)
+    UI.CornerActionRail.Size = UDim2.fromOffset(sideRailWidth, stackHeight)
     UI.CornerActionRail.Visible = false
     UI.CornerActionRail.ZIndex = 2000
     UI.CornerActionRail.Parent = InterfaceRoot
 
     UI.CornerButtonStack = Instance.new("CanvasGroup")
     UI.CornerButtonStack.Name = "ButtonStack"
+    UI.CornerButtonStack.Active = true
     UI.CornerButtonStack.BackgroundTransparency = 1
     UI.CornerButtonStack.BorderSizePixel = 0
     UI.CornerButtonStack.ClipsDescendants = false
     UI.CornerButtonStack.GroupTransparency = 0
-    UI.CornerButtonStack.Position = visibleStackPosition
-    UI.CornerButtonStack.Size = UDim2.fromOffset(tokens.CornerButtonHoverSize, railHeight)
+    UI.CornerButtonStack.Position = UDim2.fromOffset(0, 0)
+    UI.CornerButtonStack.Size = UDim2.fromOffset(stackWidth, stackHeight)
     UI.CornerButtonStack.ZIndex = 2000
     UI.CornerButtonStack.Parent = UI.CornerActionRail
+
+    local function animateCornerVisual(record, buttonSize, iconSize, duration)
+        animate(
+            record.Button,
+            {Size = UDim2.fromOffset(buttonSize, buttonSize)},
+            duration,
+            Enum.EasingStyle.Quint
+        )
+        animate(
+            record.Icon,
+            {Size = UDim2.fromOffset(iconSize, iconSize)},
+            duration,
+            Enum.EasingStyle.Quint
+        )
+    end
 
     local function createCornerButton(index, name, backgroundColor, borderColor)
         local action = Instance.new("ImageButton")
@@ -1390,8 +1420,9 @@ do
         action.ClipsDescendants = false
         action.Image = ""
         action.Position = UDim2.fromOffset(
-            tokens.CornerButtonHoverSize * 0.5,
-            tokens.CornerButtonHoverSize * 0.5 + (index - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap)
+            stackPadding + tokens.CornerButtonHoverSize * 0.5,
+            stackPadding + tokens.CornerButtonHoverSize * 0.5
+                + (index - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap)
         )
         action.Selectable = true
         action.Size = UDim2.fromOffset(tokens.CornerButtonSize, tokens.CornerButtonSize)
@@ -1433,30 +1464,30 @@ do
         trackConnection(action.MouseEnter:Connect(function()
             record.Hovered = true
             UI.PlaySound("ButtonHover")
-            animate(
-                action,
-                {Size = UDim2.fromOffset(tokens.CornerButtonHoverSize, tokens.CornerButtonHoverSize)},
-                tokens.MotionCornerHover,
-                Enum.EasingStyle.Quint
+            animateCornerVisual(
+                record,
+                tokens.CornerButtonHoverSize,
+                tokens.CornerButtonHoverIconSize,
+                tokens.MotionCornerHover
             )
         end))
         trackConnection(action.MouseLeave:Connect(function()
             record.Hovered = false
-            animate(
-                action,
-                {Size = UDim2.fromOffset(tokens.CornerButtonSize, tokens.CornerButtonSize)},
-                tokens.MotionCornerHover,
-                Enum.EasingStyle.Quint
+            animateCornerVisual(
+                record,
+                tokens.CornerButtonSize,
+                tokens.CornerButtonIconSize,
+                tokens.MotionCornerHover
             )
         end))
         trackConnection(action.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1
                 or input.UserInputType == Enum.UserInputType.Touch then
-                animate(
-                    action,
-                    {Size = UDim2.fromOffset(tokens.CornerButtonPressedSize, tokens.CornerButtonPressedSize)},
-                    0.1,
-                    Enum.EasingStyle.Quint
+                animateCornerVisual(
+                    record,
+                    tokens.CornerButtonPressedSize,
+                    tokens.CornerButtonPressedIconSize,
+                    0.1
                 )
             end
         end))
@@ -1464,18 +1495,18 @@ do
             if input.UserInputType == Enum.UserInputType.MouseButton1
                 or input.UserInputType == Enum.UserInputType.Touch then
                 local targetSize = record.Hovered and tokens.CornerButtonHoverSize or tokens.CornerButtonSize
-                animate(
-                    action,
-                    {Size = UDim2.fromOffset(targetSize, targetSize)},
-                    0.14,
-                    Enum.EasingStyle.Quint
-                )
+                local targetIconSize = record.Hovered and tokens.CornerButtonHoverIconSize or tokens.CornerButtonIconSize
+                animateCornerVisual(record, targetSize, targetIconSize, 0.14)
             end
         end))
         trackConnection(action.Activated:Connect(function()
+            if UI.CornerRailDragMoved or os.clock() < UI.CornerRailSuppressClickUntil then
+                return
+            end
+            UI.PlaySound("ButtonClick")
             local callback = UI.CornerButtonActions[index]
             if type(callback) == "function" then
-                task.spawn(callback, index)
+                task.delay(0.12, callback, index)
             end
         end))
     end
@@ -1530,73 +1561,112 @@ do
     end
 
     UI.CornerRailToggle = Instance.new("TextButton")
-    UI.CornerRailToggle.Name = "VisibilityToggle"
-    UI.CornerRailToggle.AnchorPoint = Vector2.new(0, 0.5)
+    UI.CornerRailToggle.Name = "VisibilityLine"
     UI.CornerRailToggle.AutoButtonColor = false
-    UI.CornerRailToggle.BackgroundColor3 = tokens.Surface
-    UI.CornerRailToggle.BackgroundTransparency = tokens.CornerButtonBackgroundTransparency
+    UI.CornerRailToggle.BackgroundColor3 = tokens.TextPrimary
+    UI.CornerRailToggle.BackgroundTransparency = 0.3
     UI.CornerRailToggle.BorderSizePixel = 0
-    UI.CornerRailToggle.Position = UDim2.fromOffset(
-        tokens.CornerButtonHoverSize + tokens.CornerRailToggleGap,
-        railHeight * 0.5
-    )
-    UI.CornerRailToggle.Size = UDim2.fromOffset(tokens.CornerRailToggleSize.X, tokens.CornerRailToggleSize.Y)
     UI.CornerRailToggle.Text = ""
     UI.CornerRailToggle.ZIndex = 2004
     UI.CornerRailToggle.Parent = UI.CornerActionRail
-    round(UI.CornerRailToggle, 12)
+    round(UI.CornerRailToggle, 999)
 
-    local toggleOutline = Instance.new("UIStroke")
-    toggleOutline.Name = "Outline"
-    toggleOutline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    toggleOutline.Color = tokens.Canvas
-    toggleOutline.Thickness = tokens.CornerButtonStroke
-    toggleOutline.Transparency = 0.08
-    toggleOutline.Parent = UI.CornerRailToggle
+    local function getDockLayout(side)
+        if side == "Left" then
+            return {
+                RootSize = Vector2.new(sideRailWidth, stackHeight),
+                StackVisible = UDim2.fromOffset(tokens.CornerRailToggleThickness + tokens.CornerRailToggleGap, 0),
+                StackHidden = UDim2.fromOffset(-stackWidth, 0),
+                TogglePosition = UDim2.fromOffset(0, (stackHeight - tokens.CornerRailToggleLength) * 0.5),
+                ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleThickness, tokens.CornerRailToggleLength)
+            }
+        elseif side == "Top" then
+            return {
+                RootSize = Vector2.new(stackWidth, capRailHeight),
+                StackVisible = UDim2.fromOffset(0, tokens.CornerRailToggleThickness + tokens.CornerRailToggleGap),
+                StackHidden = UDim2.fromOffset(0, -stackHeight),
+                TogglePosition = UDim2.fromOffset((stackWidth - tokens.CornerRailToggleLength) * 0.5, 0),
+                ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleLength, tokens.CornerRailToggleThickness)
+            }
+        elseif side == "Bottom" then
+            return {
+                RootSize = Vector2.new(stackWidth, capRailHeight),
+                StackVisible = UDim2.fromOffset(0, 0),
+                StackHidden = UDim2.fromOffset(0, capRailHeight),
+                TogglePosition = UDim2.fromOffset(
+                    (stackWidth - tokens.CornerRailToggleLength) * 0.5,
+                    capRailHeight - tokens.CornerRailToggleThickness
+                ),
+                ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleLength, tokens.CornerRailToggleThickness)
+            }
+        end
+        return {
+            RootSize = Vector2.new(sideRailWidth, stackHeight),
+            StackVisible = UDim2.fromOffset(0, 0),
+            StackHidden = UDim2.fromOffset(sideRailWidth, 0),
+            TogglePosition = UDim2.fromOffset(
+                sideRailWidth - tokens.CornerRailToggleThickness,
+                (stackHeight - tokens.CornerRailToggleLength) * 0.5
+            ),
+            ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleThickness, tokens.CornerRailToggleLength)
+        }
+    end
 
-    UI.CornerRailArrow = Instance.new("TextLabel")
-    UI.CornerRailArrow.Name = "Arrow"
-    UI.CornerRailArrow.AnchorPoint = Vector2.new(0.5, 0.5)
-    UI.CornerRailArrow.BackgroundTransparency = 1
-    UI.CornerRailArrow.FontFace = UI.Fonts.HeadingHeavy
-    UI.CornerRailArrow.Position = UDim2.fromScale(0.5, 0.5)
-    UI.CornerRailArrow.Size = UDim2.fromScale(1, 1)
-    UI.CornerRailArrow.Text = "›"
-    UI.CornerRailArrow.TextColor3 = tokens.TextPrimary
-    UI.CornerRailArrow.TextSize = 28
-    UI.CornerRailArrow.ZIndex = 2005
-    UI.CornerRailArrow.Parent = UI.CornerRailToggle
+    local function applyCornerDock(side, ratio)
+        side = table.find({"Left", "Right", "Top", "Bottom"}, side) and side or "Right"
+        ratio = math.clamp(tonumber(ratio) or 0.5, 0, 1)
+        UI.CornerDockSide = side
+        UI.CornerDockRatio = ratio
+        local layout = getDockLayout(side)
+        local canvas = getCanvasSize()
+        local margin = tokens.CornerDockTravelMargin
+        local rootX, rootY
+        if side == "Left" or side == "Right" then
+            local travel = math.max(0, canvas.Y - layout.RootSize.Y - margin * 2)
+            rootX = side == "Left" and 0 or math.max(0, canvas.X - layout.RootSize.X)
+            rootY = margin + travel * ratio
+        else
+            local travel = math.max(0, canvas.X - layout.RootSize.X - margin * 2)
+            rootX = margin + travel * ratio
+            rootY = side == "Top" and 0 or math.max(0, canvas.Y - layout.RootSize.Y)
+        end
+        UI.CornerActionRail.Size = UDim2.fromOffset(layout.RootSize.X, layout.RootSize.Y)
+        UI.CornerActionRail.Position = UDim2.fromOffset(rootX, rootY)
+        UI.CornerRailToggle.Position = layout.TogglePosition
+        UI.CornerRailToggle.Size = layout.ToggleSize
+        UI.CornerButtonStack.Position = UI.CornerButtonsHidden and layout.StackHidden or layout.StackVisible
+        UI.CornerButtonStack.GroupTransparency = UI.CornerButtonsHidden and 1 or 0
+        UI.CornerButtonStack.Visible = not UI.CornerButtonsHidden
+        return layout
+    end
 
-    UI.CornerButtonsHidden = false
-    UI.CornerButtonToggleRevision = 0
+    UI.SetCornerDock = function(side, ratio)
+        applyCornerDock(side, ratio)
+        return true
+    end
+
     UI.SetCornerButtonsHidden = function(hidden, instant)
         hidden = hidden == true
         UI.CornerButtonToggleRevision = UI.CornerButtonToggleRevision + 1
         local revision = UI.CornerButtonToggleRevision
         UI.CornerButtonsHidden = hidden
+        local layout = getDockLayout(UI.CornerDockSide)
         for _, record in ipairs(UI.CornerButtons) do
             record.Hovered = false
             record.Button.Size = UDim2.fromOffset(tokens.CornerButtonSize, tokens.CornerButtonSize)
+            record.Icon.Size = UDim2.fromOffset(tokens.CornerButtonIconSize, tokens.CornerButtonIconSize)
         end
         if not hidden then
             UI.CornerButtonStack.Visible = true
         end
-        local targetPosition = hidden and hiddenStackPosition or visibleStackPosition
+        local targetPosition = hidden and layout.StackHidden or layout.StackVisible
         local targetTransparency = hidden and 1 or 0
-        local targetRotation = hidden and 180 or 0
         if instant then
             UI.CornerButtonStack.Position = targetPosition
             UI.CornerButtonStack.GroupTransparency = targetTransparency
             UI.CornerButtonStack.Visible = not hidden
-            UI.CornerRailArrow.Rotation = targetRotation
             return true
         end
-        animate(
-            UI.CornerRailArrow,
-            {Rotation = targetRotation},
-            tokens.MotionCornerToggle,
-            Enum.EasingStyle.Quint
-        )
         local toggleTween = animate(
             UI.CornerButtonStack,
             {Position = targetPosition, GroupTransparency = targetTransparency},
@@ -1616,16 +1686,125 @@ do
         return true
     end
 
+    UI.CornerRailDragging = false
+    UI.CornerRailDragMoved = false
+    UI.CornerRailDragInput = nil
+    UI.CornerRailDragStart = nil
+
+    local function pointerPosition(input)
+        if input and input.UserInputType == Enum.UserInputType.Touch then
+            return Vector2.new(input.Position.X, input.Position.Y)
+        end
+        return UserInputService:GetMouseLocation()
+    end
+
+    local function beginCornerDockDrag(input)
+        if UI.CornerRailDragging or (input.UserInputType ~= Enum.UserInputType.MouseButton1
+            and input.UserInputType ~= Enum.UserInputType.Touch) then
+            return
+        end
+        UI.CornerRailDragging = true
+        UI.CornerRailDragMoved = false
+        UI.CornerRailDragInput = input
+        UI.CornerRailDragStart = pointerPosition(input)
+    end
+
+    local function updateCornerDockDrag(input)
+        if not UI.CornerRailDragging or not UI.CornerRailDragStart then
+            return
+        end
+        local current = pointerPosition(input)
+        if not UI.CornerRailDragMoved
+            and (current - UI.CornerRailDragStart).Magnitude < tokens.CornerDragThreshold then
+            return
+        end
+        if not UI.CornerRailDragMoved then
+            UI.CornerRailDragMoved = true
+            for _, record in ipairs(UI.CornerButtons) do
+                record.Hovered = false
+                record.Button.Size = UDim2.fromOffset(tokens.CornerButtonSize, tokens.CornerButtonSize)
+                record.Icon.Size = UDim2.fromOffset(tokens.CornerButtonIconSize, tokens.CornerButtonIconSize)
+            end
+        end
+        local canvas = getCanvasSize()
+        local point = Vector2.new(
+            math.clamp(current.X, 0, canvas.X),
+            math.clamp(current.Y, 0, canvas.Y)
+        )
+        local distances = {
+            Left = point.X,
+            Right = canvas.X - point.X,
+            Top = point.Y,
+            Bottom = canvas.Y - point.Y
+        }
+        local side = "Left"
+        local nearest = distances.Left
+        for _, candidate in ipairs({"Right", "Top", "Bottom"}) do
+            if distances[candidate] < nearest then
+                side = candidate
+                nearest = distances[candidate]
+            end
+        end
+        local layout = getDockLayout(side)
+        local margin = tokens.CornerDockTravelMargin
+        local ratio
+        if side == "Left" or side == "Right" then
+            local travel = math.max(1, canvas.Y - layout.RootSize.Y - margin * 2)
+            ratio = math.clamp((point.Y - layout.RootSize.Y * 0.5 - margin) / travel, 0, 1)
+        else
+            local travel = math.max(1, canvas.X - layout.RootSize.X - margin * 2)
+            ratio = math.clamp((point.X - layout.RootSize.X * 0.5 - margin) / travel, 0, 1)
+        end
+        applyCornerDock(side, ratio)
+    end
+
+    local function finishCornerDockDrag(input)
+        if not UI.CornerRailDragging then
+            return
+        end
+        local isMouseRelease = input.UserInputType == Enum.UserInputType.MouseButton1
+        local isTouchRelease = input == UI.CornerRailDragInput
+        if not isMouseRelease and not isTouchRelease then
+            return
+        end
+        if UI.CornerRailDragMoved then
+            UI.CornerRailSuppressClickUntil = os.clock() + 0.25
+        end
+        UI.CornerRailDragging = false
+        UI.CornerRailDragMoved = false
+        UI.CornerRailDragInput = nil
+        UI.CornerRailDragStart = nil
+    end
+
+    for _, record in ipairs(UI.CornerButtons) do
+        trackConnection(record.Button.InputBegan:Connect(beginCornerDockDrag))
+    end
+    trackConnection(UI.CornerRailToggle.InputBegan:Connect(beginCornerDockDrag))
+    trackConnection(UserInputService.InputChanged:Connect(function(input)
+        if UI.CornerRailDragging and (input == UI.CornerRailDragInput
+            or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            updateCornerDockDrag(input)
+        end
+    end))
+    trackConnection(UserInputService.InputEnded:Connect(finishCornerDockDrag))
+    trackConnection(InterfaceRoot:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        if UI.CornerActionRail and UI.CornerActionRail.Parent then
+            applyCornerDock(UI.CornerDockSide, UI.CornerDockRatio)
+        end
+    end))
     trackConnection(UI.CornerRailToggle.MouseEnter:Connect(function()
-        UI.PlaySound("ButtonHover")
-        animate(UI.CornerRailArrow, {TextTransparency = 0.18}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
+        animate(UI.CornerRailToggle, {BackgroundTransparency = 0.08}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
     end))
     trackConnection(UI.CornerRailToggle.MouseLeave:Connect(function()
-        animate(UI.CornerRailArrow, {TextTransparency = 0}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
+        animate(UI.CornerRailToggle, {BackgroundTransparency = 0.3}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
     end))
     trackConnection(UI.CornerRailToggle.Activated:Connect(function()
-        UI.SetCornerButtonsHidden(not UI.CornerButtonsHidden)
+        if not UI.CornerRailDragMoved and os.clock() >= UI.CornerRailSuppressClickUntil then
+            UI.SetCornerButtonsHidden(not UI.CornerButtonsHidden)
+        end
     end))
+
+    applyCornerDock("Right", 1)
 
     UI.ShowCornerButtons = function()
         if not UI.CornerActionRail or not UI.CornerActionRail.Parent then
@@ -6700,6 +6879,7 @@ env.TasuHub = {
     SetCornerButtonIcon = UI.SetCornerButtonIcon,
     SetCornerButtonAction = UI.SetCornerButtonAction,
     SetCornerButtonsHidden = UI.SetCornerButtonsHidden,
+    SetCornerDock = UI.SetCornerDock,
     CornerButtons = UI.CornerButtons,
     CornerButtonDefinitions = UI.CornerButtonDefinitions,
     SetUnloadIcon = UI.SetUnloadIcon,
