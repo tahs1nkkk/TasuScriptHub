@@ -34,6 +34,7 @@ Audit baseline: executor-verified remote content `c23ef7c`; local rework source 
 - Loader shadow revision: removed every loader-specific icon, bar, and status shadow instance, scale, reveal path, completion tween, and the temporary black `Shadow` palette token. No loader shadow references remain.
 - Loader ambient-motion revision: removed the unused bar-collapse `PopOut` sound call and preset. Dot motion updates only 22 row groups per frame; the 1320 retained dot records exist intentionally as the exact static baseline memory requested for future tuning.
 - Loader endpoint/rock revision: removed the obsolete `LoaderIconTravel` translation token and same-position reassignment path. The replacement `LoaderIconRockAngle`, dot endpoint-opacity envelope, white percentage path, larger ready scale, and three-second reverse exit cue are all live; no superseded loader motion or audio branch remains.
+- Loader exit-audio timing revision: removed the late `FadeOut` call at exit-motion start. The sole remaining reverse-cue path is ownership-guarded and scheduled from bar collapse using the live `LoaderExitSoundLead` token; no duplicate exit sound trigger remains.
 - Legacy visibility pass: removed the old unload animation and disabled automatic top-bar reveal, window/search opening, stats, preview, visual notifications, and exported legacy open/toggle/category methods.
 - Theme retirement: removed the `Tasu Light`, `Midnight`, and `Amethyst` preset definitions. Legacy config names now resolve to the sole `Rework Dark` three-color theme.
 

@@ -10,6 +10,6 @@ The loader's `BlurEffect` is created through `trackInstance`, tweened back to ze
 
 The loader's single ambient `RenderStepped` connection owns both the 22-row halftone loop and the icon breathing/anchor-rock motion. It is registered through `trackConnection`, runs through the full downward/fade exit, is explicitly disconnected once that exit tween completes, and remains covered by global unload if execution is interrupted early.
 
-Transient loader sounds remain tracked instances. Their cleanup delay respects an explicit target duration plus a one-second margin (minimum four seconds), preventing the three-second reverse exit cue from being destroyed before playback completes.
+Transient loader sounds remain tracked instances. Their cleanup delay respects an explicit target duration plus a one-second margin (minimum four seconds), preventing the three-second reverse exit cue from being destroyed before playback completes. The exit cue's delayed start checks loader ownership and visibility before creating sound state, so an unload during the lead window cannot resurrect audio after cleanup.
 
 Executor checks: double load, unload during animation, unload with every feature enabled, respawn during enable/disable, and unload after a partial remote-module failure.

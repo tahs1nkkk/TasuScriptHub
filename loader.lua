@@ -450,7 +450,8 @@ local UI = {
         LoaderIconLoopDuration = 6.4,
         LoaderIconRockAngle = 6,
         LoaderIconMaxScale = 1.08,
-        LoaderReadyScale = 1.4
+        LoaderReadyScale = 1.4,
+        LoaderExitSoundLead = 2
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
@@ -6352,6 +6353,15 @@ task.wait(UI.DesignTokens.MotionProgress)
 animate(UI.LoaderBar, {
     GroupTransparency = 1
 }, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+local loaderExitSoundDelay = math.max(
+    0,
+    UI.DesignTokens.MotionLoaderComplete + 1.8 - UI.DesignTokens.LoaderExitSoundLead
+)
+task.delay(loaderExitSoundDelay, function()
+    if UI.Loader and UI.Loader.Parent and UI.Loader.Visible then
+        UI.PlaySound("FadeOut")
+    end
+end)
 local loaderBarCompleteTween = animate(UI.LoaderBarScale, {
     Scale = 0.02
 }, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
@@ -6369,7 +6379,6 @@ animate(UI.LoaderStatusScale, {
     Scale = UI.DesignTokens.LoaderReadyScale
 }, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 task.wait(1.8)
-UI.PlaySound("FadeOut")
 animate(UI.LoaderBlur, {Size = 0}, UI.DesignTokens.MotionLoaderExit, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 animate(UI.Loader, {
     GroupTransparency = 1
