@@ -27,6 +27,7 @@ Audit baseline: executor-verified remote content `c23ef7c`; local rework source 
 - `mm2.lua` owns a second independent UI. Its feature logic is live, but that visual shell must be removed when MM2 becomes a registered feature provider.
 - Corner-action audit: `CornerActionRail`, both `CornerButtons` records, all five interaction connections per button, `SetCornerButtonIcon`, `SetCornerButtonAction`, and `ShowCornerButtons` are live through construction, exported configuration, or the post-loader reveal. The two icon definitions and slot 1 action are live; slot 2's absent callback is the explicit next-step boundary rather than an abandoned legacy path. No legacy builder or legacy visibility flag is reused.
 - Corner-action assignment audit: both semantic definitions and asset IDs are consumed during construction; slot 1's callback reaches the canonical `unload` function, while slot 2's nil action is an intentional next-step boundary. No duplicate catalog/general-menu launcher or unload implementation was introduced.
+- Corner-action geometry/visibility audit: the former `UIListLayout`, per-button `UIScale`, asymmetric upper style, and 60 px geometry paths are removed. Fixed positions consume the 78/84/74 px rest/hover/press tokens; the right-side arrow is the sole hide/show controller, and its revision-guarded completion path is live. The direct Roblox icon source and concurrent-folder recheck are both active fallbacks for the reported blank-icon failure.
 
 ## Confirmed removals
 

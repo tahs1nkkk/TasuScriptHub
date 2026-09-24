@@ -34,11 +34,11 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 
 ## Approved post-loader corner actions
 
-- The persistent action rail is anchored 24 px from the viewport's right and bottom edges and appears only after the full-screen loader has exited and been destroyed.
-- It contains exactly two 60×60 square buttons in a vertical stack with a 12 px gap and 16 px corners. Both surfaces use 0.18 background transparency.
-- The upper action uses `Base` with a `Signal` border. The lower action uses `Layer` with a `Base` border. This is deliberate contrast within the shared three-color system, not a private palette.
-- Button icons are Roblox assets resolved through the shared executor thumbnail/custom-asset pipeline and occupy identical centered 30×30 `Fit` slots. The upper catalog icon is decal `137753054375497`; the lower general-menu icon is decal `83533116222028`. Their shared anchor, position, and slot size must remain symmetric even if the source images have different artwork bounds.
-- Reveal fades the rail and brings each button from 0.88 to 1 scale over 0.34 seconds with an 0.08-second stagger. Hover scales only the hovered button from 1 to 1.07 over 0.22 seconds and plays the shared short UI-hover cue once on pointer entry. Press feedback briefly uses 0.96 scale.
+- The persistent action rail is anchored 24 px from the viewport's right and bottom edges and appears only after the full-screen loader has exited and been destroyed. All rail containers have clipping disabled so hover growth is never cut by an invisible parent boundary.
+- It contains exactly two 78×78 square buttons in fixed absolute positions with an 18 px normal-state gap and 16 px corners. No automatic list/grid layout may control their positions. Both buttons use the same `Layer` surface, `Base` 3 px outline, and 0.18 background transparency.
+- Button icons are Roblox assets resolved through the shared executor thumbnail/custom-asset pipeline and occupy identical centered 38×38 `Fit` slots. The upper catalog icon is decal `137753054375497`; the lower general-menu icon is decal `83533116222028`. Their shared anchor, position, and slot size must remain symmetric even if the source images have different artwork bounds.
+- Reveal fades the complete rail over 0.34 seconds without altering button geometry. Hover animates the hovered button's actual `Size` from 78×78 to 84×84 over 0.22 seconds and plays the shared short UI-hover cue once on pointer entry; it does not use `UIScale`. Press feedback briefly uses 74×74. Center anchors and fixed center positions make every size change expand equally in all directions without reflowing the other button.
+- A 30×44 arrow control sits 10 px to the right of the maximum hover bounds. It remains on-screen while the separate button stack animates horizontally beyond the right viewport edge and fades out over 0.44 seconds. Activating the reversed arrow restores the stack along the same path. The hidden stack becomes non-visible only after its exit tween completes.
 
 ## Required semantic tokens
 
@@ -57,7 +57,7 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 - Motion is smooth and deliberately unhurried except for the intentionally responsive loader: controls 0.22–0.32 s, panels 0.45–0.65 s, modals 0.55–0.75 s, loader entry 0.5 s, progress 1.4 s, completion collapse 0.7 s, completion-status transition 1.2 s, and whole-loader downward exit approximately 0.567 s.
 - Prefer position and `CanvasGroup.GroupTransparency` transitions. Do not animate layout-critical `Size` values when it can reflow or clip content.
 - Do not hide or destroy content until its closing tween completes.
-- `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. Approved exceptions are the loader's staged reveal (0.82 → 1.035 → 1), icon breathing loop (1 ↔ 1.08), completed bar collapse (1 → 0.02 before hiding), and final status emphasis (1 → 1.40), plus the corner actions' reveal (0.88 → 1), hover (1 → 1.07), and press (→ 0.96) feedback. These transitions do not participate in layout reflow.
+- `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. Approved exceptions are the loader's staged reveal (0.82 → 1.035 → 1), icon breathing loop (1 ↔ 1.08), completed bar collapse (1 → 0.02 before hiding), and final status emphasis (1 → 1.40). Corner-action hover and press feedback deliberately animate the buttons' fixed-position `Size` values instead of using `UIScale`; their parent bounds and clipping rules reserve the maximum geometry so no neighboring layout reflows.
 - Re-entrant actions cancel or supersede the prior tween cleanly; overlapping tweens may not leave stale transparency, position, or input state.
 - Reduced-motion support must be possible through a single global duration multiplier.
 

@@ -6,7 +6,7 @@ Resolve globals once through a normalized capability service. Feature code reque
 
 The TasuHub decal loader requires HTTP, file/folder, and custom-asset capabilities. It resolves the current Roblox thumbnail URL at runtime and writes the PNG into `TasuHub/Icons`. At the user's request there is no fallback: if any required capability or request fails, the reserved icon canvas stays empty. It never substitutes a Studio-only path.
 
-Corner-action icons reuse that same Roblox thumbnail → PNG file → executor custom-asset path. Slot 1 resolves catalog decal `137753054375497`; slot 2 resolves general-menu decal `83533116222028`. Their cache names are stable per slot (`CornerButton1.png` and `CornerButton2.png`), and revision guards prevent an older request from overwriting a newer asset choice. A failed request leaves the corresponding fixed slot empty; no Studio asset-loading substitute is permitted.
+Corner-action icons first receive their executor-safe `rbxassetid://` Roblox source, then reuse the thumbnail → PNG file → executor custom-asset path as the preferred resolved source. Slot 1 resolves catalog decal `137753054375497`; slot 2 resolves general-menu decal `83533116222028`. Their cache names are stable per slot (`CornerButton1.png` and `CornerButton2.png`), and revision guards prevent an older request from overwriting a newer asset choice. `ensureFolder` rechecks folder existence after a failed creation call so simultaneous icon workers cannot fail merely because another worker won the same creation race. No Studio asset-loading substitute is permitted.
 
 Never add Studio substitutes. Capability results are included in diagnostics but must not expose sensitive executor data.
 
