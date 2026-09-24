@@ -25,7 +25,8 @@ Audit baseline: executor-verified remote content `c23ef7c`; local rework source 
 - `loader.lua`: no unreferenced named local functions or service bindings were found by AST reference counting. Luau compilation succeeds.
 - `mm2.lua`: no unreferenced named local functions or service bindings were found by AST reference counting. Luau compilation succeeds.
 - `mm2.lua` owns a second independent UI. Its feature logic is live, but that visual shell must be removed when MM2 becomes a registered feature provider.
-- Corner-action audit: `CornerActionRail`, both `CornerButtons` records, all five interaction connections per button, `SetCornerButtonIcon`, `SetCornerButtonAction`, and `ShowCornerButtons` are live through construction, exported configuration, or the post-loader reveal. The deliberately empty icon/action registries are extension slots for the next design step, not abandoned legacy paths. No legacy builder or legacy visibility flag is reused.
+- Corner-action audit: `CornerActionRail`, both `CornerButtons` records, all five interaction connections per button, `SetCornerButtonIcon`, `SetCornerButtonAction`, and `ShowCornerButtons` are live through construction, exported configuration, or the post-loader reveal. The two icon definitions and slot 1 action are live; slot 2's absent callback is the explicit next-step boundary rather than an abandoned legacy path. No legacy builder or legacy visibility flag is reused.
+- Corner-action assignment audit: both semantic definitions and asset IDs are consumed during construction; slot 1's callback reaches the canonical `unload` function, while slot 2's nil action is an intentional next-step boundary. No duplicate catalog/general-menu launcher or unload implementation was introduced.
 
 ## Confirmed removals
 

@@ -37,7 +37,7 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 - The persistent action rail is anchored 24 px from the viewport's right and bottom edges and appears only after the full-screen loader has exited and been destroyed.
 - It contains exactly two 60×60 square buttons in a vertical stack with a 12 px gap and 16 px corners. Both surfaces use 0.18 background transparency.
 - The upper action uses `Base` with a `Signal` border. The lower action uses `Layer` with a `Base` border. This is deliberate contrast within the shared three-color system, not a private palette.
-- Button icons are Roblox assets resolved through the shared executor thumbnail/custom-asset pipeline and occupy a fixed 30×30 slot. Asset IDs and actions remain unset until their semantic roles are chosen; the interim blank slots do not create replacement glyphs or shift layout.
+- Button icons are Roblox assets resolved through the shared executor thumbnail/custom-asset pipeline and occupy identical centered 30×30 `Fit` slots. The upper catalog icon is decal `137753054375497`; the lower general-menu icon is decal `83533116222028`. Their shared anchor, position, and slot size must remain symmetric even if the source images have different artwork bounds.
 - Reveal fades the rail and brings each button from 0.88 to 1 scale over 0.34 seconds with an 0.08-second stagger. Hover scales only the hovered button from 1 to 1.07 over 0.22 seconds and plays the shared short UI-hover cue once on pointer entry. Press feedback briefly uses 0.96 scale.
 
 ## Required semantic tokens

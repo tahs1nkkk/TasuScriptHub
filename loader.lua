@@ -431,6 +431,10 @@ local UI = {
     ActionIconAssets = {},
     CornerButtons = {},
     CornerButtonActions = {},
+    CornerButtonDefinitions = {
+        {Name = "CatalogAction", AssetId = 137753054375497, IntendedAction = "Catalog", CurrentAction = "Unload"},
+        {Name = "GeneralMenuAction", AssetId = 83533116222028, IntendedAction = "GeneralMenu", CurrentAction = nil}
+    },
     IconAssets = {
         TasuHub = {AssetId = 138667112902223, CachePath = "TasuHub/Icons/TasuHub.png"}
     },
@@ -1441,8 +1445,8 @@ do
         end))
     end
 
-    createCornerButton(1, "UpperAction", tokens.Canvas, tokens.TextPrimary)
-    createCornerButton(2, "LowerAction", tokens.Surface, tokens.Canvas)
+    createCornerButton(1, UI.CornerButtonDefinitions[1].Name, tokens.Canvas, tokens.TextPrimary)
+    createCornerButton(2, UI.CornerButtonDefinitions[2].Name, tokens.Surface, tokens.Canvas)
 
     UI.SetCornerButtonIcon = function(index, assetId)
         index = tonumber(index)
@@ -1481,6 +1485,10 @@ do
         end
         UI.CornerButtonActions[index] = callback
         return true
+    end
+
+    for index, definition in ipairs(UI.CornerButtonDefinitions) do
+        UI.SetCornerButtonIcon(index, definition.AssetId)
     end
 
     UI.ShowCornerButtons = function()
@@ -6552,6 +6560,10 @@ unload = function()
     end
 end
 
+UI.SetCornerButtonAction(1, function()
+    unload()
+end)
+
 env.TasuHub = {
     Version = UI.Version,
     State = State,
@@ -6565,6 +6577,7 @@ env.TasuHub = {
     SetCornerButtonIcon = UI.SetCornerButtonIcon,
     SetCornerButtonAction = UI.SetCornerButtonAction,
     CornerButtons = UI.CornerButtons,
+    CornerButtonDefinitions = UI.CornerButtonDefinitions,
     SetUnloadIcon = UI.SetUnloadIcon,
     UpdateLog = UI.UpdateLog,
     Notify = UI.Notify,
