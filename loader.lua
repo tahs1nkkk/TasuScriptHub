@@ -379,7 +379,8 @@ local Theme = State.Interface
 local ReworkPalette = {
     Base = Color3.fromRGB(18, 19, 22),
     Layer = Color3.fromRGB(37, 39, 45),
-    Signal = Color3.fromRGB(242, 243, 245)
+    Signal = Color3.fromRGB(242, 243, 245),
+    Success = Color3.fromRGB(79, 224, 141)
 }
 local UI = {
     Version = "0.1",
@@ -434,12 +435,14 @@ local UI = {
         TextSecondary = ReworkPalette.Signal,
         TextOnAccent = ReworkPalette.Base,
         Accent = ReworkPalette.Signal,
+        Success = ReworkPalette.Success,
         MotionStatus = 0.42,
         MotionProgress = 0.85,
         MotionLoader = 0.5,
-        MotionLoaderExit = 0.9,
+        MotionLoaderExit = 1.5,
         MotionLoaderPop = 0.26,
-        MotionLoaderSettle = 0.08
+        MotionLoaderSettle = 0.08,
+        MotionLoaderSuccess = 1.2
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
@@ -1028,6 +1031,8 @@ do
     loaderTopGradient.Rotation = 90
     loaderTopGradient.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(0.28, 0.94),
+        NumberSequenceKeypoint.new(0.62, 0.58),
         NumberSequenceKeypoint.new(1, 0)
     })
     loaderTopGradient.Parent = UI.LoaderTopFade
@@ -1044,7 +1049,7 @@ do
     UI.LoaderContent.Parent = UI.Loader
 
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
-        Size = UDim2.fromOffset(152, 152),
+        Size = UDim2.fromOffset(184, 184),
         Color = tokens.TextPrimary,
         ZIndex = 1002
     })
@@ -1063,7 +1068,7 @@ do
     UI.LoaderBar.BorderSizePixel = 0
     UI.LoaderBar.ClipsDescendants = true
     UI.LoaderBar.GroupTransparency = 1
-    UI.LoaderBar.Position = UDim2.fromScale(0.5, 0.76)
+    UI.LoaderBar.Position = UDim2.fromScale(0.5, 0.8)
     UI.LoaderBar.Size = UDim2.fromOffset(400, 22)
     UI.LoaderBar.ZIndex = 1002
     UI.LoaderBar.Parent = UI.LoaderContent
@@ -1078,6 +1083,7 @@ do
     loaderStroke.Thickness = 1
     loaderStroke.Transparency = 0.78
     loaderStroke.Parent = UI.LoaderBar
+    UI.LoaderBarStroke = loaderStroke
 
     UI.LoaderFill = Instance.new("Frame")
     UI.LoaderFill.Name = "ProgressFill"
@@ -1112,7 +1118,7 @@ do
     UI.LoaderStatus.AnchorPoint = Vector2.new(0.5, 0)
     UI.LoaderStatus.BackgroundTransparency = 1
     UI.LoaderStatus.FontFace = UI.Fonts.Description
-    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0.76, 27)
+    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0.8, 27)
     UI.LoaderStatus.Size = UDim2.fromOffset(400, 47)
     UI.LoaderStatus.Text = "Arayüz hazırlanıyor"
     UI.LoaderStatus.TextColor3 = tokens.TextSecondary
@@ -6218,7 +6224,15 @@ env.TasuHub = {
 }
 
 UI.SetLoading(1, "Herşey Hazır!")
-task.wait(1.3)
+animate(UI.LoaderStatus, {
+    TextColor3 = UI.DesignTokens.Success,
+    TextTransparency = 0
+}, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+animate(UI.LoaderBarStroke, {
+    Color = UI.DesignTokens.Success,
+    Transparency = 0.16
+}, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+task.wait(2.5)
 UI.PlaySound("FadeOut")
 local loaderExitTween = animate(UI.Loader, {
     Position = UDim2.new(0, 0, 1, 200)
