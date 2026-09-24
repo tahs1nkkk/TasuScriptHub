@@ -32,6 +32,14 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 - Theme changes update bound components through one refresh path. Rebuilding an entire feature window to apply a theme is forbidden.
 - A missing token is added to this contract only when it represents a reusable semantic role, never a single screen or feature.
 
+## Approved post-loader corner actions
+
+- The persistent action rail is anchored 24 px from the viewport's right and bottom edges and appears only after the full-screen loader has exited and been destroyed.
+- It contains exactly two 60×60 square buttons in a vertical stack with a 12 px gap and 16 px corners. Both surfaces use 0.18 background transparency.
+- The upper action uses `Base` with a `Signal` border. The lower action uses `Layer` with a `Base` border. This is deliberate contrast within the shared three-color system, not a private palette.
+- Button icons are Roblox assets resolved through the shared executor thumbnail/custom-asset pipeline and occupy a fixed 30×30 slot. Asset IDs and actions remain unset until their semantic roles are chosen; the interim blank slots do not create replacement glyphs or shift layout.
+- Reveal fades the rail and brings each button from 0.88 to 1 scale over 0.34 seconds with an 0.08-second stagger. Hover scales only the hovered button from 1 to 1.07 over 0.22 seconds and plays the shared short UI-hover cue once on pointer entry. Press feedback briefly uses 0.96 scale.
+
 ## Required semantic tokens
 
 - Surfaces: `Canvas`, `Surface`, `SurfaceRaised`, `SurfaceOverlay`, `ControlIdle`, `ControlHover`, `ControlPressed`.
@@ -49,7 +57,7 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 - Motion is smooth and deliberately unhurried except for the intentionally responsive loader: controls 0.22–0.32 s, panels 0.45–0.65 s, modals 0.55–0.75 s, loader entry 0.5 s, progress 1.4 s, completion collapse 0.7 s, completion-status transition 1.2 s, and whole-loader downward exit approximately 0.567 s.
 - Prefer position and `CanvasGroup.GroupTransparency` transitions. Do not animate layout-critical `Size` values when it can reflow or clip content.
 - Do not hide or destroy content until its closing tween completes.
-- `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. Approved loader exceptions are its staged reveal (0.82 → 1.035 → 1), icon breathing loop (1 ↔ 1.08), completed bar collapse (1 → 0.02 before hiding), and final status emphasis (1 → 1.40). These transitions do not participate in layout reflow.
+- `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. Approved exceptions are the loader's staged reveal (0.82 → 1.035 → 1), icon breathing loop (1 ↔ 1.08), completed bar collapse (1 → 0.02 before hiding), and final status emphasis (1 → 1.40), plus the corner actions' reveal (0.88 → 1), hover (1 → 1.07), and press (→ 0.96) feedback. These transitions do not participate in layout reflow.
 - Re-entrant actions cancel or supersede the prior tween cleanly; overlapping tweens may not leave stale transparency, position, or input state.
 - Reduced-motion support must be possible through a single global duration multiplier.
 

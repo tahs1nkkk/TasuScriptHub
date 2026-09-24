@@ -25,6 +25,7 @@ This directory is the persistent source of truth for the executor-only UI rework
 - `systems/capability-detection.md`
 - `systems/keybinds.md`
 - `systems/loader-screen.md`
+- `systems/corner-action-buttons.md`
 - `systems/legacy-ui-retirement.md`
 
 ## Feature memory
@@ -35,4 +36,4 @@ Feature-specific files live under `features/`. Each file records current behavio
 
 ## Current gate
 
-The remote `main` build at `c23ef7c` was confirmed by the user to run without errors through the executor entrypoint. The local rework branch currently has identical `loader.lua` and `mm2.lua` contents. Do not call the rework runtime-ready until the executor checklist is completed again.
+The loader build at `313375c` was confirmed by the user as complete and working through the executor entrypoint. The post-loader corner-action shell is the next unverified UI step; do not call it runtime-ready until its executor checklist is completed.

@@ -429,6 +429,8 @@ local UI = {
     },
     ActionIconBindings = {},
     ActionIconAssets = {},
+    CornerButtons = {},
+    CornerButtonActions = {},
     IconAssets = {
         TasuHub = {AssetId = 138667112902223, CachePath = "TasuHub/Icons/TasuHub.png"}
     },
@@ -459,12 +461,19 @@ local UI = {
         LoaderIconRockAngle = 6,
         LoaderIconMaxScale = 1.08,
         LoaderReadyScale = 1.4,
-        LoaderExitSoundDelay = 0
+        LoaderExitSoundDelay = 0,
+        CornerButtonSize = 60,
+        CornerButtonGap = 12,
+        CornerButtonRadius = 16,
+        CornerButtonBackgroundTransparency = 0.18,
+        MotionCornerReveal = 0.34,
+        MotionCornerHover = 0.22
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
         FadeOut = {Id = "rbxassetid://90657541635248", Volume = 0.09, PlaybackSpeed = 2 / 3, PitchCompensation = 1.5, TargetDuration = 3},
-        PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1}
+        PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
+        ButtonHover = {Id = "rbxassetid://113397864512278", Volume = 0.08, PlaybackSpeed = 1}
     },
     Flags = {},
     Controls = {},
@@ -1325,6 +1334,183 @@ do
     UI.LoaderIconMotionActive = true
     revealLoaderItem(UI.LoaderBar, UI.LoaderBarScale, {GroupTransparency = 0})
     revealLoaderItem(UI.LoaderStatus, UI.LoaderStatusScale, {TextTransparency = 0.42})
+end
+
+do
+    local tokens = UI.DesignTokens
+    local railHeight = tokens.CornerButtonSize * 2 + tokens.CornerButtonGap
+
+    UI.CornerActionRail = Instance.new("CanvasGroup")
+    UI.CornerActionRail.Name = "CornerActionRail"
+    UI.CornerActionRail.AnchorPoint = Vector2.new(1, 1)
+    UI.CornerActionRail.BackgroundTransparency = 1
+    UI.CornerActionRail.BorderSizePixel = 0
+    UI.CornerActionRail.GroupTransparency = 1
+    UI.CornerActionRail.Position = UDim2.new(1, -24, 1, -24)
+    UI.CornerActionRail.Size = UDim2.fromOffset(tokens.CornerButtonSize, railHeight)
+    UI.CornerActionRail.Visible = false
+    UI.CornerActionRail.ZIndex = 2000
+    UI.CornerActionRail.Parent = InterfaceRoot
+
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Vertical
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.Padding = UDim.new(0, tokens.CornerButtonGap)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.VerticalAlignment = Enum.VerticalAlignment.Top
+    layout.Parent = UI.CornerActionRail
+
+    local function createCornerButton(index, name, backgroundColor, borderColor)
+        local action = Instance.new("ImageButton")
+        action.Name = name
+        action.Active = true
+        action.AutoButtonColor = false
+        action.BackgroundColor3 = backgroundColor
+        action.BackgroundTransparency = tokens.CornerButtonBackgroundTransparency
+        action.BorderSizePixel = 0
+        action.Image = ""
+        action.LayoutOrder = index
+        action.Selectable = true
+        action.Size = UDim2.fromOffset(tokens.CornerButtonSize, tokens.CornerButtonSize)
+        action.ZIndex = 2001
+        action.Parent = UI.CornerActionRail
+        round(action, tokens.CornerButtonRadius)
+
+        local outline = Instance.new("UIStroke")
+        outline.Name = "Outline"
+        outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        outline.Color = borderColor
+        outline.Thickness = 1.5
+        outline.Transparency = 0.08
+        outline.Parent = action
+
+        local icon = Instance.new("ImageLabel")
+        icon.Name = "AssetIcon"
+        icon.AnchorPoint = Vector2.new(0.5, 0.5)
+        icon.BackgroundTransparency = 1
+        icon.BorderSizePixel = 0
+        icon.Image = ""
+        icon.ImageColor3 = tokens.TextPrimary
+        icon.ImageTransparency = 1
+        icon.Position = UDim2.fromScale(0.5, 0.5)
+        icon.ScaleType = Enum.ScaleType.Fit
+        icon.Size = UDim2.fromOffset(30, 30)
+        icon.ZIndex = 2002
+        icon.Parent = action
+
+        local buttonScale = Instance.new("UIScale")
+        buttonScale.Scale = 0.88
+        buttonScale.Parent = action
+
+        local record = {
+            Button = action,
+            Icon = icon,
+            Scale = buttonScale,
+            Stroke = outline,
+            Hovered = false,
+            IconRevision = 0
+        }
+        UI.CornerButtons[index] = record
+
+        trackConnection(action.MouseEnter:Connect(function()
+            record.Hovered = true
+            UI.PlaySound("ButtonHover")
+            animate(buttonScale, {Scale = 1.07}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
+        end))
+        trackConnection(action.MouseLeave:Connect(function()
+            record.Hovered = false
+            animate(buttonScale, {Scale = 1}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
+        end))
+        trackConnection(action.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+                or input.UserInputType == Enum.UserInputType.Touch then
+                animate(buttonScale, {Scale = 0.96}, 0.1, Enum.EasingStyle.Quint)
+            end
+        end))
+        trackConnection(action.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+                or input.UserInputType == Enum.UserInputType.Touch then
+                animate(buttonScale, {Scale = record.Hovered and 1.07 or 1}, 0.14, Enum.EasingStyle.Quint)
+            end
+        end))
+        trackConnection(action.Activated:Connect(function()
+            local callback = UI.CornerButtonActions[index]
+            if type(callback) == "function" then
+                task.spawn(callback, index)
+            end
+        end))
+    end
+
+    createCornerButton(1, "UpperAction", tokens.Canvas, tokens.TextPrimary)
+    createCornerButton(2, "LowerAction", tokens.Surface, tokens.Canvas)
+
+    UI.SetCornerButtonIcon = function(index, assetId)
+        index = tonumber(index)
+        local record = index and UI.CornerButtons[index]
+        if not record then
+            return false, "unknown corner button"
+        end
+        record.IconRevision = record.IconRevision + 1
+        local revision = record.IconRevision
+        record.Icon.Image = ""
+        record.Icon.ImageTransparency = 1
+        if assetId == nil or tostring(assetId) == "" then
+            return true
+        end
+        local numericId = tonumber(tostring(assetId):match("%d+"))
+        if not numericId then
+            return false, "invalid Roblox asset id"
+        end
+        task.spawn(function()
+            local resolved = UI.LoadRobloxThumbnailAsset(
+                numericId,
+                "TasuHub/Icons/CornerButton" .. tostring(index) .. ".png"
+            )
+            if resolved and record.Icon.Parent and record.IconRevision == revision then
+                record.Icon.Image = resolved
+                record.Icon.ImageTransparency = 0
+            end
+        end)
+        return true
+    end
+
+    UI.SetCornerButtonAction = function(index, callback)
+        index = tonumber(index)
+        if not index or not UI.CornerButtons[index] or (callback ~= nil and type(callback) ~= "function") then
+            return false
+        end
+        UI.CornerButtonActions[index] = callback
+        return true
+    end
+
+    UI.ShowCornerButtons = function()
+        if not UI.CornerActionRail or not UI.CornerActionRail.Parent then
+            return false
+        end
+        UI.CornerActionRail.Visible = true
+        UI.CornerActionRail.GroupTransparency = 1
+        animate(
+            UI.CornerActionRail,
+            {GroupTransparency = 0},
+            tokens.MotionCornerReveal,
+            Enum.EasingStyle.Quint
+        )
+        for index, record in ipairs(UI.CornerButtons) do
+            record.Scale.Scale = 0.88
+            task.delay((index - 1) * 0.08, function()
+                if record.Button and record.Button.Parent then
+                    animate(
+                        record.Scale,
+                        {Scale = 1},
+                        tokens.MotionCornerReveal,
+                        Enum.EasingStyle.Back,
+                        Enum.EasingDirection.Out
+                    )
+                end
+            end)
+        end
+        return true
+    end
 end
 
 UI.ReportLoading(0.06, "Core · tema, ikon ve loader hazır")
@@ -6376,6 +6562,9 @@ env.TasuHub = {
     SetCategoryIconBackground = UI.SetCategoryIconBackground,
     SetActionIcon = UI.SetActionIcon,
     ActionIconUrls = UI.ActionIconUrls,
+    SetCornerButtonIcon = UI.SetCornerButtonIcon,
+    SetCornerButtonAction = UI.SetCornerButtonAction,
+    CornerButtons = UI.CornerButtons,
     SetUnloadIcon = UI.SetUnloadIcon,
     UpdateLog = UI.UpdateLog,
     Notify = UI.Notify,
@@ -6443,3 +6632,4 @@ StatsPanel.Visible = false
 Toast.Visible = false
 UI.Ready = true
 if UI.Loader then UI.Loader:Destroy() end
+UI.ShowCornerButtons()
