@@ -121,6 +121,7 @@ local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local ContextActionService = game:GetService("ContextActionService")
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
@@ -435,10 +436,18 @@ local UI = {
         Accent = ReworkPalette.Signal,
         MotionStatus = 0.42,
         MotionProgress = 0.85,
-        MotionLoader = 1.65,
-        MotionLoaderPop = 0.52,
-        MotionLoaderSettle = 0.18,
-        MotionLoaderStagger = 0.6
+        MotionLoader = 0.8,
+        MotionLoaderPop = 0.26,
+        MotionLoaderSettle = 0.08,
+        MotionLoaderSlide = 0.8,
+        MotionLoaderStagger = 0.6,
+        MotionLoaderFadeDelay = 1.5
+    },
+    AudioLibrary = {
+        FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
+        FadeOut = {Id = "rbxassetid://1127797047", Volume = 0.14, PlaybackSpeed = 0.82},
+        PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
+        PopOut = {Id = "rbxassetid://137081214744553", Volume = 0.14, PlaybackSpeed = 1.3}
     },
     Flags = {},
     Controls = {},
@@ -471,6 +480,31 @@ local UI = {
         }
     }
 }
+
+UI.PlaySound = function(name)
+    local preset = UI.AudioLibrary[name]
+    if type(preset) ~= "table" or type(preset.Id) ~= "string" or preset.Id == "" then
+        return false
+    end
+    local sound = trackInstance(Instance.new("Sound"))
+    sound.Name = "TasuHub" .. tostring(name)
+    sound.SoundId = preset.Id
+    sound.Volume = preset.Volume or 0.15
+    sound.PlaybackSpeed = preset.PlaybackSpeed or 1
+    sound.Parent = SoundService
+    local played = pcall(function()
+        SoundService:PlayLocalSound(sound)
+    end)
+    if not played then
+        played = pcall(function() sound:Play() end)
+    end
+    task.delay(4, function()
+        if sound and sound.Parent then
+            sound:Destroy()
+        end
+    end)
+    return played
+end
 
 UI.BindTheme = function(object, property, token)
     table.insert(UI.ThemeBindings, {Object = object, Property = property, Token = token})
@@ -988,18 +1022,18 @@ do
     UI.LoaderContent.BorderSizePixel = 0
     UI.LoaderContent.GroupTransparency = 0
     UI.LoaderContent.Position = UDim2.fromScale(0.5, 0.5)
-    UI.LoaderContent.Size = UDim2.fromOffset(400, 220)
+    UI.LoaderContent.Size = UDim2.fromScale(1, 1)
     UI.LoaderContent.ZIndex = 1001
     UI.LoaderContent.Parent = UI.Loader
 
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
-        Size = UDim2.fromOffset(78, 78),
+        Size = UDim2.fromOffset(128, 128),
         Color = tokens.TextPrimary,
         ZIndex = 1002
     })
-    UI.LoaderIcon.AnchorPoint = Vector2.new(0.5, 0)
+    UI.LoaderIcon.AnchorPoint = Vector2.new(0.5, 0.5)
     UI.LoaderIcon.GroupTransparency = 1
-    UI.LoaderIcon.Position = UDim2.new(0.5, 0, 0, 8)
+    UI.LoaderIcon.Position = UDim2.fromScale(0.5, 0.42)
     UI.LoaderIcon.Visible = false
     UI.LoaderIconScale = Instance.new("UIScale")
     UI.LoaderIconScale.Scale = 0.82
@@ -1007,12 +1041,12 @@ do
 
     UI.LoaderBar = Instance.new("CanvasGroup")
     UI.LoaderBar.Name = "ProgressTrack"
-    UI.LoaderBar.AnchorPoint = Vector2.new(0.5, 0)
+    UI.LoaderBar.AnchorPoint = Vector2.new(0.5, 0.5)
     UI.LoaderBar.BackgroundColor3 = tokens.ControlIdle
     UI.LoaderBar.BorderSizePixel = 0
     UI.LoaderBar.ClipsDescendants = true
     UI.LoaderBar.GroupTransparency = 1
-    UI.LoaderBar.Position = UDim2.new(0.5, 0, 0, 116)
+    UI.LoaderBar.Position = UDim2.fromScale(0.5, 0.76)
     UI.LoaderBar.Size = UDim2.fromOffset(340, 18)
     UI.LoaderBar.ZIndex = 1002
     UI.LoaderBar.Parent = UI.LoaderContent
@@ -1061,7 +1095,7 @@ do
     UI.LoaderStatus.AnchorPoint = Vector2.new(0.5, 0)
     UI.LoaderStatus.BackgroundTransparency = 1
     UI.LoaderStatus.FontFace = UI.Fonts.Description
-    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0, 150)
+    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0.76, 22)
     UI.LoaderStatus.Size = UDim2.fromOffset(340, 40)
     UI.LoaderStatus.Text = "Arayüz hazırlanıyor"
     UI.LoaderStatus.TextColor3 = tokens.TextSecondary
@@ -1077,6 +1111,21 @@ do
     UI.LoaderStatusScale.Scale = 0.82
     UI.LoaderStatusScale.Parent = UI.LoaderStatus
 
+    UI.LoaderVersion = Instance.new("TextLabel")
+    UI.LoaderVersion.Name = "LoaderVersion"
+    UI.LoaderVersion.AnchorPoint = Vector2.new(1, 1)
+    UI.LoaderVersion.BackgroundTransparency = 1
+    UI.LoaderVersion.Position = UDim2.new(1, -18, 1, -14)
+    UI.LoaderVersion.Size = UDim2.fromOffset(150, 18)
+    UI.LoaderVersion.FontFace = UI.Fonts.Description
+    UI.LoaderVersion.Text = "TasuHub  ·  v" .. UI.Version
+    UI.LoaderVersion.TextColor3 = tokens.TextSecondary
+    UI.LoaderVersion.TextSize = 11
+    UI.LoaderVersion.TextTransparency = 1
+    UI.LoaderVersion.TextXAlignment = Enum.TextXAlignment.Right
+    UI.LoaderVersion.ZIndex = 1001
+    UI.LoaderVersion.Parent = UI.Loader
+
     UI.SetLoading = function(progress, status)
         progress = math.clamp(tonumber(progress) or 0, 0, 1)
         local percentage = tostring(math.floor(progress * 100 + 0.5)) .. "%"
@@ -1091,6 +1140,7 @@ do
     end
 
     local function revealLoaderItem(item, itemScale, revealProperties)
+        UI.PlaySound("PopIn")
         item.Visible = true
         itemScale.Scale = 0.82
         animate(item, revealProperties, tokens.MotionLoaderPop, Enum.EasingStyle.Quint)
@@ -1098,6 +1148,8 @@ do
         animate(itemScale, {Scale = 1}, tokens.MotionLoaderSettle, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut).Completed:Wait()
     end
 
+    UI.PlaySound("FadeIn")
+    animate(UI.LoaderVersion, {TextTransparency = 0.58}, tokens.MotionLoader, Enum.EasingStyle.Quint)
     local loaderEntryTween = animate(UI.Loader, {BackgroundTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
     loaderEntryTween.Completed:Wait()
     revealLoaderItem(UI.LoaderIcon, UI.LoaderIconScale, {GroupTransparency = 0})
@@ -6150,18 +6202,23 @@ env.TasuHub = {
 
 UI.SetLoading(1, "TasuHub hazır")
 task.wait(0.95)
-local loaderSlideDistance = -(getCanvasSize().Y * 0.5 + UI.LoaderContent.AbsoluteSize.Y)
+UI.PlaySound("PopOut")
 animate(UI.LoaderIcon, {
-    Position = UDim2.new(0.5, 0, 0, 8 + loaderSlideDistance)
-}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    Position = UDim2.new(0.5, 0, 0, -(UI.LoaderIcon.AbsoluteSize.Y * 0.5 + 18))
+}, UI.DesignTokens.MotionLoaderSlide, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 task.wait(UI.DesignTokens.MotionLoaderStagger)
+UI.PlaySound("PopOut")
 animate(UI.LoaderBar, {
-    Position = UDim2.new(0.5, 0, 0, 116 + loaderSlideDistance)
-}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    Position = UDim2.new(0.5, 0, 0, -(UI.LoaderBar.AbsoluteSize.Y * 0.5 + 18))
+}, UI.DesignTokens.MotionLoaderSlide, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 task.wait(UI.DesignTokens.MotionLoaderStagger)
+UI.PlaySound("PopOut")
 animate(UI.LoaderStatus, {
-    Position = UDim2.new(0.5, 0, 0, 150 + loaderSlideDistance)
-}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    Position = UDim2.new(0.5, 0, 0, -(UI.LoaderStatus.AbsoluteSize.Y + 18))
+}, UI.DesignTokens.MotionLoaderSlide, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+task.wait(UI.DesignTokens.MotionLoaderFadeDelay)
+UI.PlaySound("FadeOut")
+animate(UI.LoaderVersion, {TextTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
 local loaderExitTween = animate(UI.Loader, {BackgroundTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
 loaderExitTween.Completed:Wait()
 TopBar.Visible = false
