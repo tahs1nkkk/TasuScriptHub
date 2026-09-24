@@ -444,13 +444,16 @@ local UI = {
         MotionLoaderPop = 0.26,
         MotionLoaderSettle = 0.08,
         MotionLoaderSuccess = 1.2,
-        MotionLoaderComplete = 0.7
+        MotionLoaderComplete = 0.7,
+        LoaderDotLoopDuration = 5.2,
+        LoaderIconLoopDuration = 6.4,
+        LoaderIconTravel = 18,
+        LoaderIconMaxScale = 1.08
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
-        FadeOut = {Id = "rbxassetid://1127797047", Volume = 0.14, PlaybackSpeed = 0.82},
-        PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
-        PopOut = {Id = "rbxassetid://140323850218372", Volume = 0.16, PlaybackSpeed = 0.86}
+        FadeOut = {Id = "rbxassetid://1127797047", Volume = 0.14, PlaybackSpeed = 0.58},
+        PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1}
     },
     Flags = {},
     Controls = {},
@@ -501,7 +504,8 @@ UI.PlaySound = function(name)
     if not played then
         played = pcall(function() sound:Play() end)
     end
-    task.delay(4, function()
+    local cleanupDelay = math.max(4, 4 / math.max(0.1, sound.PlaybackSpeed))
+    task.delay(cleanupDelay, function()
         if sound and sound.Parent then
             sound:Destroy()
         end
@@ -1009,12 +1013,13 @@ end
 
 do
     local tokens = UI.DesignTokens
-    UI.Loader = Instance.new("Frame")
+    UI.Loader = Instance.new("CanvasGroup")
     UI.Loader.Name = "Loader"
     UI.Loader.BackgroundColor3 = tokens.Canvas
     UI.Loader.BackgroundTransparency = 1
     UI.Loader.BorderSizePixel = 0
     UI.Loader.ClipsDescendants = false
+    UI.Loader.GroupTransparency = 0
     UI.Loader.Position = UDim2.fromScale(0, 0)
     UI.Loader.Size = UDim2.fromScale(1, 1)
     UI.Loader.ZIndex = 1000
@@ -1036,25 +1041,86 @@ do
     UI.LoaderGrid.ZIndex = 1000
     UI.LoaderGrid.Parent = UI.Loader
     local gridColumns, gridRows = 60, 22
+    UI.LoaderDotRecords = {}
+    UI.LoaderDotRows = {}
     for row = 1, gridRows do
         local verticalProgress = (row - 1) / (gridRows - 1)
         local emphasis = verticalProgress * verticalProgress
         local dotSize = math.floor(2 + emphasis * 9 + 0.5)
         local dotTransparency = 0.98 - emphasis * 0.36
+        local rowY = (row - 0.5) / gridRows
+        local rowGroup = Instance.new("CanvasGroup")
+        rowGroup.Name = "DotRow"
+        rowGroup.AnchorPoint = Vector2.new(0, 0.5)
+        rowGroup.BackgroundTransparency = 1
+        rowGroup.BorderSizePixel = 0
+        rowGroup.GroupTransparency = dotTransparency
+        rowGroup.Position = UDim2.fromScale(0, rowY)
+        rowGroup.Size = UDim2.new(1, 0, 0, dotSize)
+        rowGroup.ZIndex = 1000
+        rowGroup.Parent = UI.LoaderGrid
+        local rowRecord = {
+            Object = rowGroup,
+            BasePosition = rowGroup.Position,
+            BaseSize = rowGroup.Size,
+            BaseTransparency = rowGroup.GroupTransparency,
+            Y = rowY
+        }
+        table.insert(UI.LoaderDotRows, rowRecord)
         for column = 1, gridColumns do
+            local x = (column - 0.5) / gridColumns
             local dot = Instance.new("Frame")
             dot.Name = "Dot"
             dot.AnchorPoint = Vector2.new(0.5, 0.5)
             dot.BackgroundColor3 = tokens.TextPrimary
-            dot.BackgroundTransparency = dotTransparency
+            dot.BackgroundTransparency = 0
             dot.BorderSizePixel = 0
-            dot.Position = UDim2.fromScale((column - 0.5) / gridColumns, (row - 0.5) / gridRows)
-            dot.Size = UDim2.fromOffset(dotSize, dotSize)
+            dot.Position = UDim2.fromScale(x, 0.5)
+            dot.Size = UDim2.fromScale(1, 1)
             dot.ZIndex = 1000
-            dot.Parent = UI.LoaderGrid
+            dot.Parent = rowGroup
+            local dotAspect = Instance.new("UIAspectRatioConstraint")
+            dotAspect.AspectRatio = 1
+            dotAspect.AspectType = Enum.AspectType.FitWithinMaxSize
+            dotAspect.DominantAxis = Enum.DominantAxis.Height
+            dotAspect.Parent = dot
             round(dot, 999)
+            table.insert(UI.LoaderDotRecords, {
+                Object = dot,
+                BasePosition = UDim2.fromScale(x, rowY),
+                BaseSize = UDim2.fromOffset(dotSize, dotSize),
+                BaseTransparency = dotTransparency
+            })
         end
     end
+    local dotAnimationStartedAt = os.clock()
+    local dotTopY = 0.5 / gridRows
+    local dotBottomY = 1 - dotTopY
+    local dotTravelSpan = dotBottomY - dotTopY
+    UI.LoaderAmbientAnimationConnection = trackConnection(RunService.RenderStepped:Connect(function()
+        if not UI.Loader or not UI.Loader.Parent or not UI.Loader.Visible then
+            return
+        end
+        local now = os.clock()
+        local travel = ((now - dotAnimationStartedAt) / tokens.LoaderDotLoopDuration) % 1
+        for _, record in ipairs(UI.LoaderDotRows) do
+            local y = (record.Y - travel) % 1
+            local verticalProgress = math.clamp((y - dotTopY) / dotTravelSpan, 0, 1)
+            local emphasis = verticalProgress * verticalProgress
+            local dotSize = 2 + emphasis * 9
+            local rowGroup = record.Object
+            rowGroup.Position = UDim2.fromScale(0, y)
+            rowGroup.Size = UDim2.new(1, 0, 0, dotSize)
+            rowGroup.GroupTransparency = 0.98 - emphasis * 0.36
+        end
+        if UI.LoaderIconMotionActive and UI.LoaderIcon and UI.LoaderIcon.Parent then
+            local iconPhase = ((now - UI.LoaderIconMotionStartedAt) / tokens.LoaderIconLoopDuration) * math.pi * 2
+            local horizontalOffset = math.sin(iconPhase) * tokens.LoaderIconTravel
+            local scaleProgress = (1 - math.cos(iconPhase)) * 0.5
+            UI.LoaderIcon.Position = UDim2.new(0.5, horizontalOffset, 0.42, 0)
+            UI.LoaderIconScale.Scale = 1 + (tokens.LoaderIconMaxScale - 1) * scaleProgress
+        end
+    end))
 
     UI.LoaderContent = Instance.new("CanvasGroup")
     UI.LoaderContent.Name = "LoaderContent"
@@ -1068,7 +1134,7 @@ do
     UI.LoaderContent.Parent = UI.Loader
 
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
-        Size = UDim2.fromOffset(240, 240),
+        Size = UDim2.fromOffset(280, 280),
         Color = tokens.TextPrimary,
         ZIndex = 1002
     })
@@ -1202,6 +1268,8 @@ do
     }, tokens.MotionLoader, Enum.EasingStyle.Quint)
     loaderEntryTween.Completed:Wait()
     revealLoaderItem(UI.LoaderIcon, UI.LoaderIconScale, {GroupTransparency = 0})
+    UI.LoaderIconMotionStartedAt = os.clock()
+    UI.LoaderIconMotionActive = true
     revealLoaderItem(UI.LoaderBar, UI.LoaderBarScale, {GroupTransparency = 0})
     revealLoaderItem(UI.LoaderStatus, UI.LoaderStatusScale, {TextTransparency = 0.42})
 end
@@ -6273,7 +6341,6 @@ UI.ReportLoading(0.99, "Runtime · executor API ve cleanup hazır")
 
 UI.SetLoading(1)
 task.wait(UI.DesignTokens.MotionProgress)
-UI.PlaySound("PopOut")
 animate(UI.LoaderBar, {
     GroupTransparency = 1
 }, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
@@ -6296,10 +6363,17 @@ animate(UI.LoaderStatusScale, {
 task.wait(1.8)
 UI.PlaySound("FadeOut")
 animate(UI.LoaderBlur, {Size = 0}, UI.DesignTokens.MotionLoaderExit, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+animate(UI.Loader, {
+    GroupTransparency = 1
+}, UI.DesignTokens.MotionLoaderExit, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
 local loaderExitTween = animate(UI.Loader, {
     Position = UDim2.fromScale(0, 1)
 }, UI.DesignTokens.MotionLoaderExit, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 loaderExitTween.Completed:Wait()
+if UI.LoaderAmbientAnimationConnection then
+    UI.LoaderAmbientAnimationConnection:Disconnect()
+    UI.LoaderAmbientAnimationConnection = nil
+end
 UI.Loader.Visible = false
 if UI.LoaderBlur then UI.LoaderBlur:Destroy() end
 TopBar.Visible = false
