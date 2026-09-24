@@ -380,8 +380,7 @@ local ReworkPalette = {
     Base = Color3.fromRGB(18, 19, 22),
     Layer = Color3.fromRGB(37, 39, 45),
     Signal = Color3.fromRGB(242, 243, 245),
-    Success = Color3.fromRGB(79, 224, 141),
-    Shadow = Color3.fromRGB(0, 0, 0)
+    Success = Color3.fromRGB(79, 224, 141)
 }
 local UI = {
     Version = "0.1",
@@ -437,10 +436,8 @@ local UI = {
         TextOnAccent = ReworkPalette.Base,
         Accent = ReworkPalette.Signal,
         Success = ReworkPalette.Success,
-        Shadow = ReworkPalette.Shadow,
-        LoaderBackgroundTransparency = 0.18,
+        LoaderBackgroundTransparency = 0.2,
         LoaderBlurSize = 34,
-        MotionStatus = 0.42,
         MotionProgress = 1.4,
         MotionLoader = 0.5,
         MotionLoaderExit = 2,
@@ -1070,17 +1067,6 @@ do
     UI.LoaderContent.ZIndex = 1001
     UI.LoaderContent.Parent = UI.Loader
 
-    UI.LoaderIconShadow = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
-        Size = UDim2.fromOffset(266, 266),
-        Color = tokens.Shadow,
-        ZIndex = 1001
-    })
-    UI.LoaderIconShadow.Name = "IconSoftShadow"
-    UI.LoaderIconShadow.AnchorPoint = Vector2.new(0.5, 0.5)
-    UI.LoaderIconShadow.GroupTransparency = 1
-    UI.LoaderIconShadow.Position = UDim2.new(0.5, 14, 0.42, 14)
-    UI.LoaderIconShadow.Visible = false
-
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
         Size = UDim2.fromOffset(240, 240),
         Color = tokens.TextPrimary,
@@ -1093,25 +1079,6 @@ do
     UI.LoaderIconScale = Instance.new("UIScale")
     UI.LoaderIconScale.Scale = 0.82
     UI.LoaderIconScale.Parent = UI.LoaderIcon
-
-    UI.LoaderBarShadow = Instance.new("ImageLabel")
-    UI.LoaderBarShadow.Name = "BarSoftShadow"
-    UI.LoaderBarShadow.AnchorPoint = Vector2.new(0.5, 0.5)
-    UI.LoaderBarShadow.BackgroundTransparency = 1
-    UI.LoaderBarShadow.BorderSizePixel = 0
-    UI.LoaderBarShadow.Image = "rbxassetid://1316045217"
-    UI.LoaderBarShadow.ImageColor3 = tokens.Shadow
-    UI.LoaderBarShadow.ImageTransparency = 1
-    UI.LoaderBarShadow.Position = UDim2.new(0.5, 14, 0.8, 14)
-    UI.LoaderBarShadow.ScaleType = Enum.ScaleType.Slice
-    UI.LoaderBarShadow.SliceCenter = Rect.new(10, 10, 118, 118)
-    UI.LoaderBarShadow.Size = UDim2.fromOffset(550, 98)
-    UI.LoaderBarShadow.Visible = false
-    UI.LoaderBarShadow.ZIndex = 1001
-    UI.LoaderBarShadow.Parent = UI.LoaderContent
-    UI.LoaderBarShadowScale = Instance.new("UIScale")
-    UI.LoaderBarShadowScale.Scale = 1
-    UI.LoaderBarShadowScale.Parent = UI.LoaderBarShadow
 
     UI.LoaderBar = Instance.new("CanvasGroup")
     UI.LoaderBar.Name = "ProgressTrack"
@@ -1138,7 +1105,7 @@ do
 
     UI.LoaderFill = Instance.new("Frame")
     UI.LoaderFill.Name = "ProgressFill"
-    UI.LoaderFill.BackgroundColor3 = tokens.Shadow
+    UI.LoaderFill.BackgroundColor3 = tokens.ControlIdle
     UI.LoaderFill.BorderSizePixel = 0
     UI.LoaderFill.ClipsDescendants = true
     UI.LoaderFill.Size = UDim2.fromScale(0, 1)
@@ -1152,7 +1119,7 @@ do
     UI.LoaderPercent.Size = UDim2.fromScale(1, 1)
     UI.LoaderPercent.FontFace = UI.Fonts.HeadingHeavy
     UI.LoaderPercent.Text = "0%"
-    UI.LoaderPercent.TextColor3 = tokens.Shadow
+    UI.LoaderPercent.TextColor3 = tokens.ControlIdle
     UI.LoaderPercent.TextSize = 16
     UI.LoaderPercent.ZIndex = 1004
     UI.LoaderPercent.Parent = UI.LoaderBar
@@ -1181,28 +1148,6 @@ do
     UI.LoaderStatus.ZIndex = 1002
     UI.LoaderStatus.Parent = UI.LoaderContent
     UI.LoaderStatus.Visible = false
-    UI.LoaderStatusShadow = Instance.new("TextLabel")
-    UI.LoaderStatusShadow.Name = "StatusSoftShadow"
-    UI.LoaderStatusShadow.AnchorPoint = UI.LoaderStatus.AnchorPoint
-    UI.LoaderStatusShadow.BackgroundTransparency = 1
-    UI.LoaderStatusShadow.FontFace = UI.LoaderStatus.FontFace
-    UI.LoaderStatusShadow.Position = UDim2.new(0.5, 8, 0.8, 42)
-    UI.LoaderStatusShadow.Size = UI.LoaderStatus.Size
-    UI.LoaderStatusShadow.Text = UI.LoaderStatus.Text
-    UI.LoaderStatusShadow.TextColor3 = tokens.Shadow
-    UI.LoaderStatusShadow.TextSize = UI.LoaderStatus.TextSize
-    UI.LoaderStatusShadow.TextStrokeColor3 = tokens.Shadow
-    UI.LoaderStatusShadow.TextStrokeTransparency = 0.46
-    UI.LoaderStatusShadow.TextTransparency = 1
-    UI.LoaderStatusShadow.TextWrapped = true
-    UI.LoaderStatusShadow.TextXAlignment = UI.LoaderStatus.TextXAlignment
-    UI.LoaderStatusShadow.TextYAlignment = UI.LoaderStatus.TextYAlignment
-    UI.LoaderStatusShadow.Visible = false
-    UI.LoaderStatusShadow.ZIndex = 1001
-    UI.LoaderStatusShadow.Parent = UI.LoaderContent
-    UI.LoaderStatusShadowScale = Instance.new("UIScale")
-    UI.LoaderStatusShadowScale.Scale = 1
-    UI.LoaderStatusShadowScale.Parent = UI.LoaderStatusShadow
     UI.LoaderStatusScale = Instance.new("UIScale")
     UI.LoaderStatusScale.Scale = 0.82
     UI.LoaderStatusScale.Parent = UI.LoaderStatus
@@ -1230,12 +1175,13 @@ do
         animate(UI.LoaderFill, {Size = UDim2.fromScale(progress, 1)}, tokens.MotionProgress, Enum.EasingStyle.Quint)
         if status and status ~= UI.LoaderStatus.Text then
             UI.LoaderStatus.Text = status
-            UI.LoaderStatusShadow.Text = status
-            UI.LoaderStatus.TextTransparency = 1
-            UI.LoaderStatusShadow.TextTransparency = 1
-            animate(UI.LoaderStatus, {TextTransparency = 0.42}, tokens.MotionStatus, Enum.EasingStyle.Quint)
-            animate(UI.LoaderStatusShadow, {TextTransparency = 0.3}, tokens.MotionStatus, Enum.EasingStyle.Quint)
+            UI.LoaderStatus.TextTransparency = 0.42
         end
+    end
+
+    UI.ReportLoading = function(progress, status)
+        UI.SetLoading(progress, status)
+        task.wait()
     end
 
     local function revealLoaderItem(item, itemScale, revealProperties)
@@ -1247,13 +1193,6 @@ do
         animate(itemScale, {Scale = 1}, tokens.MotionLoaderSettle, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut).Completed:Wait()
     end
 
-    local function revealLoaderShadow(shadow, property, transparency)
-        shadow.Visible = true
-        animate(shadow, {
-            [property] = transparency
-        }, tokens.MotionLoaderPop, Enum.EasingStyle.Quint)
-    end
-
     UI.PlaySound("FadeIn")
     animate(UI.LoaderVersion, {TextTransparency = 0.58}, tokens.MotionLoader, Enum.EasingStyle.Quint)
     animate(UI.LoaderBlur, {Size = tokens.LoaderBlurSize}, tokens.MotionLoader, Enum.EasingStyle.Quint)
@@ -1262,15 +1201,12 @@ do
         BackgroundTransparency = tokens.LoaderBackgroundTransparency
     }, tokens.MotionLoader, Enum.EasingStyle.Quint)
     loaderEntryTween.Completed:Wait()
-    revealLoaderShadow(UI.LoaderIconShadow, "GroupTransparency", 0.38)
     revealLoaderItem(UI.LoaderIcon, UI.LoaderIconScale, {GroupTransparency = 0})
-    revealLoaderShadow(UI.LoaderBarShadow, "ImageTransparency", 0.28)
     revealLoaderItem(UI.LoaderBar, UI.LoaderBarScale, {GroupTransparency = 0})
-    revealLoaderShadow(UI.LoaderStatusShadow, "TextTransparency", 0.3)
     revealLoaderItem(UI.LoaderStatus, UI.LoaderStatusScale, {TextTransparency = 0.42})
 end
 
-UI.SetLoading(0.06, "Arayüz hazırlanıyor")
+UI.ReportLoading(0.06, "Core · tema, ikon ve loader hazır")
 
 local TopBar = Instance.new("Frame")
 TopBar.Name = "CategoryBar"
@@ -1613,7 +1549,7 @@ trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
     StatsPanel.Size = UDim2.fromOffset(190, 38 + math.max(1, #lines) * 18)
 end))
 
-UI.SetLoading(0.22, "Arayüz bileşenleri yükleniyor")
+UI.ReportLoading(0.18, "UI · pencere ve durum bileşenleri hazır")
 
 local topBarCollapsed = false
 local topBarTransition = 0
@@ -2803,6 +2739,7 @@ for index, name in ipairs(categories) do
     end)
 end
 
+UI.ReportLoading(0.25, "Categories · 9 kategori sayfası hazır")
 
 UI.SetCategoryIcon = function(category, url, background)
     if not categoryButtons[category] then return false end
@@ -2873,7 +2810,7 @@ UI.GlobalSearchListPadding.PaddingTop = UDim.new(0, 6)
 UI.GlobalSearchListPadding.PaddingBottom = UDim.new(0, 6)
 UI.GlobalSearchListPadding.Parent = UI.GlobalSearchList
 
-UI.SetLoading(0.44, "Özellikler hazırlanıyor")
+UI.ReportLoading(0.3, "Search · indeks ve sonuç görünümü bağlanıyor")
 
 local windowTransition = 0
 
@@ -3219,6 +3156,8 @@ trackConnection(RunService.RenderStepped:Connect(function()
     end
 end))
 
+UI.ReportLoading(0.38, "Search · indeksleme ve gezinme sistemi hazır")
+
 local FOVCircle = Instance.new("Frame")
 FOVCircle.BackgroundTransparency = 1
 FOVCircle.Visible = false
@@ -3345,6 +3284,8 @@ trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
         camera.CFrame = camera.CFrame:Lerp(goal, factor)
     end
 end))
+
+UI.ReportLoading(0.46, "Aim · hedefleme ve tahmin motoru hazır")
 
 local espRecords = {}
 
@@ -3752,6 +3693,7 @@ end)
 
 trackConnection(Players.PlayerRemoving:Connect(destroyESP))
 
+UI.ReportLoading(0.54, "Visuals · ESP ve çizim motoru hazır")
 
 local freecamState
 local FREECAM_SINK_ACTION = "TasuHubFreecamMovementSink"
@@ -4560,6 +4502,8 @@ trackConnection(Workspace.DescendantAdded:Connect(function(object)
     end
 end))
 
+UI.ReportLoading(0.6, "Runtime · hareket ve dünya motorları hazır")
+
 local function applyWorld()
     if State.World.Fullbright then
         Lighting.Brightness = 3
@@ -4629,7 +4573,7 @@ local function applyWorld()
 end
 
 do
-UI.SetLoading(0.7, "Kategoriler oluşturuluyor")
+UI.ReportLoading(0.64, "Categories · özellik panelleri oluşturuluyor")
 
 local HomePage = pages.Home
 local HomeCard = UI.AddAccordion(HomePage, "TasuHub", true)
@@ -5078,6 +5022,8 @@ setupVisualPreview()
 
 end
 
+UI.ReportLoading(0.72, "Visuals · önizleme ve kontrol seçenekleri hazır")
+
 local MiscPage = pages.Misc
 do
 local MovementPage = pages.Movement
@@ -5223,6 +5169,8 @@ addSlider(OrbitCard, "Feature Offset", 0, 10, function() return State.Movement.O
     return State.Movement.Orbit and table.find({"Carpet", "Backpack", "Helicopter"}, State.Movement.OrbitMode) ~= nil
 end)
 end
+
+UI.ReportLoading(0.78, "Movement · hareket ve koruma özellikleri hazır")
 
 do
 local WorldPage = pages.World
@@ -5459,6 +5407,8 @@ UI.Register("Misc/Waypoints/Delete Selected Waypoint", {Instance = UI.WaypointDe
 UI.RefreshWaypointList()
 end
 
+UI.ReportLoading(0.83, "World · ışık, kamera ve waypoint sistemi hazır")
+
 do
 local PlayersPage = pages.Players
 PlayersPage.ScrollingEnabled = false
@@ -5642,6 +5592,8 @@ trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
     refreshPlayerRows()
 end))
 end
+
+UI.ReportLoading(0.87, "Players · canlı oyuncu listeleme sistemi hazır")
 
 local function sanitizeName(value)
     return string.gsub(tostring(value), "[^%w_%-]", "_")
@@ -5943,6 +5895,8 @@ updateCatalogStatus()
 end
 setupCatalog()
 
+UI.ReportLoading(0.9, "Catalog · script yükleme sistemi hazır")
+
 local function configPayload()
     local payload = deepCopy(State)
     payload.Interface = {
@@ -6035,7 +5989,7 @@ local function loadConfig(name)
     return true, path
 end
 
-UI.SetLoading(0.9, "Son kontroller yapılıyor")
+UI.ReportLoading(0.92, "Configs · kayıt ve geri yükleme sistemi bağlanıyor")
 
 local ConfigPage = pages.Configs
 do
@@ -6223,6 +6177,8 @@ end
 
 UI.RefreshConfigList()
 
+UI.ReportLoading(0.97, "Configs · dosya listesi ve modal hazır")
+
 UI.SetUnloadIcon = function(url)
     UI.UnloadIconUrl = tostring(url or "")
     UI.SetActionIcon("Unload", url)
@@ -6313,15 +6269,11 @@ env.TasuHub = {
     Unload = unload
 }
 
+UI.ReportLoading(0.99, "Runtime · executor API ve cleanup hazır")
+
 UI.SetLoading(1)
 task.wait(UI.DesignTokens.MotionProgress)
 UI.PlaySound("PopOut")
-animate(UI.LoaderBarShadow, {
-    ImageTransparency = 1
-}, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-animate(UI.LoaderBarShadowScale, {
-    Scale = 0.02
-}, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 animate(UI.LoaderBar, {
     GroupTransparency = 1
 }, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
@@ -6330,19 +6282,9 @@ local loaderBarCompleteTween = animate(UI.LoaderBarScale, {
 }, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 loaderBarCompleteTween.Completed:Wait()
 UI.LoaderBar.Visible = false
-UI.LoaderBarShadow.Visible = false
 UI.LoaderStatus.Text = "Herşey Hazır!"
-UI.LoaderStatusShadow.Text = UI.LoaderStatus.Text
 UI.LoaderStatus.TextTransparency = 1
-UI.LoaderStatusShadow.TextTransparency = 1
 UI.PlaySound("PopIn")
-animate(UI.LoaderStatusShadow, {
-    Position = UDim2.new(0.5, 8, 0.76, 8),
-    TextTransparency = 0.3
-}, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-animate(UI.LoaderStatusShadowScale, {
-    Scale = 1.18
-}, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 animate(UI.LoaderStatus, {
     Position = UDim2.fromScale(0.5, 0.76),
     TextColor3 = UI.DesignTokens.Success,
@@ -6351,7 +6293,7 @@ animate(UI.LoaderStatus, {
 animate(UI.LoaderStatusScale, {
     Scale = 1.18
 }, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-task.wait(2.5)
+task.wait(1.8)
 UI.PlaySound("FadeOut")
 animate(UI.LoaderBlur, {Size = 0}, UI.DesignTokens.MotionLoaderExit, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 local loaderExitTween = animate(UI.Loader, {

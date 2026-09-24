@@ -1,28 +1,27 @@
 # Shared theme contract
 
-Status: the rework uses a dark-gray, minimal, vector-first direction, three permanent UI colors, one neutral black depth/control token, and one transient completion-state color. The complete component language is still being developed step by step.
+Status: the rework uses a dark-gray, minimal, vector-first direction, three permanent UI colors, and one transient completion-state color. The complete component language is still being developed step by step.
 
 ## Core three-color palette and success state
 
 - `Base` — RGB `18, 19, 22` / `#121316`: viewport canvas and deepest surfaces.
 - `Layer` — RGB `37, 39, 45` / `#25272D`: tracks, raised surfaces, and inactive controls.
 - `Signal` — RGB `242, 243, 245` / `#F2F3F5`: icon geometry, loader track, primary text, borders, and active states.
-- `Shadow` — RGB `0, 0, 0` / `#000000`: neutral compositing token reserved for shadows and the loader's approved black progress fill; it is not a feature palette color.
-- `Success` — RGB `79, 224, 141` / `#4FE08D`: the sole approved exception, used only for confirmed successful completion feedback such as the loader's final status and border transition.
+- `Success` — RGB `79, 224, 141` / `#4FE08D`: the sole approved exception, used only for confirmed successful completion feedback such as the loader's final status.
 - New UI code cannot introduce another color. Outside the transient `Success` state, hierarchy is created with transparency, spacing, stroke weight, and typography.
 - `TextOnAccent` resolves to `Base`; muted text resolves to `Signal` with transparency rather than a new gray.
 - Runtime/game data colors such as health, team identity, ESP targets, and world effects remain the only exceptions because they communicate gameplay data rather than application theme.
 
 ## Approved loader direction
 
-- The loader covers the entire viewport with a `Base` scrim at 0.18 transparency over a tracked Roblox `BlurEffect` at size 34. Background and blur enter over 0.5 seconds. Exit moves the complete loader downward over 2 seconds with Quint-In acceleration while the blur returns to zero.
+- The loader covers the entire viewport with a `Base` scrim at 0.20 transparency over a tracked Roblox `BlurEffect` at size 34. Background and blur enter over 0.5 seconds. Exit moves the complete loader downward over 2 seconds with Quint-In acceleration while the blur returns to zero.
 - Loader content stays hidden until the background entry finishes. The icon, progress bar, and status text then fade and scale in, in that order, from 0.82 to a 1.035 overshoot over 0.26 seconds and settle to normal over 0.08 seconds. Progress cannot begin before all three reveals finish.
 - The 240×240 reusable vector `TasuHub` icon occupies the middle area. The enlarged 480×28 progress bar and 18 px status are positioned at 80% viewport height; the bottom-right version label retains its safe margin.
-- The thin, fully rounded progress track/frame uses `Signal` white; its fill uses `Shadow` black. Percentage text is duplicated and clipped so it appears black on the unfilled white track and white over the filled black area, producing a true negative/inverted effect. Progress changes use a deliberately slower 1.4 second tween.
+- The thin, fully rounded progress track/frame uses `Signal` white; its fill uses `Layer` gray. Percentage text is duplicated and clipped so it appears `Layer` gray on the unfilled white track and `Signal` white over the filled gray area, producing a true negative/inverted effect. Progress changes use a deliberately slower 1.4 second tween.
 - The former top-edge glow/fade is removed. A responsive 60×22 vector dot grid starts at 40% viewport height and occupies the lower 60%: dots are tiny and nearly transparent near its top, then grow and become more visible toward the bottom edge. It uses `Signal` only and remains behind all loader content.
-- Loader depth uses one approved right/down soft-shadow copy per element. The icon uses one enlarged copy of the same `TasuHub` vector geometry, the bar uses one sliced shadow image, and status uses one same-text copy with a soft stroke. Every shadow is black, offset right/down, and partially transparent; stacked shadow arrays are forbidden.
-- Progress changes tween smoothly; status changes fade in without resizing the layout.
-- At 100%, the progress bar and its shadow shrink toward their center and disappear over 0.7 seconds. The status then changes to green `Herşey Hazır!`, shifts upward from 80% to 76% viewport height, and scales to 1.18 over 1.2 seconds. This completed state remains for 2.5 seconds before exit. No other content has an independent exit: the complete loader accelerates downward over 2 seconds until it leaves the viewport; only then is it hidden and destroyed.
+- The loader uses no icon, bar, text, or background shadow objects. Depth comes only from blur, transparency, scale, and the lower dot grid.
+- Progress changes tween smoothly. Runtime status changes immediately at actual construction boundaries and yield one scheduler frame, allowing short-lived code/system headings to render without adding artificial loading delays.
+- At 100%, the progress bar shrinks toward its center and disappears over 0.7 seconds. The status then changes to green `Herşey Hazır!`, shifts upward from 80% to 76% viewport height, and scales to 1.18 over 1.2 seconds. This completed state remains for 1.8 seconds before exit. No other content has an independent exit: the complete loader accelerates downward over 2 seconds until it leaves the viewport; only then is it hidden and destroyed.
 - Loader entry, each content pop-in, and the complete background exit trigger shared non-positional Roblox asset sounds through the central audio registry. Missing or permission-restricted audio must never stop an animation.
 
 ## One theme, one source
