@@ -319,20 +319,25 @@ local function loadRemoteAsset(url, path)
     if not capabilities.Files or not capabilities.CustomAsset then
         return nil
     end
+    local body
     local request = getRequest()
-    local ok, response
     if request then
-        ok, response = pcall(request, {Url = url, Method = "GET"})
-    else
-        ok, response = pcall(function()
-            return {Body = game:HttpGet(url)}
-        end)
+        local ok, response = pcall(request, {Url = url, Method = "GET"})
+        if ok and type(response) == "string" then
+            body = response
+        elseif ok and type(response) == "table" then
+            body = response.Body or response.body
+        end
     end
-    if not ok or type(response) ~= "table" then
-        return nil
-    end
-    local body = response.Body or response.body
     if type(body) ~= "string" or body == "" then
+        local ok, response = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if ok then
+            body = response
+        end
+    end
+    if not body then
         return nil
     end
     local writefile = resolveGlobal("writefile")
@@ -425,7 +430,7 @@ local UI = {
     ActionIconBindings = {},
     ActionIconAssets = {},
     IconAssets = {
-        TasuHub = "rbxthumb://type=Asset&id=138667112902223&w=420&h=420"
+        TasuHub = {AssetId = 138667112902223, CachePath = "TasuHub/Icons/TasuHub.png"}
     },
     IconLibrary = {},
     DesignTokens = {
@@ -454,7 +459,7 @@ local UI = {
         LoaderIconRockAngle = 6,
         LoaderIconMaxScale = 1.08,
         LoaderReadyScale = 1.4,
-        LoaderExitSoundDelay = 0.3
+        LoaderExitSoundDelay = 0
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
@@ -492,6 +497,42 @@ local UI = {
         }
     }
 }
+
+UI.LoadRobloxThumbnailAsset = function(assetId, path)
+    if not capabilities.Http or not capabilities.Files or not capabilities.CustomAsset then
+        return nil
+    end
+    local endpoint = "https://thumbnails.roblox.com/v1/assets?assetIds="
+        .. tostring(assetId)
+        .. "&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false"
+    local request = getRequest()
+    local body
+    if request then
+        local ok, response = pcall(request, {Url = endpoint, Method = "GET"})
+        if ok and type(response) == "string" then
+            body = response
+        elseif ok and type(response) == "table" then
+            body = response.Body or response.body
+        end
+    end
+    if type(body) ~= "string" or body == "" then
+        local ok, response = pcall(function()
+            return game:HttpGet(endpoint)
+        end)
+        if ok then
+            body = response
+        end
+    end
+    local decodedOk, decoded = pcall(HttpService.JSONDecode, HttpService, body or "")
+    local record = decodedOk and decoded.data and decoded.data[1]
+    if not record or record.state ~= "Completed" or type(record.imageUrl) ~= "string" then
+        return nil
+    end
+    if not ensureFolder("TasuHub/Icons") then
+        return nil
+    end
+    return loadRemoteAsset(record.imageUrl, path)
+end
 
 UI.PlaySound = function(name)
     local preset = UI.AudioLibrary[name]
@@ -708,20 +749,22 @@ UI.IconLibrary.TasuHub = function(parent, options)
     image.Name = "Asset"
     image.BackgroundTransparency = 1
     image.BorderSizePixel = 0
-    image.Image = UI.IconAssets.TasuHub
+    image.Image = ""
     image.ImageTransparency = 1
     image.ScaleType = Enum.ScaleType.Fit
     image.Size = UDim2.fromScale(1, 1)
     image.ZIndex = zIndex + 1
     image.Parent = canvas
 
-    local function syncIconSource()
-        local assetReady = image.IsLoaded
-        image.ImageTransparency = assetReady and 0 or 1
-        vectorFallback.GroupTransparency = assetReady and 1 or 0
-    end
-    trackConnection(image:GetPropertyChangedSignal("IsLoaded"):Connect(syncIconSource))
-    syncIconSource()
+    task.spawn(function()
+        local iconAsset = UI.IconAssets.TasuHub
+        local resolved = UI.LoadRobloxThumbnailAsset(iconAsset.AssetId, iconAsset.CachePath)
+        if resolved and image.Parent and vectorFallback.Parent then
+            image.Image = resolved
+            image.ImageTransparency = 0
+            vectorFallback.GroupTransparency = 1
+        end
+    end)
     return canvas
 end
 
