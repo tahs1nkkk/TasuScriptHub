@@ -13,12 +13,13 @@ Status: the rework uses a dark-gray, minimal, vector-first direction and exactly
 
 ## Approved loader direction
 
-- The loader covers the entire viewport with the dark-gray `Base` color and enters/exits through synchronized 1.65 second background/content fades.
+- The loader covers the entire viewport with the dark-gray `Base` color. Background entry and exit use the same 1.65 second Quint fade duration.
+- Loader content stays hidden until the background entry finishes. The icon, progress bar, and status text then fade and scale in, in that order, through a small-to-1.035 overshoot and a short settle to normal scale. Progress cannot begin before all three reveals finish.
 - The center composition contains the reusable vector `TasuHub` icon, one horizontal progress bar, an in-bar percentage, and one live status line below it.
 - The thin, fully rounded progress track uses `Layer`; its fill uses `Signal`. Percentage text is duplicated and clipped so it appears `Signal` on the unfilled track and `Base` over the filled area, producing a true negative/inverted effect.
 - The loader has no card, gradient, shadow, illustration, radial spinner, decorative particle, or unnecessary detail.
 - Progress changes tween smoothly; status changes fade in without resizing the layout.
-- Completion shows `TasuHub hazır`, then the entire loader fades before it is destroyed.
+- Completion shows `TasuHub hazır`. Icon, progress bar, and status text then accelerate upward with Quint-In motion in that order, starting exactly 0.6 seconds apart. The background fade starts as soon as the status text begins moving and finishes with the final slide.
 
 ## One theme, one source
 
@@ -45,7 +46,7 @@ Status: the rework uses a dark-gray, minimal, vector-first direction and exactly
 - Motion is smooth and deliberately unhurried: controls 0.22–0.32 s, panels 0.45–0.65 s, modals 0.55–0.75 s, loader entry/exit 1.65 s.
 - Prefer position and `CanvasGroup.GroupTransparency` transitions. Do not animate layout-critical `Size` values when it can reflow or clip content.
 - Do not hide or destroy content until its closing tween completes.
-- `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. Never scale text/content to zero and never combine scale animation with layout resizing.
+- `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. The loader's approved staged reveal is the sole exception: it starts at 0.82, reaches 1.035, and settles at 1 without changing layout size. Never scale text/content to zero and never combine scale animation with layout resizing.
 - Re-entrant actions cancel or supersede the prior tween cleanly; overlapping tweens may not leave stale transparency, position, or input state.
 - Reduced-motion support must be possible through a single global duration multiplier.
 

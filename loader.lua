@@ -435,7 +435,10 @@ local UI = {
         Accent = ReworkPalette.Signal,
         MotionStatus = 0.42,
         MotionProgress = 0.85,
-        MotionLoader = 1.65
+        MotionLoader = 1.65,
+        MotionLoaderPop = 0.52,
+        MotionLoaderSettle = 0.18,
+        MotionLoaderStagger = 0.6
     },
     Flags = {},
     Controls = {},
@@ -983,7 +986,7 @@ do
     UI.LoaderContent.AnchorPoint = Vector2.new(0.5, 0.5)
     UI.LoaderContent.BackgroundTransparency = 1
     UI.LoaderContent.BorderSizePixel = 0
-    UI.LoaderContent.GroupTransparency = 1
+    UI.LoaderContent.GroupTransparency = 0
     UI.LoaderContent.Position = UDim2.fromScale(0.5, 0.5)
     UI.LoaderContent.Size = UDim2.fromOffset(400, 220)
     UI.LoaderContent.ZIndex = 1001
@@ -995,18 +998,28 @@ do
         ZIndex = 1002
     })
     UI.LoaderIcon.AnchorPoint = Vector2.new(0.5, 0)
+    UI.LoaderIcon.GroupTransparency = 1
     UI.LoaderIcon.Position = UDim2.new(0.5, 0, 0, 8)
+    UI.LoaderIcon.Visible = false
+    UI.LoaderIconScale = Instance.new("UIScale")
+    UI.LoaderIconScale.Scale = 0.82
+    UI.LoaderIconScale.Parent = UI.LoaderIcon
 
-    UI.LoaderBar = Instance.new("Frame")
+    UI.LoaderBar = Instance.new("CanvasGroup")
     UI.LoaderBar.Name = "ProgressTrack"
     UI.LoaderBar.AnchorPoint = Vector2.new(0.5, 0)
     UI.LoaderBar.BackgroundColor3 = tokens.ControlIdle
     UI.LoaderBar.BorderSizePixel = 0
     UI.LoaderBar.ClipsDescendants = true
+    UI.LoaderBar.GroupTransparency = 1
     UI.LoaderBar.Position = UDim2.new(0.5, 0, 0, 116)
     UI.LoaderBar.Size = UDim2.fromOffset(340, 18)
     UI.LoaderBar.ZIndex = 1002
     UI.LoaderBar.Parent = UI.LoaderContent
+    UI.LoaderBar.Visible = false
+    UI.LoaderBarScale = Instance.new("UIScale")
+    UI.LoaderBarScale.Scale = 0.82
+    UI.LoaderBarScale.Parent = UI.LoaderBar
     round(UI.LoaderBar, 999)
     local loaderStroke = Instance.new("UIStroke")
     loaderStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -1053,12 +1066,16 @@ do
     UI.LoaderStatus.Text = "Arayüz hazırlanıyor"
     UI.LoaderStatus.TextColor3 = tokens.TextSecondary
     UI.LoaderStatus.TextSize = 13
-    UI.LoaderStatus.TextTransparency = 0.42
+    UI.LoaderStatus.TextTransparency = 1
     UI.LoaderStatus.TextWrapped = true
     UI.LoaderStatus.TextXAlignment = Enum.TextXAlignment.Center
     UI.LoaderStatus.TextYAlignment = Enum.TextYAlignment.Top
     UI.LoaderStatus.ZIndex = 1002
     UI.LoaderStatus.Parent = UI.LoaderContent
+    UI.LoaderStatus.Visible = false
+    UI.LoaderStatusScale = Instance.new("UIScale")
+    UI.LoaderStatusScale.Scale = 0.82
+    UI.LoaderStatusScale.Parent = UI.LoaderStatus
 
     UI.SetLoading = function(progress, status)
         progress = math.clamp(tonumber(progress) or 0, 0, 1)
@@ -1073,9 +1090,19 @@ do
         end
     end
 
-    animate(UI.Loader, {BackgroundTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
-    animate(UI.LoaderContent, {GroupTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
-    task.wait(tokens.MotionLoader)
+    local function revealLoaderItem(item, itemScale, revealProperties)
+        item.Visible = true
+        itemScale.Scale = 0.82
+        animate(item, revealProperties, tokens.MotionLoaderPop, Enum.EasingStyle.Quint)
+        animate(itemScale, {Scale = 1.035}, tokens.MotionLoaderPop, Enum.EasingStyle.Quint).Completed:Wait()
+        animate(itemScale, {Scale = 1}, tokens.MotionLoaderSettle, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut).Completed:Wait()
+    end
+
+    local loaderEntryTween = animate(UI.Loader, {BackgroundTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    loaderEntryTween.Completed:Wait()
+    revealLoaderItem(UI.LoaderIcon, UI.LoaderIconScale, {GroupTransparency = 0})
+    revealLoaderItem(UI.LoaderBar, UI.LoaderBarScale, {GroupTransparency = 0})
+    revealLoaderItem(UI.LoaderStatus, UI.LoaderStatusScale, {TextTransparency = 0.42})
 end
 
 UI.SetLoading(0.06, "Arayüz hazırlanıyor")
@@ -6123,8 +6150,19 @@ env.TasuHub = {
 
 UI.SetLoading(1, "TasuHub hazır")
 task.wait(0.95)
+local loaderSlideDistance = -(getCanvasSize().Y * 0.5 + UI.LoaderContent.AbsoluteSize.Y)
+animate(UI.LoaderIcon, {
+    Position = UDim2.new(0.5, 0, 0, 8 + loaderSlideDistance)
+}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+task.wait(UI.DesignTokens.MotionLoaderStagger)
+animate(UI.LoaderBar, {
+    Position = UDim2.new(0.5, 0, 0, 116 + loaderSlideDistance)
+}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+task.wait(UI.DesignTokens.MotionLoaderStagger)
+animate(UI.LoaderStatus, {
+    Position = UDim2.new(0.5, 0, 0, 150 + loaderSlideDistance)
+}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 local loaderExitTween = animate(UI.Loader, {BackgroundTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
-animate(UI.LoaderContent, {GroupTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
 loaderExitTween.Completed:Wait()
 TopBar.Visible = false
 ContentWindow.Visible = false
