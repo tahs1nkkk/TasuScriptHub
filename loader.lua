@@ -448,7 +448,7 @@ local UI = {
         LoaderBlurSize = 34,
         MotionProgress = 1.4,
         MotionLoader = 0.5,
-        MotionLoaderExit = 2,
+        MotionLoaderExit = 1.7,
         MotionLoaderPop = 0.26,
         MotionLoaderSettle = 0.08,
         MotionLoaderSuccess = 1.2,
@@ -463,7 +463,7 @@ local UI = {
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
-        FadeOut = {Id = "rbxassetid://90657541635248", Volume = 0.08, PlaybackSpeed = 1, TargetDuration = 2},
+        FadeOut = {Id = "rbxassetid://90657541635248", Volume = 0.07, PlaybackSpeed = 2 / 3, PitchCompensation = 1.5, TargetDuration = 3},
         PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1}
     },
     Flags = {},
@@ -544,6 +544,11 @@ UI.PlaySound = function(name)
     sound.SoundId = preset.Id
     sound.Volume = preset.Volume or 0.15
     sound.PlaybackSpeed = preset.PlaybackSpeed or 1
+    if preset.PitchCompensation then
+        local pitchShift = trackInstance(Instance.new("PitchShiftSoundEffect"))
+        pitchShift.Octave = preset.PitchCompensation
+        pitchShift.Parent = sound
+    end
     sound.Parent = SoundService
     local played = pcall(function()
         SoundService:PlayLocalSound(sound)
