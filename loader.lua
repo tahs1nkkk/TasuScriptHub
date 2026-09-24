@@ -446,13 +446,15 @@ local UI = {
         MotionLoaderSuccess = 1.2,
         MotionLoaderComplete = 0.7,
         LoaderDotLoopDuration = 5.2,
+        LoaderDotEdgeFadeSpan = 0.08,
         LoaderIconLoopDuration = 6.4,
-        LoaderIconTravel = 18,
-        LoaderIconMaxScale = 1.08
+        LoaderIconRockAngle = 6,
+        LoaderIconMaxScale = 1.08,
+        LoaderReadyScale = 1.4
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
-        FadeOut = {Id = "rbxassetid://1127797047", Volume = 0.14, PlaybackSpeed = 0.58},
+        FadeOut = {Id = "rbxassetid://9120699503", Volume = 0.14, PlaybackSpeed = 7 / 3, TargetDuration = 3},
         PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1}
     },
     Flags = {},
@@ -504,7 +506,7 @@ UI.PlaySound = function(name)
     if not played then
         played = pcall(function() sound:Play() end)
     end
-    local cleanupDelay = math.max(4, 4 / math.max(0.1, sound.PlaybackSpeed))
+    local cleanupDelay = math.max(4, (preset.TargetDuration or (4 / math.max(0.1, sound.PlaybackSpeed))) + 1)
     task.delay(cleanupDelay, function()
         if sound and sound.Parent then
             sound:Destroy()
@@ -1107,17 +1109,23 @@ do
             local y = (record.Y - travel) % 1
             local verticalProgress = math.clamp((y - dotTopY) / dotTravelSpan, 0, 1)
             local emphasis = verticalProgress * verticalProgress
+            local edgeFadeSpan = tokens.LoaderDotEdgeFadeSpan
+            local edgeVisibility = math.min(
+                1,
+                verticalProgress / edgeFadeSpan,
+                (1 - verticalProgress) / edgeFadeSpan
+            )
             local dotSize = 2 + emphasis * 9
             local rowGroup = record.Object
             rowGroup.Position = UDim2.fromScale(0, y)
             rowGroup.Size = UDim2.new(1, 0, 0, dotSize)
-            rowGroup.GroupTransparency = 0.98 - emphasis * 0.36
+            local curveOpacity = 1 - (0.98 - emphasis * 0.36)
+            rowGroup.GroupTransparency = 1 - curveOpacity * edgeVisibility
         end
         if UI.LoaderIconMotionActive and UI.LoaderIcon and UI.LoaderIcon.Parent then
             local iconPhase = ((now - UI.LoaderIconMotionStartedAt) / tokens.LoaderIconLoopDuration) * math.pi * 2
-            local horizontalOffset = math.sin(iconPhase) * tokens.LoaderIconTravel
             local scaleProgress = (1 - math.cos(iconPhase)) * 0.5
-            UI.LoaderIcon.Position = UDim2.new(0.5, horizontalOffset, 0.42, 0)
+            UI.LoaderIcon.Rotation = math.sin(iconPhase) * tokens.LoaderIconRockAngle
             UI.LoaderIconScale.Scale = 1 + (tokens.LoaderIconMaxScale - 1) * scaleProgress
         end
     end))
@@ -1185,7 +1193,7 @@ do
     UI.LoaderPercent.Size = UDim2.fromScale(1, 1)
     UI.LoaderPercent.FontFace = UI.Fonts.HeadingHeavy
     UI.LoaderPercent.Text = "0%"
-    UI.LoaderPercent.TextColor3 = tokens.ControlIdle
+    UI.LoaderPercent.TextColor3 = tokens.TextPrimary
     UI.LoaderPercent.TextSize = 16
     UI.LoaderPercent.ZIndex = 1004
     UI.LoaderPercent.Parent = UI.LoaderBar
@@ -6358,7 +6366,7 @@ animate(UI.LoaderStatus, {
     TextTransparency = 0
 }, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 animate(UI.LoaderStatusScale, {
-    Scale = 1.18
+    Scale = UI.DesignTokens.LoaderReadyScale
 }, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 task.wait(1.8)
 UI.PlaySound("FadeOut")
