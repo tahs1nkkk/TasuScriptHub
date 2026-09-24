@@ -6,5 +6,6 @@ The second canonical execution must unload the first instance before creating th
 
 Feature controllers register resources by feature ID. UI overlays and animations register separately from gameplay behavior.
 
-Executor checks: double load, unload during animation, unload with every feature enabled, respawn during enable/disable, and unload after a partial remote-module failure.
+The loader's `BlurEffect` is created through `trackInstance`, tweened back to zero during normal exit, explicitly destroyed after that exit, and also covered by global unload cleanup for reloads or partial initialization.
 
+Executor checks: double load, unload during animation, unload with every feature enabled, respawn during enable/disable, and unload after a partial remote-module failure.

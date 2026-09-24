@@ -436,6 +436,8 @@ local UI = {
         TextOnAccent = ReworkPalette.Base,
         Accent = ReworkPalette.Signal,
         Success = ReworkPalette.Success,
+        LoaderBackgroundTransparency = 0.18,
+        LoaderBlurSize = 28,
         MotionStatus = 0.42,
         MotionProgress = 0.85,
         MotionLoader = 0.5,
@@ -1017,25 +1019,41 @@ do
     UI.Loader.ZIndex = 1000
     UI.Loader.Parent = InterfaceRoot
 
-    UI.LoaderTopFade = Instance.new("Frame")
-    UI.LoaderTopFade.Name = "TopEdgeGlow"
-    UI.LoaderTopFade.AnchorPoint = Vector2.new(0, 1)
-    UI.LoaderTopFade.BackgroundColor3 = UI.Loader.BackgroundColor3
-    UI.LoaderTopFade.BorderSizePixel = 0
-    UI.LoaderTopFade.Position = UDim2.fromOffset(0, 0)
-    UI.LoaderTopFade.Size = UDim2.new(1, 0, 0, 1000)
-    UI.LoaderTopFade.ZIndex = 1000
-    UI.LoaderTopFade.Parent = UI.Loader
-    local loaderTopGradient = Instance.new("UIGradient")
-    loaderTopGradient.Color = ColorSequence.new(UI.Loader.BackgroundColor3)
-    loaderTopGradient.Rotation = 90
-    loaderTopGradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 1),
-        NumberSequenceKeypoint.new(0.28, 0.94),
-        NumberSequenceKeypoint.new(0.62, 0.58),
-        NumberSequenceKeypoint.new(1, 0)
-    })
-    loaderTopGradient.Parent = UI.LoaderTopFade
+    UI.LoaderBlur = trackInstance(Instance.new("BlurEffect"))
+    UI.LoaderBlur.Name = "TasuHubLoaderBlur"
+    UI.LoaderBlur.Size = 0
+    UI.LoaderBlur.Parent = Lighting
+
+    UI.LoaderGrid = Instance.new("CanvasGroup")
+    UI.LoaderGrid.Name = "BottomDotGrid"
+    UI.LoaderGrid.BackgroundTransparency = 1
+    UI.LoaderGrid.BorderSizePixel = 0
+    UI.LoaderGrid.ClipsDescendants = true
+    UI.LoaderGrid.GroupTransparency = 1
+    UI.LoaderGrid.Position = UDim2.fromScale(0, 0.5)
+    UI.LoaderGrid.Size = UDim2.fromScale(1, 0.5)
+    UI.LoaderGrid.ZIndex = 1000
+    UI.LoaderGrid.Parent = UI.Loader
+    local gridColumns, gridRows = 48, 18
+    for row = 1, gridRows do
+        local verticalProgress = (row - 1) / (gridRows - 1)
+        local emphasis = verticalProgress * verticalProgress
+        local dotSize = math.floor(2 + emphasis * 9 + 0.5)
+        local dotTransparency = 0.98 - emphasis * 0.36
+        for column = 1, gridColumns do
+            local dot = Instance.new("Frame")
+            dot.Name = "Dot"
+            dot.AnchorPoint = Vector2.new(0.5, 0.5)
+            dot.BackgroundColor3 = tokens.TextPrimary
+            dot.BackgroundTransparency = dotTransparency
+            dot.BorderSizePixel = 0
+            dot.Position = UDim2.fromScale((column - 0.5) / gridColumns, (row - 0.5) / gridRows)
+            dot.Size = UDim2.fromOffset(dotSize, dotSize)
+            dot.ZIndex = 1000
+            dot.Parent = UI.LoaderGrid
+            round(dot, 999)
+        end
+    end
 
     UI.LoaderContent = Instance.new("CanvasGroup")
     UI.LoaderContent.Name = "LoaderContent"
@@ -1047,6 +1065,26 @@ do
     UI.LoaderContent.Size = UDim2.fromScale(1, 1)
     UI.LoaderContent.ZIndex = 1001
     UI.LoaderContent.Parent = UI.Loader
+
+    UI.LoaderIconShadows = {}
+    for index, shadowSpec in ipairs({
+        {Size = 268, Offset = 8, Transparency = 0.34},
+        {Size = 286, Offset = 12, Transparency = 0.52},
+        {Size = 310, Offset = 17, Transparency = 0.7},
+        {Size = 338, Offset = 23, Transparency = 0.84}
+    }) do
+        local iconShadow = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
+            Size = UDim2.fromOffset(shadowSpec.Size, shadowSpec.Size),
+            Color = tokens.Canvas,
+            ZIndex = 1001
+        })
+        iconShadow.Name = "IconSoftShadow" .. tostring(index)
+        iconShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+        iconShadow.GroupTransparency = 1
+        iconShadow.Position = UDim2.new(0.5, shadowSpec.Offset, 0.42, shadowSpec.Offset)
+        iconShadow.Visible = false
+        table.insert(UI.LoaderIconShadows, {Object = iconShadow, Transparency = shadowSpec.Transparency})
+    end
 
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
         Size = UDim2.fromOffset(240, 240),
@@ -1060,6 +1098,30 @@ do
     UI.LoaderIconScale = Instance.new("UIScale")
     UI.LoaderIconScale.Scale = 0.82
     UI.LoaderIconScale.Parent = UI.LoaderIcon
+
+    UI.LoaderBarShadows = {}
+    for index, shadowSpec in ipairs({
+        {Spread = 34, Offset = 8, Transparency = 0.34},
+        {Spread = 58, Offset = 14, Transparency = 0.56},
+        {Spread = 88, Offset = 22, Transparency = 0.76}
+    }) do
+        local barShadow = Instance.new("ImageLabel")
+        barShadow.Name = "BarSoftShadow" .. tostring(index)
+        barShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+        barShadow.BackgroundTransparency = 1
+        barShadow.BorderSizePixel = 0
+        barShadow.Image = "rbxassetid://1316045217"
+        barShadow.ImageColor3 = tokens.Canvas
+        barShadow.ImageTransparency = 1
+        barShadow.Position = UDim2.new(0.5, shadowSpec.Offset, 0.8, shadowSpec.Offset)
+        barShadow.ScaleType = Enum.ScaleType.Slice
+        barShadow.SliceCenter = Rect.new(10, 10, 118, 118)
+        barShadow.Size = UDim2.fromOffset(480 + shadowSpec.Spread, 28 + shadowSpec.Spread)
+        barShadow.Visible = false
+        barShadow.ZIndex = 1001
+        barShadow.Parent = UI.LoaderContent
+        table.insert(UI.LoaderBarShadows, {Object = barShadow, Transparency = shadowSpec.Transparency})
+    end
 
     UI.LoaderBar = Instance.new("CanvasGroup")
     UI.LoaderBar.Name = "ProgressTrack"
@@ -1130,6 +1192,31 @@ do
     UI.LoaderStatus.ZIndex = 1002
     UI.LoaderStatus.Parent = UI.LoaderContent
     UI.LoaderStatus.Visible = false
+    UI.LoaderStatusShadows = {}
+    for index, shadowSpec in ipairs({
+        {Offset = 4, Transparency = 0.28},
+        {Offset = 8, Transparency = 0.5},
+        {Offset = 13, Transparency = 0.72}
+    }) do
+        local statusShadow = Instance.new("TextLabel")
+        statusShadow.Name = "StatusSoftShadow" .. tostring(index)
+        statusShadow.AnchorPoint = UI.LoaderStatus.AnchorPoint
+        statusShadow.BackgroundTransparency = 1
+        statusShadow.FontFace = UI.LoaderStatus.FontFace
+        statusShadow.Position = UDim2.new(0.5, shadowSpec.Offset, 0.8, 34 + shadowSpec.Offset)
+        statusShadow.Size = UI.LoaderStatus.Size
+        statusShadow.Text = UI.LoaderStatus.Text
+        statusShadow.TextColor3 = tokens.Canvas
+        statusShadow.TextSize = UI.LoaderStatus.TextSize
+        statusShadow.TextTransparency = 1
+        statusShadow.TextWrapped = true
+        statusShadow.TextXAlignment = UI.LoaderStatus.TextXAlignment
+        statusShadow.TextYAlignment = UI.LoaderStatus.TextYAlignment
+        statusShadow.Visible = false
+        statusShadow.ZIndex = 1001
+        statusShadow.Parent = UI.LoaderContent
+        table.insert(UI.LoaderStatusShadows, {Object = statusShadow, Transparency = shadowSpec.Transparency})
+    end
     UI.LoaderStatusScale = Instance.new("UIScale")
     UI.LoaderStatusScale.Scale = 0.82
     UI.LoaderStatusScale.Parent = UI.LoaderStatus
@@ -1157,6 +1244,9 @@ do
         animate(UI.LoaderFill, {Size = UDim2.fromScale(progress, 1)}, tokens.MotionProgress, Enum.EasingStyle.Quint)
         if status and status ~= UI.LoaderStatus.Text then
             UI.LoaderStatus.Text = status
+            for _, shadowEntry in ipairs(UI.LoaderStatusShadows) do
+                shadowEntry.Object.Text = status
+            end
             UI.LoaderStatus.TextTransparency = 1
             animate(UI.LoaderStatus, {TextTransparency = 0.42}, tokens.MotionStatus, Enum.EasingStyle.Quint)
         end
@@ -1171,12 +1261,28 @@ do
         animate(itemScale, {Scale = 1}, tokens.MotionLoaderSettle, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut).Completed:Wait()
     end
 
+    local function revealLoaderShadows(shadows, property)
+        for _, shadowEntry in ipairs(shadows) do
+            shadowEntry.Object.Visible = true
+            animate(shadowEntry.Object, {
+                [property] = shadowEntry.Transparency
+            }, tokens.MotionLoaderPop, Enum.EasingStyle.Quint)
+        end
+    end
+
     UI.PlaySound("FadeIn")
     animate(UI.LoaderVersion, {TextTransparency = 0.58}, tokens.MotionLoader, Enum.EasingStyle.Quint)
-    local loaderEntryTween = animate(UI.Loader, {BackgroundTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    animate(UI.LoaderBlur, {Size = tokens.LoaderBlurSize}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    animate(UI.LoaderGrid, {GroupTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    local loaderEntryTween = animate(UI.Loader, {
+        BackgroundTransparency = tokens.LoaderBackgroundTransparency
+    }, tokens.MotionLoader, Enum.EasingStyle.Quint)
     loaderEntryTween.Completed:Wait()
+    revealLoaderShadows(UI.LoaderIconShadows, "GroupTransparency")
     revealLoaderItem(UI.LoaderIcon, UI.LoaderIconScale, {GroupTransparency = 0})
+    revealLoaderShadows(UI.LoaderBarShadows, "ImageTransparency")
     revealLoaderItem(UI.LoaderBar, UI.LoaderBarScale, {GroupTransparency = 0})
+    revealLoaderShadows(UI.LoaderStatusShadows, "TextTransparency")
     revealLoaderItem(UI.LoaderStatus, UI.LoaderStatusScale, {TextTransparency = 0.42})
 end
 
@@ -6234,11 +6340,13 @@ animate(UI.LoaderBarStroke, {
 }, UI.DesignTokens.MotionLoaderSuccess, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 task.wait(2.5)
 UI.PlaySound("FadeOut")
+animate(UI.LoaderBlur, {Size = 0}, UI.DesignTokens.MotionLoaderExit, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 local loaderExitTween = animate(UI.Loader, {
-    Position = UDim2.new(0, 0, 1, 1000)
+    Position = UDim2.fromScale(0, 1)
 }, UI.DesignTokens.MotionLoaderExit, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 loaderExitTween.Completed:Wait()
 UI.Loader.Visible = false
+if UI.LoaderBlur then UI.LoaderBlur:Destroy() end
 TopBar.Visible = false
 ContentWindow.Visible = false
 StatsPanel.Visible = false
