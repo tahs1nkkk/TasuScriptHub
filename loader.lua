@@ -425,7 +425,7 @@ local UI = {
     ActionIconBindings = {},
     ActionIconAssets = {},
     IconAssets = {
-        TasuHub = "rbxassetid://138667112902223"
+        TasuHub = "rbxthumb://type=Asset&id=138667112902223&w=420&h=420"
     },
     IconLibrary = {},
     DesignTokens = {
@@ -454,7 +454,7 @@ local UI = {
         LoaderIconRockAngle = 6,
         LoaderIconMaxScale = 1.08,
         LoaderReadyScale = 1.4,
-        LoaderExitSoundLead = 0.4
+        LoaderExitSoundDelay = 0.3
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
@@ -6385,7 +6385,7 @@ animate(UI.LoaderBar, {
 }, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 local loaderExitSoundDelay = math.max(
     0,
-    UI.DesignTokens.MotionLoaderComplete + 1.8 - UI.DesignTokens.LoaderExitSoundLead
+    UI.DesignTokens.MotionLoaderComplete + 1.8 + UI.DesignTokens.LoaderExitSoundDelay
 )
 task.delay(loaderExitSoundDelay, function()
     if UI.Loader and UI.Loader.Parent and UI.Loader.Visible then
