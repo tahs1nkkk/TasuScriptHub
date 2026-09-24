@@ -463,7 +463,7 @@ local UI = {
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
-        FadeOut = {Id = "rbxassetid://9120699503", Volume = 0.14, PlaybackSpeed = 7 / 3, TargetDuration = 3},
+        FadeOut = {Id = "rbxassetid://90657541635248", Volume = 0.08, PlaybackSpeed = 1, TargetDuration = 2},
         PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1}
     },
     Flags = {},
@@ -704,8 +704,6 @@ end
 
 UI.IconLibrary.TasuHub = function(parent, options)
     options = type(options) == "table" and options or {}
-    local tokens = UI.DesignTokens
-    local color = options.Color or tokens.TextPrimary
     local zIndex = options.ZIndex or 1
     local canvas = Instance.new("CanvasGroup")
     canvas.Name = "TasuHubIcon"
@@ -714,36 +712,6 @@ UI.IconLibrary.TasuHub = function(parent, options)
     canvas.Size = options.Size or UDim2.fromOffset(80, 80)
     canvas.ZIndex = zIndex
     canvas.Parent = parent
-
-    local vectorFallback = Instance.new("CanvasGroup")
-    vectorFallback.Name = "VectorFallback"
-    vectorFallback.BackgroundTransparency = 1
-    vectorFallback.BorderSizePixel = 0
-    vectorFallback.Size = UDim2.fromScale(1, 1)
-    vectorFallback.ZIndex = zIndex
-    vectorFallback.Parent = canvas
-
-    local function iconPart(name, position, size, rotation)
-        local part = Instance.new("Frame")
-        part.Name = name
-        part.AnchorPoint = Vector2.new(0.5, 0.5)
-        part.BackgroundColor3 = color
-        part.BorderSizePixel = 0
-        part.Position = position
-        part.Rotation = rotation or 0
-        part.Size = size
-        part.ZIndex = zIndex
-        part.Parent = vectorFallback
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0.22, 0)
-        corner.Parent = part
-        return part
-    end
-
-    iconPart("Crown", UDim2.fromScale(0.5, 0.22), UDim2.fromScale(0.76, 0.16))
-    iconPart("Stem", UDim2.fromScale(0.5, 0.51), UDim2.fromScale(0.16, 0.52))
-    iconPart("LeftFoot", UDim2.fromScale(0.405, 0.76), UDim2.fromScale(0.25, 0.14), -32)
-    iconPart("RightFoot", UDim2.fromScale(0.595, 0.76), UDim2.fromScale(0.25, 0.14), 32)
 
     local image = Instance.new("ImageLabel")
     image.Name = "Asset"
@@ -759,10 +727,9 @@ UI.IconLibrary.TasuHub = function(parent, options)
     task.spawn(function()
         local iconAsset = UI.IconAssets.TasuHub
         local resolved = UI.LoadRobloxThumbnailAsset(iconAsset.AssetId, iconAsset.CachePath)
-        if resolved and image.Parent and vectorFallback.Parent then
+        if resolved and image.Parent then
             image.Image = resolved
             image.ImageTransparency = 0
-            vectorFallback.GroupTransparency = 1
         end
     end)
     return canvas
@@ -1217,7 +1184,6 @@ do
 
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
         Size = UDim2.fromOffset(280, 280),
-        Color = tokens.TextPrimary,
         ZIndex = 1002
     })
     UI.LoaderIcon.AnchorPoint = Vector2.new(0.5, 0.5)
