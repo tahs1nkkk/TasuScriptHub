@@ -1,6 +1,15 @@
 # Shared theme contract
 
-Status: visual direction is intentionally undecided. These rules constrain implementation without choosing colors or style.
+Status: the rework starts with a dark, minimal, vector-first direction. The complete application theme is still being developed step by step; the loader decisions below are approved foundations.
+
+## Approved loader direction
+
+- The loader covers the entire viewport with a square, pure-black canvas and enters/exits through synchronized background/content fades.
+- The center composition contains the reusable vector `TasuHub` icon, one horizontal progress bar, an in-bar percentage, and one live status line below it.
+- The progress fill is near-white on a dark track. Percentage text is duplicated and clipped so it appears light on the unfilled track and dark over the filled area, producing a true negative/inverted effect.
+- The loader has no card, gradient, shadow, illustration, radial spinner, decorative particle, or unnecessary detail.
+- Progress changes tween smoothly; status changes fade in without resizing the layout.
+- Completion shows `TasuHub hazır`, then the entire loader fades before it is destroyed.
 
 ## One theme, one source
 
@@ -37,6 +46,7 @@ Status: visual direction is intentionally undecided. These rules constrain imple
 - Feature code requests an icon name; it does not own asset URLs.
 - Every icon has a text fallback and inherits theme color unless the asset is intentionally multicolor.
 - Missing or failed remote assets must not shift layout or remove the associated action.
+- General icons live in the shared vector icon library and accept size/color/Z-index options. `TasuHub` is the first general icon and must be reused rather than redrawn in each location.
 
 ## Component rules
 
@@ -48,4 +58,3 @@ Status: visual direction is intentionally undecided. These rules constrain imple
 ## Change rule
 
 Any proposed visual exception must first be expressed as a reusable token or component state in this file. If it cannot be generalized, it does not enter the UI.
-

@@ -26,5 +26,4 @@ They must not be copied line-for-line or visually reproduced. Their data contrac
 
 ## Current state
 
-Phase 1 is in progress. No visual theme has been selected and the verified legacy runtime remains present.
-
+Phase 1 is complete. The first approved visual foundation is implemented in the loader: dark, minimal, vector-first, shared icon registry, semantic tokens, and slow non-destructive fades. The verified legacy main UI remains present until its replacement shell is ready.

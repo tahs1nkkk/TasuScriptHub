@@ -24,6 +24,7 @@ This directory is the persistent source of truth for the executor-only UI rework
 - `systems/lifecycle.md`
 - `systems/capability-detection.md`
 - `systems/keybinds.md`
+- `systems/loader-screen.md`
 
 ## Feature memory
 

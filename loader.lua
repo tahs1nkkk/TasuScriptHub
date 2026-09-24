@@ -416,6 +416,19 @@ local UI = {
     },
     ActionIconBindings = {},
     ActionIconAssets = {},
+    IconLibrary = {},
+    DesignTokens = {
+        Canvas = Color3.fromRGB(0, 0, 0),
+        Surface = Color3.fromRGB(13, 13, 15),
+        ControlIdle = Color3.fromRGB(24, 24, 28),
+        BorderSubtle = Color3.fromRGB(54, 54, 61),
+        TextPrimary = Color3.fromRGB(246, 246, 248),
+        TextSecondary = Color3.fromRGB(144, 144, 153),
+        TextOnAccent = Color3.fromRGB(0, 0, 0),
+        Accent = Color3.fromRGB(246, 246, 248),
+        MotionStatus = 0.28,
+        MotionLoader = 0.9
+    },
     Flags = {},
     Controls = {},
     AccordionOpeners = {},
@@ -571,6 +584,7 @@ ScreenGui.Name = "TasuHub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
 local guiParented = pcall(function()
     ScreenGui.Parent = guiParent
 end)
@@ -591,6 +605,51 @@ local function round(object, radius)
     corner.CornerRadius = UDim.new(0, radius or 6)
     corner.Parent = object
     return corner
+end
+
+UI.IconLibrary.TasuHub = function(parent, options)
+    options = type(options) == "table" and options or {}
+    local tokens = UI.DesignTokens
+    local color = options.Color or tokens.TextPrimary
+    local zIndex = options.ZIndex or 1
+    local canvas = Instance.new("CanvasGroup")
+    canvas.Name = "TasuHubIcon"
+    canvas.BackgroundTransparency = 1
+    canvas.BorderSizePixel = 0
+    canvas.Size = options.Size or UDim2.fromOffset(80, 80)
+    canvas.ZIndex = zIndex
+    canvas.Parent = parent
+
+    local function iconPart(name, position, size, rotation)
+        local part = Instance.new("Frame")
+        part.Name = name
+        part.AnchorPoint = Vector2.new(0.5, 0.5)
+        part.BackgroundColor3 = color
+        part.BorderSizePixel = 0
+        part.Position = position
+        part.Rotation = rotation or 0
+        part.Size = size
+        part.ZIndex = zIndex
+        part.Parent = canvas
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0.22, 0)
+        corner.Parent = part
+        return part
+    end
+
+    iconPart("Crown", UDim2.fromScale(0.5, 0.22), UDim2.fromScale(0.76, 0.16))
+    iconPart("Stem", UDim2.fromScale(0.5, 0.51), UDim2.fromScale(0.16, 0.52))
+    iconPart("LeftFoot", UDim2.fromScale(0.405, 0.76), UDim2.fromScale(0.25, 0.14), -32)
+    iconPart("RightFoot", UDim2.fromScale(0.595, 0.76), UDim2.fromScale(0.25, 0.14), 32)
+    return canvas
+end
+
+UI.CreateIcon = function(parent, name, options)
+    local factory = UI.IconLibrary[name]
+    if type(factory) ~= "function" then
+        return nil
+    end
+    return factory(parent, options)
 end
 
 local function addShadow(object, transparency)
@@ -901,74 +960,116 @@ local function makeDraggable(frame, handle, clickCallback)
 end
 
 do
+    local tokens = UI.DesignTokens
     UI.Loader = Instance.new("Frame")
     UI.Loader.Name = "Loader"
+    UI.Loader.BackgroundColor3 = tokens.Canvas
     UI.Loader.BackgroundTransparency = 1
     UI.Loader.BorderSizePixel = 0
     UI.Loader.Size = UDim2.fromScale(1, 1)
-    UI.Loader.ZIndex = 100
+    UI.Loader.ZIndex = 1000
     UI.Loader.Parent = InterfaceRoot
 
-    UI.LoaderCard = Instance.new("Frame")
-    UI.LoaderCard.AnchorPoint = Vector2.new(0.5, 0.5)
-    UI.LoaderCard.BackgroundColor3 = Theme.Surface
-    UI.LoaderCard.BackgroundTransparency = 0.04
-    UI.LoaderCard.BorderSizePixel = 0
-    UI.LoaderCard.Position = UDim2.fromScale(0.5, -0.3)
-    UI.LoaderCard.Size = UDim2.fromOffset(330, 300)
-    UI.LoaderCard.ZIndex = 101
-    UI.LoaderCard.Parent = UI.Loader
-    UI.BindTheme(UI.LoaderCard, "BackgroundColor3", "Surface")
-    round(UI.LoaderCard, 22)
-    gradient(UI.LoaderCard, "Surface", "Surface2", 90)
+    UI.LoaderContent = Instance.new("CanvasGroup")
+    UI.LoaderContent.Name = "LoaderContent"
+    UI.LoaderContent.AnchorPoint = Vector2.new(0.5, 0.5)
+    UI.LoaderContent.BackgroundTransparency = 1
+    UI.LoaderContent.BorderSizePixel = 0
+    UI.LoaderContent.GroupTransparency = 1
+    UI.LoaderContent.Position = UDim2.fromScale(0.5, 0.5)
+    UI.LoaderContent.Size = UDim2.fromOffset(420, 250)
+    UI.LoaderContent.ZIndex = 1001
+    UI.LoaderContent.Parent = UI.Loader
 
-    UI.LoaderTitle = textLabel(UI.LoaderCard, "TasuHub", UDim2.new(1, -32, 0, 42), UDim2.fromOffset(16, 20), 28, Theme.Text, Enum.TextXAlignment.Center)
-    UI.LoaderTitle.FontFace = UI.Fonts.Home
-    UI.LoaderTitle.ZIndex = 102
+    UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
+        Size = UDim2.fromOffset(84, 84),
+        Color = tokens.TextPrimary,
+        ZIndex = 1002
+    })
+    UI.LoaderIcon.AnchorPoint = Vector2.new(0.5, 0)
+    UI.LoaderIcon.Position = UDim2.new(0.5, 0, 0, 8)
 
-    UI.LoaderSegments = {}
-    for index = 1, 28 do
-        local angle = math.rad((index - 1) / 28 * 360 - 90)
-        local segment = Instance.new("Frame")
-        segment.AnchorPoint = Vector2.new(0.5, 0.5)
-        segment.BackgroundColor3 = Theme.ControlOff
-        segment.BorderSizePixel = 0
-        segment.Position = UDim2.fromOffset(165 + math.cos(angle) * 68, 137 + math.sin(angle) * 68)
-        segment.Rotation = math.deg(angle) + 90
-        segment.Size = UDim2.fromOffset(7, 17)
-        segment.ZIndex = 102
-        segment.Parent = UI.LoaderCard
-        round(segment, 5)
-        table.insert(UI.LoaderSegments, segment)
-    end
+    UI.LoaderBar = Instance.new("Frame")
+    UI.LoaderBar.Name = "ProgressTrack"
+    UI.LoaderBar.AnchorPoint = Vector2.new(0.5, 0)
+    UI.LoaderBar.BackgroundColor3 = tokens.ControlIdle
+    UI.LoaderBar.BorderSizePixel = 0
+    UI.LoaderBar.ClipsDescendants = true
+    UI.LoaderBar.Position = UDim2.new(0.5, 0, 0, 126)
+    UI.LoaderBar.Size = UDim2.fromOffset(360, 32)
+    UI.LoaderBar.ZIndex = 1002
+    UI.LoaderBar.Parent = UI.LoaderContent
+    round(UI.LoaderBar, 7)
+    local loaderStroke = Instance.new("UIStroke")
+    loaderStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    loaderStroke.Color = tokens.BorderSubtle
+    loaderStroke.Thickness = 1
+    loaderStroke.Transparency = 0.15
+    loaderStroke.Parent = UI.LoaderBar
 
-    UI.LoaderPercent = textLabel(UI.LoaderCard, "0%", UDim2.fromOffset(110, 48), UDim2.fromOffset(110, 113), 26, Theme.Text, Enum.TextXAlignment.Center)
+    UI.LoaderFill = Instance.new("Frame")
+    UI.LoaderFill.Name = "ProgressFill"
+    UI.LoaderFill.BackgroundColor3 = tokens.Accent
+    UI.LoaderFill.BorderSizePixel = 0
+    UI.LoaderFill.ClipsDescendants = true
+    UI.LoaderFill.Size = UDim2.fromScale(0, 1)
+    UI.LoaderFill.ZIndex = 1003
+    UI.LoaderFill.Parent = UI.LoaderBar
+    round(UI.LoaderFill, 7)
+
+    UI.LoaderPercent = Instance.new("TextLabel")
+    UI.LoaderPercent.Name = "ProgressPercent"
+    UI.LoaderPercent.BackgroundTransparency = 1
+    UI.LoaderPercent.Size = UDim2.fromScale(1, 1)
     UI.LoaderPercent.FontFace = UI.Fonts.HeadingHeavy
-    UI.LoaderPercent.ZIndex = 103
-    UI.LoaderStatus = textLabel(UI.LoaderCard, "Initializing interface", UDim2.new(1, -32, 0, 46), UDim2.fromOffset(16, 220), 14, Theme.Muted, Enum.TextXAlignment.Center)
+    UI.LoaderPercent.Text = "0%"
+    UI.LoaderPercent.TextColor3 = tokens.TextPrimary
+    UI.LoaderPercent.TextSize = 14
+    UI.LoaderPercent.ZIndex = 1004
+    UI.LoaderPercent.Parent = UI.LoaderBar
+
+    UI.LoaderPercentNegative = UI.LoaderPercent:Clone()
+    UI.LoaderPercentNegative.Name = "ProgressPercentNegative"
+    UI.LoaderPercentNegative.Size = UDim2.fromOffset(360, 32)
+    UI.LoaderPercentNegative.TextColor3 = tokens.TextOnAccent
+    UI.LoaderPercentNegative.ZIndex = 1005
+    UI.LoaderPercentNegative.Parent = UI.LoaderFill
+
+    UI.LoaderStatus = Instance.new("TextLabel")
+    UI.LoaderStatus.Name = "LoaderStatus"
+    UI.LoaderStatus.AnchorPoint = Vector2.new(0.5, 0)
+    UI.LoaderStatus.BackgroundTransparency = 1
     UI.LoaderStatus.FontFace = UI.Fonts.Description
+    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0, 174)
+    UI.LoaderStatus.Size = UDim2.fromOffset(360, 44)
+    UI.LoaderStatus.Text = "Arayüz hazırlanıyor"
+    UI.LoaderStatus.TextColor3 = tokens.TextSecondary
+    UI.LoaderStatus.TextSize = 14
     UI.LoaderStatus.TextWrapped = true
-    UI.LoaderStatus.ZIndex = 102
+    UI.LoaderStatus.TextXAlignment = Enum.TextXAlignment.Center
+    UI.LoaderStatus.TextYAlignment = Enum.TextYAlignment.Top
+    UI.LoaderStatus.ZIndex = 1002
+    UI.LoaderStatus.Parent = UI.LoaderContent
 
     UI.SetLoading = function(progress, status)
         progress = math.clamp(tonumber(progress) or 0, 0, 1)
-        UI.LoaderPercent.Text = tostring(math.floor(progress * 100 + 0.5)) .. "%"
-        UI.LoaderStatus.Text = status or UI.LoaderStatus.Text
-        local activeCount = math.floor(progress * #UI.LoaderSegments + 0.5)
-        for index, segment in ipairs(UI.LoaderSegments) do
-            animate(segment, {
-                BackgroundColor3 = index <= activeCount and Theme.Accent or Theme.ControlOff,
-                BackgroundTransparency = index <= activeCount and 0 or 0.35
-            }, 0.34, Enum.EasingStyle.Quint)
+        local percentage = tostring(math.floor(progress * 100 + 0.5)) .. "%"
+        UI.LoaderPercent.Text = percentage
+        UI.LoaderPercentNegative.Text = percentage
+        animate(UI.LoaderFill, {Size = UDim2.fromScale(progress, 1)}, 0.56, Enum.EasingStyle.Quint)
+        if status and status ~= UI.LoaderStatus.Text then
+            UI.LoaderStatus.Text = status
+            UI.LoaderStatus.TextTransparency = 1
+            animate(UI.LoaderStatus, {TextTransparency = 0}, tokens.MotionStatus, Enum.EasingStyle.Quint)
         end
-        task.wait(0.1)
     end
 
-    animate(UI.LoaderCard, {Position = UDim2.fromScale(0.5, 0.5)}, 0.9, Enum.EasingStyle.Quint)
-    task.wait(0.8)
+    animate(UI.Loader, {BackgroundTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    animate(UI.LoaderContent, {GroupTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    task.wait(tokens.MotionLoader)
 end
 
-UI.SetLoading(0.06, "Initializing interface")
+UI.SetLoading(0.06, "Arayüz hazırlanıyor")
 
 local TopBar = Instance.new("Frame")
 TopBar.Name = "CategoryBar"
@@ -1307,7 +1408,7 @@ trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
     StatsPanel.Size = UDim2.fromOffset(190, 38 + math.max(1, #lines) * 18)
 end))
 
-UI.SetLoading(0.22, "Loading UI components")
+UI.SetLoading(0.22, "Arayüz bileşenleri yükleniyor")
 
 local topBarCollapsed = false
 local topBarTransition = 0
@@ -2567,7 +2668,7 @@ UI.GlobalSearchListPadding.PaddingTop = UDim.new(0, 6)
 UI.GlobalSearchListPadding.PaddingBottom = UDim.new(0, 6)
 UI.GlobalSearchListPadding.Parent = UI.GlobalSearchList
 
-UI.SetLoading(0.44, "Setting up features")
+UI.SetLoading(0.44, "Özellikler hazırlanıyor")
 
 local windowTransition = 0
 
@@ -4322,7 +4423,7 @@ local function applyWorld()
 end
 
 do
-UI.SetLoading(0.7, "Preparing categories")
+UI.SetLoading(0.7, "Kategoriler oluşturuluyor")
 
 local HomePage = pages.Home
 local HomeCard = UI.AddAccordion(HomePage, "TasuHub", true)
@@ -5723,7 +5824,7 @@ local function loadConfig(name)
     return true, path
 end
 
-UI.SetLoading(0.9, "Almost ready")
+UI.SetLoading(0.9, "Son kontroller yapılıyor")
 
 local ConfigPage = pages.Configs
 do
@@ -6066,12 +6167,11 @@ env.TasuHub = {
     Unload = unload
 }
 
-UI.SetLoading(1, "Welcome to TasuHub")
-task.wait(math.random(10, 30) / 10)
-UI.LoaderStatus.Text = "Done!"
-task.wait(1.5)
-animate(UI.LoaderCard, {Position = UDim2.fromScale(0.5, 1.3)}, 0.8, Enum.EasingStyle.Quint)
-task.wait(0.82)
+UI.SetLoading(1, "TasuHub hazır")
+task.wait(0.65)
+local loaderExitTween = animate(UI.Loader, {BackgroundTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
+animate(UI.LoaderContent, {GroupTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
+loaderExitTween.Completed:Wait()
 TopBar.Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, -72)
 TopBar.Visible = true
 animate(TopBar, {Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, 44)}, 1.18, Enum.EasingStyle.Quint)

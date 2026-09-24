@@ -6,6 +6,7 @@ This map prevents state or behavior from being lost during the rebuild.
 | --- | --- |
 | `Interface.*`, theme bindings, shared components, icons, animation | `THEME_RULES.md` |
 | Executor entrypoint and bootstrap | `scripts/loader.md`, `EXECUTOR_TESTING.md` |
+| Full-screen loading experience and live progress | `systems/loader-screen.md` |
 | Capability globals and fallbacks | `systems/capability-detection.md` |
 | Connections, instances, render bindings, unload | `systems/lifecycle.md` |
 | `Aim.Enabled`, activation, method, rage, smoothing | `features/aim-core.md` |
@@ -45,4 +46,3 @@ This map prevents state or behavior from being lost during the rebuild.
 | MM2 role ESP | `features/mm2-role-esp.md` |
 | MM2 gun-drop ESP | `features/mm2-gun-drop.md` |
 | MM2 pickup/fire automatic and manual actions | `features/mm2-automation.md` |
-

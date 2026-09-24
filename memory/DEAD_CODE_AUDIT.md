@@ -15,6 +15,7 @@ Audit baseline: executor-verified remote content `c23ef7c`; local rework source 
 
 - `getBoundingScreenBox` is currently used by the visual preview. It becomes removable if the old preview implementation is discarded.
 - Legacy theme binding, shadow construction, vector icon drawing, card builders, dropdown implementations, global-search view, player-row view, catalog editor view, and config modal remain live today but are not reusable in the new UI.
+- The old loader card, radial `LoaderSegments`, loader title, gradient, and slide-in/slide-out path were removed during the first rework step. No references remain.
 - Placeholder methods in the initial `UI` table are intentional forward references, not dead functions.
 - `_` locals reported by AST reference counting are intentional ignored return values.
 
@@ -24,7 +25,10 @@ Audit baseline: executor-verified remote content `c23ef7c`; local rework source 
 - `mm2.lua`: no unreferenced named local functions or service bindings were found by AST reference counting. Luau compilation succeeds.
 - `mm2.lua` owns a second independent UI. Its feature logic is live, but that visual shell must be removed when MM2 becomes a registered feature provider.
 
+## Confirmed removals
+
+- Loader rework: removed the radial segment spinner and legacy loader card implementation; replaced by the shared vector icon and horizontal progress system.
+
 ## Re-run rules
 
 After each migration, check Luau compilation, named local references, state-key reads/writes, service usage, render-step bindings, connections, exported API members, and executor unload behavior. Record confirmed removals with commit IDs.
-
