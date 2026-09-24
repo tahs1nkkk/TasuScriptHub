@@ -437,17 +437,14 @@ local UI = {
         MotionStatus = 0.42,
         MotionProgress = 0.85,
         MotionLoader = 0.8,
+        MotionLoaderExit = 0.4,
         MotionLoaderPop = 0.26,
-        MotionLoaderSettle = 0.08,
-        MotionLoaderSlide = 0.8,
-        MotionLoaderStagger = 0.6,
-        MotionLoaderFadeDelay = 1.5
+        MotionLoaderSettle = 0.08
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
         FadeOut = {Id = "rbxassetid://1127797047", Volume = 0.14, PlaybackSpeed = 0.82},
-        PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
-        PopOut = {Id = "rbxassetid://137081214744553", Volume = 0.14, PlaybackSpeed = 1.3}
+        PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1}
     },
     Flags = {},
     Controls = {},
@@ -1011,9 +1008,28 @@ do
     UI.Loader.BackgroundColor3 = tokens.Canvas
     UI.Loader.BackgroundTransparency = 1
     UI.Loader.BorderSizePixel = 0
+    UI.Loader.ClipsDescendants = false
+    UI.Loader.Position = UDim2.fromScale(0, 0)
     UI.Loader.Size = UDim2.fromScale(1, 1)
     UI.Loader.ZIndex = 1000
     UI.Loader.Parent = InterfaceRoot
+
+    UI.LoaderTopFade = Instance.new("Frame")
+    UI.LoaderTopFade.Name = "TopEdgeFade"
+    UI.LoaderTopFade.BackgroundColor3 = tokens.Canvas
+    UI.LoaderTopFade.BorderSizePixel = 0
+    UI.LoaderTopFade.Position = UDim2.fromOffset(0, -200)
+    UI.LoaderTopFade.Size = UDim2.new(1, 0, 0, 200)
+    UI.LoaderTopFade.ZIndex = 1000
+    UI.LoaderTopFade.Parent = UI.Loader
+    local loaderTopGradient = Instance.new("UIGradient")
+    loaderTopGradient.Color = ColorSequence.new(tokens.Canvas)
+    loaderTopGradient.Rotation = 90
+    loaderTopGradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0)
+    })
+    loaderTopGradient.Parent = UI.LoaderTopFade
 
     UI.LoaderContent = Instance.new("CanvasGroup")
     UI.LoaderContent.Name = "LoaderContent"
@@ -1027,7 +1043,7 @@ do
     UI.LoaderContent.Parent = UI.Loader
 
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
-        Size = UDim2.fromOffset(128, 128),
+        Size = UDim2.fromOffset(152, 152),
         Color = tokens.TextPrimary,
         ZIndex = 1002
     })
@@ -1047,7 +1063,7 @@ do
     UI.LoaderBar.ClipsDescendants = true
     UI.LoaderBar.GroupTransparency = 1
     UI.LoaderBar.Position = UDim2.fromScale(0.5, 0.76)
-    UI.LoaderBar.Size = UDim2.fromOffset(340, 18)
+    UI.LoaderBar.Size = UDim2.fromOffset(400, 22)
     UI.LoaderBar.ZIndex = 1002
     UI.LoaderBar.Parent = UI.LoaderContent
     UI.LoaderBar.Visible = false
@@ -1079,13 +1095,13 @@ do
     UI.LoaderPercent.FontFace = UI.Fonts.HeadingHeavy
     UI.LoaderPercent.Text = "0%"
     UI.LoaderPercent.TextColor3 = tokens.TextPrimary
-    UI.LoaderPercent.TextSize = 11
+    UI.LoaderPercent.TextSize = 13
     UI.LoaderPercent.ZIndex = 1004
     UI.LoaderPercent.Parent = UI.LoaderBar
 
     UI.LoaderPercentNegative = UI.LoaderPercent:Clone()
     UI.LoaderPercentNegative.Name = "ProgressPercentNegative"
-    UI.LoaderPercentNegative.Size = UDim2.fromOffset(340, 18)
+    UI.LoaderPercentNegative.Size = UDim2.fromOffset(400, 22)
     UI.LoaderPercentNegative.TextColor3 = tokens.TextOnAccent
     UI.LoaderPercentNegative.ZIndex = 1005
     UI.LoaderPercentNegative.Parent = UI.LoaderFill
@@ -1095,11 +1111,11 @@ do
     UI.LoaderStatus.AnchorPoint = Vector2.new(0.5, 0)
     UI.LoaderStatus.BackgroundTransparency = 1
     UI.LoaderStatus.FontFace = UI.Fonts.Description
-    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0.76, 22)
-    UI.LoaderStatus.Size = UDim2.fromOffset(340, 40)
+    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0.76, 27)
+    UI.LoaderStatus.Size = UDim2.fromOffset(400, 47)
     UI.LoaderStatus.Text = "Arayüz hazırlanıyor"
     UI.LoaderStatus.TextColor3 = tokens.TextSecondary
-    UI.LoaderStatus.TextSize = 13
+    UI.LoaderStatus.TextSize = 15
     UI.LoaderStatus.TextTransparency = 1
     UI.LoaderStatus.TextWrapped = true
     UI.LoaderStatus.TextXAlignment = Enum.TextXAlignment.Center
@@ -1115,12 +1131,12 @@ do
     UI.LoaderVersion.Name = "LoaderVersion"
     UI.LoaderVersion.AnchorPoint = Vector2.new(1, 1)
     UI.LoaderVersion.BackgroundTransparency = 1
-    UI.LoaderVersion.Position = UDim2.new(1, -18, 1, -14)
-    UI.LoaderVersion.Size = UDim2.fromOffset(150, 18)
+    UI.LoaderVersion.Position = UDim2.new(1, -22, 1, -18)
+    UI.LoaderVersion.Size = UDim2.fromOffset(180, 21)
     UI.LoaderVersion.FontFace = UI.Fonts.Description
     UI.LoaderVersion.Text = "TasuHub  ·  v" .. UI.Version
     UI.LoaderVersion.TextColor3 = tokens.TextSecondary
-    UI.LoaderVersion.TextSize = 11
+    UI.LoaderVersion.TextSize = 13
     UI.LoaderVersion.TextTransparency = 1
     UI.LoaderVersion.TextXAlignment = Enum.TextXAlignment.Right
     UI.LoaderVersion.ZIndex = 1001
@@ -6202,25 +6218,12 @@ env.TasuHub = {
 
 UI.SetLoading(1, "TasuHub hazır")
 task.wait(0.95)
-UI.PlaySound("PopOut")
-animate(UI.LoaderIcon, {
-    Position = UDim2.new(0.5, 0, 0, -(UI.LoaderIcon.AbsoluteSize.Y * 0.5 + 18))
-}, UI.DesignTokens.MotionLoaderSlide, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-task.wait(UI.DesignTokens.MotionLoaderStagger)
-UI.PlaySound("PopOut")
-animate(UI.LoaderBar, {
-    Position = UDim2.new(0.5, 0, 0, -(UI.LoaderBar.AbsoluteSize.Y * 0.5 + 18))
-}, UI.DesignTokens.MotionLoaderSlide, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-task.wait(UI.DesignTokens.MotionLoaderStagger)
-UI.PlaySound("PopOut")
-animate(UI.LoaderStatus, {
-    Position = UDim2.new(0.5, 0, 0, -(UI.LoaderStatus.AbsoluteSize.Y + 18))
-}, UI.DesignTokens.MotionLoaderSlide, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-task.wait(UI.DesignTokens.MotionLoaderFadeDelay)
 UI.PlaySound("FadeOut")
-animate(UI.LoaderVersion, {TextTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
-local loaderExitTween = animate(UI.Loader, {BackgroundTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
+local loaderExitTween = animate(UI.Loader, {
+    Position = UDim2.new(0, 0, 1, 200)
+}, UI.DesignTokens.MotionLoaderExit, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 loaderExitTween.Completed:Wait()
+UI.Loader.Visible = false
 TopBar.Visible = false
 ContentWindow.Visible = false
 StatsPanel.Visible = false

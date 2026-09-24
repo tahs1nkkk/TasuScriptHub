@@ -29,6 +29,7 @@ Audit baseline: executor-verified remote content `c23ef7c`; local rework source 
 ## Confirmed removals
 
 - Loader rework: removed the radial segment spinner and legacy loader card implementation; replaced by the shared vector icon and horizontal progress system.
+- Loader exit revision: removed the independent icon/bar/status exit tweens, their stagger/delay tokens, and the unused per-item pop-out audio entry. Exit now has one whole-loader motion path.
 - Legacy visibility pass: removed the old unload animation and disabled automatic top-bar reveal, window/search opening, stats, preview, visual notifications, and exported legacy open/toggle/category methods.
 - Theme retirement: removed the `Tasu Light`, `Midnight`, and `Amethyst` preset definitions. Legacy config names now resolve to the sole `Rework Dark` three-color theme.
 

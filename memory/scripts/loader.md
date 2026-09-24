@@ -4,7 +4,7 @@ Role: canonical executor entrypoint and current monolithic TasuHub runtime.
 
 Current responsibilities include defaults/state, capability detection, lifecycle tracking, legacy UI, search, players, catalog, configs, Aim, Visuals, Movement, World, Misc, statistics, and unload.
 
-Implemented rework step: the old card/radial loader was replaced with the approved full-screen dark loader. `loader.lua` now owns the reusable vector icon registry entry `TasuHub`, semantic loader tokens, horizontal progress updates, clipped negative percentage text, live Turkish status text, and fade entry/exit.
+Implemented rework step: the old card/radial loader was replaced with the approved full-screen dark loader. `loader.lua` now owns the reusable vector icon registry entry `TasuHub`, semantic loader tokens, horizontal progress updates, clipped negative percentage text, live Turkish status text, Roblox-linked audio cues, and the whole-background downward exit with a 200 px soft top edge.
 
 Current presentation state: `UI.LegacyUIEnabled` is permanently false during the rebuild. The legacy top bar, content window, search, preview, stats, toast, modal entrypoints, and unload screen cannot become visible. Feature engines, state, flags, lifecycle, and executor APIs remain loaded.
 
