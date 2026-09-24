@@ -436,8 +436,8 @@ local UI = {
         Accent = ReworkPalette.Signal,
         MotionStatus = 0.42,
         MotionProgress = 0.85,
-        MotionLoader = 0.8,
-        MotionLoaderExit = 0.4,
+        MotionLoader = 0.5,
+        MotionLoaderExit = 0.9,
         MotionLoaderPop = 0.26,
         MotionLoaderSettle = 0.08
     },
@@ -1015,10 +1015,11 @@ do
     UI.Loader.Parent = InterfaceRoot
 
     UI.LoaderTopFade = Instance.new("Frame")
-    UI.LoaderTopFade.Name = "TopEdgeFade"
+    UI.LoaderTopFade.Name = "TopEdgeGlow"
+    UI.LoaderTopFade.AnchorPoint = Vector2.new(0, 1)
     UI.LoaderTopFade.BackgroundColor3 = tokens.Canvas
     UI.LoaderTopFade.BorderSizePixel = 0
-    UI.LoaderTopFade.Position = UDim2.fromOffset(0, -200)
+    UI.LoaderTopFade.Position = UDim2.fromOffset(0, 0)
     UI.LoaderTopFade.Size = UDim2.new(1, 0, 0, 200)
     UI.LoaderTopFade.ZIndex = 1000
     UI.LoaderTopFade.Parent = UI.Loader
@@ -6216,8 +6217,8 @@ env.TasuHub = {
     Unload = unload
 }
 
-UI.SetLoading(1, "TasuHub hazır")
-task.wait(0.95)
+UI.SetLoading(1, "Herşey Hazır!")
+task.wait(1.3)
 UI.PlaySound("FadeOut")
 local loaderExitTween = animate(UI.Loader, {
     Position = UDim2.new(0, 0, 1, 200)

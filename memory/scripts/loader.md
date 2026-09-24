@@ -14,4 +14,6 @@ Critical guarantees: second execution unloads the prior instance; all render-ste
 
 Loader runtime checkpoints currently report 6%, 22%, 44%, 70%, 90%, and 100%. These are construction milestones, not network-byte measurements.
 
+The 100% checkpoint displays `Herşey Hazır!` for 1.3 seconds before the complete loader exits downward. Entry is 0.5 seconds; the whole-background exit is 0.9 seconds and retains the top-only 200 px glow.
+
 Runtime validation follows `../EXECUTOR_TESTING.md`. Visual code follows `../THEME_RULES.md`.

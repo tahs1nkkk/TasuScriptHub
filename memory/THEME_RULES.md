@@ -13,13 +13,13 @@ Status: the rework uses a dark-gray, minimal, vector-first direction and exactly
 
 ## Approved loader direction
 
-- The loader covers the entire viewport with the dark-gray `Base` color. Background entry fades in over 0.8 seconds. Exit moves the entire loader downward over 0.4 seconds with Quint-In acceleration.
+- The loader covers the entire viewport with the dark-gray `Base` color. Background entry fades in quickly over 0.5 seconds. Exit moves the entire loader downward more slowly over 0.9 seconds with Quint-In acceleration.
 - Loader content stays hidden until the background entry finishes. The icon, progress bar, and status text then fade and scale in, in that order, from 0.82 to a 1.035 overshoot over 0.26 seconds and settle to normal over 0.08 seconds. Progress cannot begin before all three reveals finish.
 - The enlarged reusable vector `TasuHub` icon occupies the middle area. The progress bar, in-bar percentage, live status line, and bottom-right version label use the shared enlarged loader scale.
 - The thin, fully rounded progress track uses `Layer`; its fill uses `Signal`. Percentage text is duplicated and clipped so it appears `Signal` on the unfilled track and `Base` over the filled area, producing a true negative/inverted effect.
-- The loader has no card, shadow, illustration, radial spinner, decorative particle, or unnecessary detail. Its only gradient is the approved 200 px `Base`-color transparency tail attached above the background, which softens the revealed edge during downward exit.
+- The loader has no card, shadow, illustration, radial spinner, decorative particle, or unnecessary detail. Its only gradient is the approved 200 px upward-facing `Base` glow attached exclusively to the background's top edge; it fades to full transparency as it extends upward and softens the revealed edge during downward exit.
 - Progress changes tween smoothly; status changes fade in without resizing the layout.
-- Completion shows `TasuHub hazır`. Content never moves independently: icon, bar, status, and version remain attached to the background. The complete loader accelerates downward, including its 200 px top fade tail, until every pixel is outside the viewport; only then is it hidden and destroyed.
+- Completion changes the status to `Herşey Hazır!` for exactly 1.3 seconds before exit begins. Content never moves independently: icon, bar, status, and version remain attached to the background. The complete loader accelerates downward, including its 200 px top glow, until every pixel is outside the viewport; only then is it hidden and destroyed.
 - Loader entry, each content pop-in, and the complete background exit trigger shared non-positional Roblox asset sounds through the central audio registry. Missing or permission-restricted audio must never stop an animation.
 
 ## One theme, one source
@@ -44,7 +44,7 @@ Status: the rework uses a dark-gray, minimal, vector-first direction and exactly
 ## Motion rules
 
 - Every open, close, expand, collapse, category change, modal, dropdown, tooltip, and drag-settle action uses shared motion tokens.
-- Motion is smooth and deliberately unhurried except for the intentionally responsive loader: controls 0.22–0.32 s, panels 0.45–0.65 s, modals 0.55–0.75 s, loader entry 0.8 s, and whole-loader downward exit 0.4 s.
+- Motion is smooth and deliberately unhurried except for the intentionally responsive loader: controls 0.22–0.32 s, panels 0.45–0.65 s, modals 0.55–0.75 s, loader entry 0.5 s, and whole-loader downward exit 0.9 s.
 - Prefer position and `CanvasGroup.GroupTransparency` transitions. Do not animate layout-critical `Size` values when it can reflow or clip content.
 - Do not hide or destroy content until its closing tween completes.
 - `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. The loader's approved staged reveal is the sole exception: it starts at 0.82, reaches 1.035, and settles at 1 without changing layout size. Never scale text/content to zero and never combine scale animation with layout resizing.
