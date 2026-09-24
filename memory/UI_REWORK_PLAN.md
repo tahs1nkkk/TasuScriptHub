@@ -26,4 +26,4 @@ They must not be copied line-for-line or visually reproduced. Their data contrac
 
 ## Current state
 
-Phase 1 is complete. The first approved visual foundation is implemented in the loader: dark, minimal, vector-first, shared icon registry, semantic tokens, and slow non-destructive fades. The verified legacy main UI remains present until its replacement shell is ready.
+Phase 1 is complete. The loader now uses the fixed three-color dark-gray palette, minimal vector icon registry, thin rounded progress bar, and deliberately slow fades. Legacy presentation is disabled and cannot become visible after loading; feature engines and state remain active while the new shell is built.

@@ -1,18 +1,18 @@
 local Defaults = {
     Interface = {
         Title = "TasuHub",
-        ThemeName = "Tasu Light",
-        Accent = Color3.fromRGB(113, 180, 255),
-        AccentSoft = Color3.fromRGB(218, 239, 255),
-        Background = Color3.fromRGB(242, 248, 255),
-        Surface = Color3.fromRGB(255, 255, 255),
-        Surface2 = Color3.fromRGB(235, 245, 255),
-        Hover = Color3.fromRGB(224, 241, 255),
-        ControlOff = Color3.fromRGB(217, 231, 244),
-        Track = Color3.fromRGB(205, 220, 235),
-        Text = Color3.fromRGB(22, 27, 34),
-        Muted = Color3.fromRGB(82, 94, 108),
-        Section = Color3.fromRGB(214, 122, 38)
+        ThemeName = "Rework Dark",
+        Accent = Color3.fromRGB(242, 243, 245),
+        AccentSoft = Color3.fromRGB(37, 39, 45),
+        Background = Color3.fromRGB(18, 19, 22),
+        Surface = Color3.fromRGB(37, 39, 45),
+        Surface2 = Color3.fromRGB(18, 19, 22),
+        Hover = Color3.fromRGB(242, 243, 245),
+        ControlOff = Color3.fromRGB(37, 39, 45),
+        Track = Color3.fromRGB(37, 39, 45),
+        Text = Color3.fromRGB(242, 243, 245),
+        Muted = Color3.fromRGB(242, 243, 245),
+        Section = Color3.fromRGB(242, 243, 245)
     },
     Aim = {
         Enabled = false,
@@ -375,9 +375,15 @@ end
 guiParent = guiParent or CoreGui
 
 local Theme = State.Interface
+local ReworkPalette = {
+    Base = Color3.fromRGB(18, 19, 22),
+    Layer = Color3.fromRGB(37, 39, 45),
+    Signal = Color3.fromRGB(242, 243, 245)
+}
 local UI = {
     Version = "0.1",
     Ready = false,
+    LegacyUIEnabled = false,
     -- 9 category buttons: 148 brand + 495 categories + 6 gap + 48 search + 6 gap + 70 version + 12 padding.
     TopBarBaseWidth = 785,
     -- ShadowSpread / 2 is roughly the visible edge in pixels. Offset moves it right/down.
@@ -418,16 +424,18 @@ local UI = {
     ActionIconAssets = {},
     IconLibrary = {},
     DesignTokens = {
-        Canvas = Color3.fromRGB(0, 0, 0),
-        Surface = Color3.fromRGB(13, 13, 15),
-        ControlIdle = Color3.fromRGB(24, 24, 28),
-        BorderSubtle = Color3.fromRGB(54, 54, 61),
-        TextPrimary = Color3.fromRGB(246, 246, 248),
-        TextSecondary = Color3.fromRGB(144, 144, 153),
-        TextOnAccent = Color3.fromRGB(0, 0, 0),
-        Accent = Color3.fromRGB(246, 246, 248),
-        MotionStatus = 0.28,
-        MotionLoader = 0.9
+        Palette = ReworkPalette,
+        Canvas = ReworkPalette.Base,
+        Surface = ReworkPalette.Layer,
+        ControlIdle = ReworkPalette.Layer,
+        BorderSubtle = ReworkPalette.Signal,
+        TextPrimary = ReworkPalette.Signal,
+        TextSecondary = ReworkPalette.Signal,
+        TextOnAccent = ReworkPalette.Base,
+        Accent = ReworkPalette.Signal,
+        MotionStatus = 0.42,
+        MotionProgress = 0.85,
+        MotionLoader = 1.65
     },
     Flags = {},
     Controls = {},
@@ -451,26 +459,12 @@ local UI = {
         HomeRegular = Font.new("rbxasset://fonts/families/Ubuntu.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
     },
     Themes = {
-        ["Tasu Light"] = {
-            Accent = Color3.fromRGB(113, 180, 255), AccentSoft = Color3.fromRGB(218, 239, 255),
-            Background = Color3.fromRGB(242, 248, 255), Surface = Color3.fromRGB(255, 255, 255),
-            Surface2 = Color3.fromRGB(235, 245, 255), Hover = Color3.fromRGB(224, 241, 255), ControlOff = Color3.fromRGB(217, 231, 244),
-            Track = Color3.fromRGB(205, 220, 235), Text = Color3.fromRGB(22, 27, 34), Muted = Color3.fromRGB(82, 94, 108),
-            Section = Color3.fromRGB(214, 122, 38)
-        },
-        Midnight = {
-            Accent = Color3.fromRGB(82, 174, 255), AccentSoft = Color3.fromRGB(28, 75, 122),
-            Background = Color3.fromRGB(6, 12, 23), Surface = Color3.fromRGB(10, 22, 39),
-            Surface2 = Color3.fromRGB(16, 36, 61), Hover = Color3.fromRGB(24, 54, 88), ControlOff = Color3.fromRGB(42, 78, 113),
-            Track = Color3.fromRGB(34, 68, 103), Text = Color3.fromRGB(255, 255, 255), Muted = Color3.fromRGB(190, 218, 246),
-            Section = Color3.fromRGB(91, 224, 207)
-        },
-        Amethyst = {
-            Accent = Color3.fromRGB(178, 126, 255), AccentSoft = Color3.fromRGB(235, 220, 255),
-            Background = Color3.fromRGB(247, 242, 255), Surface = Color3.fromRGB(255, 255, 255),
-            Surface2 = Color3.fromRGB(242, 232, 255), Hover = Color3.fromRGB(235, 219, 255), ControlOff = Color3.fromRGB(226, 211, 243),
-            Track = Color3.fromRGB(217, 199, 238), Text = Color3.fromRGB(39, 27, 55), Muted = Color3.fromRGB(102, 82, 125),
-            Section = Color3.fromRGB(202, 75, 153)
+        ["Rework Dark"] = {
+            Accent = ReworkPalette.Signal, AccentSoft = ReworkPalette.Layer,
+            Background = ReworkPalette.Base, Surface = ReworkPalette.Layer,
+            Surface2 = ReworkPalette.Base, Hover = ReworkPalette.Signal, ControlOff = ReworkPalette.Layer,
+            Track = ReworkPalette.Layer, Text = ReworkPalette.Signal, Muted = ReworkPalette.Signal,
+            Section = ReworkPalette.Signal
         }
     }
 }
@@ -486,7 +480,7 @@ UI.BindTheme = function(object, property, token)
     if property == "BackgroundColor3" then
         local baseTransparency = object:GetAttribute("ThemeBaseTransparency")
         if type(baseTransparency) == "number" then
-            object.BackgroundTransparency = Theme.ThemeName == "Midnight" and math.min(baseTransparency, 0.025) or baseTransparency
+            object.BackgroundTransparency = Theme.ThemeName == "Rework Dark" and math.min(baseTransparency, 0.025) or baseTransparency
         end
     end
     return object
@@ -503,7 +497,7 @@ UI.RefreshTheme = function()
                 if binding.Property == "BackgroundColor3" then
                     local baseTransparency = binding.Object:GetAttribute("ThemeBaseTransparency")
                     if type(baseTransparency) == "number" then
-                        binding.Object.BackgroundTransparency = Theme.ThemeName == "Midnight" and math.min(baseTransparency, 0.025) or baseTransparency
+                        binding.Object.BackgroundTransparency = Theme.ThemeName == "Rework Dark" and math.min(baseTransparency, 0.025) or baseTransparency
                     end
                 end
             end)
@@ -526,7 +520,7 @@ UI.RefreshTheme = function()
 end
 
 UI.ApplyTheme = function(name, preserveAccent)
-    local resolvedName = UI.Themes[name] and name or "Tasu Light"
+    local resolvedName = UI.Themes[name] and name or "Rework Dark"
     local preset = UI.Themes[resolvedName]
     local accent = Theme.Accent
     for key, value in pairs(preset) do
@@ -599,6 +593,16 @@ InterfaceRoot.BorderSizePixel = 0
 InterfaceRoot.Size = UDim2.fromScale(1, 1)
 InterfaceRoot.Position = UDim2.fromScale(0, 0)
 InterfaceRoot.Parent = ScreenGui
+
+local LegacyUIRoot = Instance.new("Frame")
+LegacyUIRoot.Name = "LegacyUIRoot"
+LegacyUIRoot.BackgroundTransparency = 1
+LegacyUIRoot.BorderSizePixel = 0
+LegacyUIRoot.Size = UDim2.fromScale(1, 1)
+LegacyUIRoot.Position = UDim2.fromScale(0, 0)
+LegacyUIRoot.Visible = false
+LegacyUIRoot.Parent = InterfaceRoot
+UI.LegacyUIRoot = LegacyUIRoot
 
 local function round(object, radius)
     local corner = Instance.new("UICorner")
@@ -776,10 +780,14 @@ Toast.FontFace = UI.Fonts.Heading
 Toast.TextTransparency = 1
 Toast.Visible = false
 Toast.ZIndex = 40
-Toast.Parent = InterfaceRoot
+Toast.Parent = LegacyUIRoot
 round(Toast, 9)
 local toastRevision = 0
 local function showToast(message)
+    if not UI.LegacyUIEnabled then
+        warn("[TasuHub] " .. tostring(message))
+        return
+    end
     toastRevision = toastRevision + 1
     local revision = toastRevision
     Toast.Text = message
@@ -977,12 +985,12 @@ do
     UI.LoaderContent.BorderSizePixel = 0
     UI.LoaderContent.GroupTransparency = 1
     UI.LoaderContent.Position = UDim2.fromScale(0.5, 0.5)
-    UI.LoaderContent.Size = UDim2.fromOffset(420, 250)
+    UI.LoaderContent.Size = UDim2.fromOffset(400, 220)
     UI.LoaderContent.ZIndex = 1001
     UI.LoaderContent.Parent = UI.Loader
 
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
-        Size = UDim2.fromOffset(84, 84),
+        Size = UDim2.fromOffset(78, 78),
         Color = tokens.TextPrimary,
         ZIndex = 1002
     })
@@ -995,16 +1003,16 @@ do
     UI.LoaderBar.BackgroundColor3 = tokens.ControlIdle
     UI.LoaderBar.BorderSizePixel = 0
     UI.LoaderBar.ClipsDescendants = true
-    UI.LoaderBar.Position = UDim2.new(0.5, 0, 0, 126)
-    UI.LoaderBar.Size = UDim2.fromOffset(360, 32)
+    UI.LoaderBar.Position = UDim2.new(0.5, 0, 0, 116)
+    UI.LoaderBar.Size = UDim2.fromOffset(340, 18)
     UI.LoaderBar.ZIndex = 1002
     UI.LoaderBar.Parent = UI.LoaderContent
-    round(UI.LoaderBar, 7)
+    round(UI.LoaderBar, 999)
     local loaderStroke = Instance.new("UIStroke")
     loaderStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     loaderStroke.Color = tokens.BorderSubtle
     loaderStroke.Thickness = 1
-    loaderStroke.Transparency = 0.15
+    loaderStroke.Transparency = 0.78
     loaderStroke.Parent = UI.LoaderBar
 
     UI.LoaderFill = Instance.new("Frame")
@@ -1015,7 +1023,7 @@ do
     UI.LoaderFill.Size = UDim2.fromScale(0, 1)
     UI.LoaderFill.ZIndex = 1003
     UI.LoaderFill.Parent = UI.LoaderBar
-    round(UI.LoaderFill, 7)
+    round(UI.LoaderFill, 999)
 
     UI.LoaderPercent = Instance.new("TextLabel")
     UI.LoaderPercent.Name = "ProgressPercent"
@@ -1024,13 +1032,13 @@ do
     UI.LoaderPercent.FontFace = UI.Fonts.HeadingHeavy
     UI.LoaderPercent.Text = "0%"
     UI.LoaderPercent.TextColor3 = tokens.TextPrimary
-    UI.LoaderPercent.TextSize = 14
+    UI.LoaderPercent.TextSize = 11
     UI.LoaderPercent.ZIndex = 1004
     UI.LoaderPercent.Parent = UI.LoaderBar
 
     UI.LoaderPercentNegative = UI.LoaderPercent:Clone()
     UI.LoaderPercentNegative.Name = "ProgressPercentNegative"
-    UI.LoaderPercentNegative.Size = UDim2.fromOffset(360, 32)
+    UI.LoaderPercentNegative.Size = UDim2.fromOffset(340, 18)
     UI.LoaderPercentNegative.TextColor3 = tokens.TextOnAccent
     UI.LoaderPercentNegative.ZIndex = 1005
     UI.LoaderPercentNegative.Parent = UI.LoaderFill
@@ -1040,11 +1048,12 @@ do
     UI.LoaderStatus.AnchorPoint = Vector2.new(0.5, 0)
     UI.LoaderStatus.BackgroundTransparency = 1
     UI.LoaderStatus.FontFace = UI.Fonts.Description
-    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0, 174)
-    UI.LoaderStatus.Size = UDim2.fromOffset(360, 44)
+    UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0, 150)
+    UI.LoaderStatus.Size = UDim2.fromOffset(340, 40)
     UI.LoaderStatus.Text = "Arayüz hazırlanıyor"
     UI.LoaderStatus.TextColor3 = tokens.TextSecondary
-    UI.LoaderStatus.TextSize = 14
+    UI.LoaderStatus.TextSize = 13
+    UI.LoaderStatus.TextTransparency = 0.42
     UI.LoaderStatus.TextWrapped = true
     UI.LoaderStatus.TextXAlignment = Enum.TextXAlignment.Center
     UI.LoaderStatus.TextYAlignment = Enum.TextYAlignment.Top
@@ -1056,11 +1065,11 @@ do
         local percentage = tostring(math.floor(progress * 100 + 0.5)) .. "%"
         UI.LoaderPercent.Text = percentage
         UI.LoaderPercentNegative.Text = percentage
-        animate(UI.LoaderFill, {Size = UDim2.fromScale(progress, 1)}, 0.56, Enum.EasingStyle.Quint)
+        animate(UI.LoaderFill, {Size = UDim2.fromScale(progress, 1)}, tokens.MotionProgress, Enum.EasingStyle.Quint)
         if status and status ~= UI.LoaderStatus.Text then
             UI.LoaderStatus.Text = status
             UI.LoaderStatus.TextTransparency = 1
-            animate(UI.LoaderStatus, {TextTransparency = 0}, tokens.MotionStatus, Enum.EasingStyle.Quint)
+            animate(UI.LoaderStatus, {TextTransparency = 0.42}, tokens.MotionStatus, Enum.EasingStyle.Quint)
         end
     end
 
@@ -1080,7 +1089,7 @@ TopBar.Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, 44)
 TopBar.ClipsDescendants = true
 TopBar.Visible = false
 TopBar.ZIndex = 5
-TopBar.Parent = InterfaceRoot
+TopBar.Parent = LegacyUIRoot
 UI.BindTheme(TopBar, "BackgroundColor3", "Background")
 round(TopBar, 14)
 gradient(TopBar, "Surface", "Surface2", 75)
@@ -1097,7 +1106,7 @@ do
     UI.CategoryGlow.SliceCenter = Rect.new(10, 10, 118, 118)
     UI.CategoryGlow.Visible = false
     UI.CategoryGlow.ZIndex = 4
-    UI.CategoryGlow.Parent = InterfaceRoot
+    UI.CategoryGlow.Parent = LegacyUIRoot
     UI.BindTheme(UI.CategoryGlow, "ImageColor3", "Accent")
     local function syncCategoryGlow()
         UI.CategoryGlow.Position = TopBar.Position + UDim2.fromOffset(-14, -14)
@@ -1226,7 +1235,7 @@ ContentWindow.Visible = false
 ContentWindow.GroupTransparency = 1
 ContentWindow.ClipsDescendants = true
 ContentWindow.ZIndex = 10
-ContentWindow.Parent = InterfaceRoot
+ContentWindow.Parent = LegacyUIRoot
 UI.BindTheme(ContentWindow, "BackgroundColor3", "Background")
 round(ContentWindow, 16)
 gradient(ContentWindow, "Surface", "Surface2", 80)
@@ -1344,7 +1353,7 @@ StatsPanel.Position = UDim2.fromOffset(24, 120)
 StatsPanel.Size = UDim2.fromOffset(190, 92)
 StatsPanel.Visible = false
 StatsPanel.ZIndex = 30
-StatsPanel.Parent = InterfaceRoot
+StatsPanel.Parent = LegacyUIRoot
 UI.BindTheme(StatsPanel, "BackgroundColor3", "Surface")
 round(StatsPanel, 12)
 gradient(StatsPanel, "Surface", "Surface2", 90)
@@ -1364,6 +1373,10 @@ StatsScale.Parent = StatsPanel
 makeDraggable(StatsPanel, StatsTitle)
 local statsTransition = 0
 UI.RefreshStatsWindow = function()
+    if not UI.LegacyUIEnabled then
+        StatsPanel.Visible = false
+        return
+    end
     statsTransition = statsTransition + 1
     local revision = statsTransition
     if State.Stats.Visible then
@@ -1877,7 +1890,7 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
     options.GroupTransparency = 1
     options.Visible = false
     options.ZIndex = 80
-    options.Parent = InterfaceRoot
+    options.Parent = LegacyUIRoot
     round(options, 9)
     UI.BindTheme(options, "BackgroundColor3", "Surface2")
     local optionsLayout = Instance.new("UIListLayout")
@@ -2055,7 +2068,7 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
     options.Size = UDim2.new(1, 0, 0, 0)
     options.Visible = false
     options.ZIndex = 80
-    options.Parent = InterfaceRoot
+    options.Parent = LegacyUIRoot
     round(options, 9)
     UI.BindTheme(options, "BackgroundColor3", "Surface2")
     local list = Instance.new("ScrollingFrame")
@@ -2544,7 +2557,7 @@ CategoryTooltip.TextYAlignment = Enum.TextYAlignment.Center
 CategoryTooltip.Visible = false
 CategoryTooltip.ZIndex = 20
 CategoryTooltip.Size = UDim2.fromOffset(138, 26)
-CategoryTooltip.Parent = InterfaceRoot
+CategoryTooltip.Parent = LegacyUIRoot
 round(CategoryTooltip, 7)
 UI.BindTheme(CategoryTooltip, "BackgroundColor3", "Text")
 UI.BindTheme(CategoryTooltip, "TextColor3", "Surface")
@@ -2642,7 +2655,7 @@ UI.GlobalSearchResults.GroupTransparency = 1
 UI.GlobalSearchResults.Size = UDim2.fromOffset(224, 0)
 UI.GlobalSearchResults.Visible = false
 UI.GlobalSearchResults.ZIndex = 45
-UI.GlobalSearchResults.Parent = InterfaceRoot
+UI.GlobalSearchResults.Parent = LegacyUIRoot
 UI.BindTheme(UI.GlobalSearchResults, "BackgroundColor3", "Surface")
 round(UI.GlobalSearchResults, 11)
 gradient(UI.GlobalSearchResults, "Surface", "Surface2", 90)
@@ -2703,6 +2716,7 @@ local function placeContentWindow()
 end
 
 local function openContentWindow()
+    if not UI.LegacyUIEnabled then return false end
     windowTransition = windowTransition + 1
     if not ContentWindow.Visible then
         placeContentWindow()
@@ -2744,7 +2758,7 @@ local function closeContentWindow()
 end
 
 local function showCategory(name)
-    if not UI.Ready or not pages[name] or name == "SearchResults" then
+    if not UI.LegacyUIEnabled or not UI.Ready or not pages[name] or name == "SearchResults" then
         return
     end
     UI.CloseActiveDropdown()
@@ -2942,7 +2956,7 @@ UI.CloseGlobalSearch = function(force)
 end
 
 UI.OpenGlobalSearch = function()
-    if not UI.Ready or topBarCollapsed then return end
+    if not UI.LegacyUIEnabled or not UI.Ready or topBarCollapsed then return false end
     if not UI.GlobalSearchOpen then
         UI.GlobalSearchOpen = true
         UI.GlobalSearchClip.Visible = true
@@ -3001,7 +3015,7 @@ CloseButton.Activated:Connect(function()
 end)
 
 trackConnection(RunService.RenderStepped:Connect(function()
-    if UI.Ready and not TopBar.Visible then TopBar.Visible = true end
+    if UI.LegacyUIEnabled and UI.Ready and not TopBar.Visible then TopBar.Visible = true end
     if not ScreenGui.Enabled then ScreenGui.Enabled = true end
     keepGuiOnScreen(TopBar)
     if UI.GlobalSearchResults.Visible then
@@ -4546,7 +4560,7 @@ PreviewPanel.GroupTransparency = 1
 PreviewPanel.Size = UDim2.fromOffset(300, 440)
 PreviewPanel.Visible = false
 PreviewPanel.ZIndex = 8
-PreviewPanel.Parent = InterfaceRoot
+PreviewPanel.Parent = LegacyUIRoot
 UI.BindTheme(PreviewPanel, "BackgroundColor3", "Surface")
 round(PreviewPanel, 16)
 gradient(PreviewPanel, "Surface", "Surface2", 90)
@@ -4754,6 +4768,11 @@ local function setPreviewOpen(value)
 end
 PreviewToggle.Activated:Connect(function() setPreviewOpen(not previewOpen) end)
 UI.RefreshVisualPreview = function()
+    if not UI.LegacyUIEnabled then
+        setPreviewOpen(false)
+        PreviewPanel.Visible = false
+        return
+    end
     local available = UI.ActiveCategory == "Visuals" and ContentWindow.Visible
     if available then
         PreviewPanel.Visible = true
@@ -5814,7 +5833,7 @@ local function loadConfig(name)
     end
     ensureBuiltinCatalogEntries()
     Theme = State.Interface
-    UI.ApplyTheme(State.Interface.ThemeName or "Tasu Light", true)
+    UI.ApplyTheme(State.Interface.ThemeName or "Rework Dark", true)
     applyWorld()
     TopTitle.Text = State.Interface.Title or Theme.Title
     updateCatalogStatus()
@@ -5830,8 +5849,8 @@ local ConfigPage = pages.Configs
 do
     local appearanceCard = createCard(ConfigPage, "Appearance")
     addNote(appearanceCard, "Choose a complete theme or fine-tune the shared accent color.")
-    UI.AddDropdown(appearanceCard, "Theme", {"Tasu Light", "Midnight", "Amethyst"}, function()
-        return State.Interface.ThemeName or "Tasu Light"
+    UI.AddDropdown(appearanceCard, "Theme", {"Rework Dark"}, function()
+        return State.Interface.ThemeName or "Rework Dark"
     end, function(value)
         UI.ApplyTheme(value, false)
         refreshControls()
@@ -5902,7 +5921,7 @@ addAction(ConfigCard, "Reset to Defaults", function()
     State = deepCopy(Defaults)
     State.World.CameraFOV = originalCameraFOV
     Theme = State.Interface
-    UI.ApplyTheme(State.Interface.ThemeName or "Tasu Light", false)
+    UI.ApplyTheme(State.Interface.ThemeName or "Rework Dark", false)
     restoreMovement()
     applyWorld()
     TopTitle.Text = State.Interface.Title
@@ -6018,72 +6037,7 @@ UI.SetUnloadIcon = function(url)
 end
 
 UI.PlayUnloadScreen = function()
-    if not ScreenGui or not ScreenGui.Parent then return end
-    ContentWindow.Visible = false
-    TopBar.Visible = false
-
-    local screen = Instance.new("CanvasGroup")
-    screen.Name = "UnloadScreen"
-    screen.BackgroundTransparency = 1
-    screen.GroupTransparency = 1
-    screen.Size = UDim2.fromScale(1, 1)
-    screen.ZIndex = 190
-    screen.Parent = InterfaceRoot
-
-    local card = Instance.new("Frame")
-    card.AnchorPoint = Vector2.new(0.5, 0.5)
-    card.BackgroundColor3 = Theme.Surface
-    card.BackgroundTransparency = 0.03
-    card.Position = UDim2.fromScale(0.5, 0.54)
-    card.Size = UDim2.fromOffset(350, 300)
-    card.ZIndex = 191
-    card.Parent = screen
-    round(card, 22)
-    gradient(card, "Surface", "Surface2", 90)
-
-    local cardScale = Instance.new("UIScale")
-    cardScale.Scale = 0.88
-    cardScale.Parent = card
-    local title = textLabel(card, "Görüşürüz!", UDim2.new(1, -30, 0, 40), UDim2.fromOffset(15, 22), 27, Theme.Text, Enum.TextXAlignment.Center)
-    title.FontFace = UI.Fonts.Home
-    title.ZIndex = 193
-    local description = textLabel(card, "TasuHub güvenle kapatılıyor", UDim2.new(1, -30, 0, 30), UDim2.fromOffset(15, 62), 16, Theme.Muted, Enum.TextXAlignment.Center)
-    description.FontFace = UI.Fonts.Description
-    description.ZIndex = 193
-
-    local pivot = Instance.new("Frame")
-    pivot.AnchorPoint = Vector2.new(0.5, 0.5)
-    pivot.BackgroundTransparency = 1
-    pivot.Position = UDim2.fromOffset(175, 253)
-    pivot.Size = UDim2.fromOffset(2, 2)
-    pivot.ZIndex = 192
-    pivot.Parent = card
-    local image = Instance.new("ImageLabel")
-    image.AnchorPoint = Vector2.new(0.5, 1)
-    image.BackgroundTransparency = 1
-    image.Position = UDim2.fromScale(0.5, 0.5)
-    image.Size = UDim2.fromOffset(130, 130)
-    image.ScaleType = Enum.ScaleType.Fit
-    image.ZIndex = 193
-    image.Parent = pivot
-    image.Image = UI.UnloadIconUrl ~= "" and (loadRemoteAsset(UI.UnloadIconUrl, "TasuHub/Icons/Unload.png") or UI.UnloadIconUrl) or HubIcon.Image
-
-    animate(screen, {GroupTransparency = 0}, 0.58, Enum.EasingStyle.Quint)
-    animate(cardScale, {Scale = 1}, 0.78, Enum.EasingStyle.Back)
-    task.wait(0.62)
-    pivot.Rotation = -12
-    animate(pivot, {Rotation = 12}, 0.82, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-    task.wait(0.82)
-    animate(pivot, {Rotation = -10}, 0.76, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-    task.wait(0.76)
-    animate(pivot, {Rotation = 8}, 0.68, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-    task.wait(0.68)
-    animate(pivot, {Rotation = 0}, 0.58, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-    task.wait(0.85)
-    animate(screen, {GroupTransparency = 1}, 0.66, Enum.EasingStyle.Quint)
-    animate(cardScale, {Scale = 0.9}, 0.66, Enum.EasingStyle.Quint)
-    task.wait(0.66)
-    screen:Destroy()
+    return
 end
 
 unload = function()
@@ -6158,23 +6112,23 @@ env.TasuHub = {
     Notify = UI.Notify,
     ApplyTheme = UI.ApplyTheme,
     Capabilities = capabilities,
-    Open = function() ContentWindow.Visible = true end,
-    Close = function() ContentWindow.Visible = false end,
-    Toggle = function() ContentWindow.Visible = not ContentWindow.Visible end,
-    ShowCategory = showCategory,
+    Open = function() return false, "UI rework in progress" end,
+    Close = function() return true end,
+    Toggle = function() return false, "UI rework in progress" end,
+    ShowCategory = function() return false, "UI rework in progress" end,
     SaveConfig = saveConfig,
     LoadConfig = loadConfig,
     Unload = unload
 }
 
 UI.SetLoading(1, "TasuHub hazır")
-task.wait(0.65)
+task.wait(0.95)
 local loaderExitTween = animate(UI.Loader, {BackgroundTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
 animate(UI.LoaderContent, {GroupTransparency = 1}, UI.DesignTokens.MotionLoader, Enum.EasingStyle.Quint)
 loaderExitTween.Completed:Wait()
-TopBar.Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, -72)
-TopBar.Visible = true
-animate(TopBar, {Position = UDim2.new(0.5, -UI.TopBarBaseWidth * 0.5, 0, 44)}, 1.18, Enum.EasingStyle.Quint)
-task.wait(1.2)
+TopBar.Visible = false
+ContentWindow.Visible = false
+StatsPanel.Visible = false
+Toast.Visible = false
 UI.Ready = true
 if UI.Loader then UI.Loader:Destroy() end

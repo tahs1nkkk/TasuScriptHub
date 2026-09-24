@@ -20,5 +20,4 @@
 
 ## Migration constraint
 
-The verified monolith stays intact until the replacement shell can load, navigate, re-index, list players, and unload. Legacy UI removal is one reviewed change, not incremental deletion that leaves a broken executor build.
-
+Feature engines and state remain intact while the legacy presentation is suppressed behind `UI.LegacyUIEnabled = false`. No legacy visual may reappear. Physical removal of the dormant legacy builders happens as their replacement services/components land, without deleting feature controllers or executor APIs.

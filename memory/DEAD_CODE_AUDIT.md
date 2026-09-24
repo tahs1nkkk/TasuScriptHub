@@ -15,6 +15,7 @@ Audit baseline: executor-verified remote content `c23ef7c`; local rework source 
 
 - `getBoundingScreenBox` is currently used by the visual preview. It becomes removable if the old preview implementation is discarded.
 - Legacy theme binding, shadow construction, vector icon drawing, card builders, dropdown implementations, global-search view, player-row view, catalog editor view, and config modal remain live today but are not reusable in the new UI.
+- Legacy builders still initialize temporarily for compatibility with existing state/flag setters, but every legacy presentation entrypoint is gated by `UI.LegacyUIEnabled = false` and every legacy visual root is isolated below the permanently hidden `LegacyUIRoot`. They are dormant code scheduled for physical removal as replacement controllers land.
 - The old loader card, radial `LoaderSegments`, loader title, gradient, and slide-in/slide-out path were removed during the first rework step. No references remain.
 - Placeholder methods in the initial `UI` table are intentional forward references, not dead functions.
 - `_` locals reported by AST reference counting are intentional ignored return values.
@@ -28,6 +29,8 @@ Audit baseline: executor-verified remote content `c23ef7c`; local rework source 
 ## Confirmed removals
 
 - Loader rework: removed the radial segment spinner and legacy loader card implementation; replaced by the shared vector icon and horizontal progress system.
+- Legacy visibility pass: removed the old unload animation and disabled automatic top-bar reveal, window/search opening, stats, preview, visual notifications, and exported legacy open/toggle/category methods.
+- Theme retirement: removed the `Tasu Light`, `Midnight`, and `Amethyst` preset definitions. Legacy config names now resolve to the sole `Rework Dark` three-color theme.
 
 ## Re-run rules
 

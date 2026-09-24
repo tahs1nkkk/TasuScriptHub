@@ -7,6 +7,7 @@ This map prevents state or behavior from being lost during the rebuild.
 | `Interface.*`, theme bindings, shared components, icons, animation | `THEME_RULES.md` |
 | Executor entrypoint and bootstrap | `scripts/loader.md`, `EXECUTOR_TESTING.md` |
 | Full-screen loading experience and live progress | `systems/loader-screen.md` |
+| Legacy visual suppression and final retirement | `systems/legacy-ui-retirement.md` |
 | Capability globals and fallbacks | `systems/capability-detection.md` |
 | Connections, instances, render bindings, unload | `systems/lifecycle.md` |
 | `Aim.Enabled`, activation, method, rage, smoothing | `features/aim-core.md` |
