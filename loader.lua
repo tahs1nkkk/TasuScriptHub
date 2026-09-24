@@ -424,6 +424,9 @@ local UI = {
     },
     ActionIconBindings = {},
     ActionIconAssets = {},
+    IconAssets = {
+        TasuHub = "rbxassetid://138667112902223"
+    },
     IconLibrary = {},
     DesignTokens = {
         Palette = ReworkPalette,
@@ -451,7 +454,7 @@ local UI = {
         LoaderIconRockAngle = 6,
         LoaderIconMaxScale = 1.08,
         LoaderReadyScale = 1.4,
-        LoaderExitSoundLead = 2
+        LoaderExitSoundLead = 0.4
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
@@ -671,6 +674,14 @@ UI.IconLibrary.TasuHub = function(parent, options)
     canvas.ZIndex = zIndex
     canvas.Parent = parent
 
+    local vectorFallback = Instance.new("CanvasGroup")
+    vectorFallback.Name = "VectorFallback"
+    vectorFallback.BackgroundTransparency = 1
+    vectorFallback.BorderSizePixel = 0
+    vectorFallback.Size = UDim2.fromScale(1, 1)
+    vectorFallback.ZIndex = zIndex
+    vectorFallback.Parent = canvas
+
     local function iconPart(name, position, size, rotation)
         local part = Instance.new("Frame")
         part.Name = name
@@ -681,7 +692,7 @@ UI.IconLibrary.TasuHub = function(parent, options)
         part.Rotation = rotation or 0
         part.Size = size
         part.ZIndex = zIndex
-        part.Parent = canvas
+        part.Parent = vectorFallback
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0.22, 0)
         corner.Parent = part
@@ -692,6 +703,25 @@ UI.IconLibrary.TasuHub = function(parent, options)
     iconPart("Stem", UDim2.fromScale(0.5, 0.51), UDim2.fromScale(0.16, 0.52))
     iconPart("LeftFoot", UDim2.fromScale(0.405, 0.76), UDim2.fromScale(0.25, 0.14), -32)
     iconPart("RightFoot", UDim2.fromScale(0.595, 0.76), UDim2.fromScale(0.25, 0.14), 32)
+
+    local image = Instance.new("ImageLabel")
+    image.Name = "Asset"
+    image.BackgroundTransparency = 1
+    image.BorderSizePixel = 0
+    image.Image = UI.IconAssets.TasuHub
+    image.ImageTransparency = 1
+    image.ScaleType = Enum.ScaleType.Fit
+    image.Size = UDim2.fromScale(1, 1)
+    image.ZIndex = zIndex + 1
+    image.Parent = canvas
+
+    local function syncIconSource()
+        local assetReady = image.IsLoaded
+        image.ImageTransparency = assetReady and 0 or 1
+        vectorFallback.GroupTransparency = assetReady and 1 or 0
+    end
+    trackConnection(image:GetPropertyChangedSignal("IsLoaded"):Connect(syncIconSource))
+    syncIconSource()
     return canvas
 end
 

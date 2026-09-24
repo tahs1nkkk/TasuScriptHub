@@ -8,7 +8,7 @@ Feature controllers register resources by feature ID. UI overlays and animations
 
 The loader's `BlurEffect` is created through `trackInstance`, tweened back to zero during normal exit, explicitly destroyed after that exit, and also covered by global unload cleanup for reloads or partial initialization.
 
-The loader's single ambient `RenderStepped` connection owns both the 22-row halftone loop and the icon breathing/anchor-rock motion. It is registered through `trackConnection`, runs through the full downward/fade exit, is explicitly disconnected once that exit tween completes, and remains covered by global unload if execution is interrupted early.
+The loader's single ambient `RenderStepped` connection owns both the 22-row halftone loop and the icon breathing/anchor-rock motion. The TasuHub image-load listener is also registered through `trackConnection`; it swaps the vector fallback for asset `138667112902223` without adding a second animation loop. Both connections remain covered by global unload if execution is interrupted early, and the ambient loop is explicitly disconnected once the full downward/fade exit completes.
 
 Transient loader sounds remain tracked instances. Their cleanup delay respects an explicit target duration plus a one-second margin (minimum four seconds), preventing the three-second reverse exit cue from being destroyed before playback completes. The exit cue's delayed start checks loader ownership and visibility before creating sound state, so an unload during the lead window cannot resurrect audio after cleanup.
 
