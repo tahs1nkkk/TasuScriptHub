@@ -452,15 +452,24 @@ local UI = {
         Success = ReworkPalette.Success,
         LoaderBackgroundTransparency = 0.2,
         LoaderBlurSize = 34,
-        MotionProgress = 1.4,
         MotionLoader = 0.5,
         MotionLoaderExit = 1.7 / 3,
         MotionLoaderPop = 0.26,
         MotionLoaderSettle = 0.08,
+        MotionLoaderIconPop = 0.34,
+        MotionLoaderIconSettle = 0.12,
+        MotionLoaderCheckpoint = 0.14,
         MotionLoaderSuccess = 1.2,
         MotionLoaderComplete = 0.7,
+        LoaderCheckpointCount = 30,
+        LoaderCheckpointInterval = 0.085,
+        LoaderCheckpointPitchLow = 0.72,
+        LoaderCheckpointPitchHigh = 1.42,
         LoaderDotLoopDuration = 5.2,
         LoaderDotEdgeFadeSpan = 0.08,
+        LoaderIconSize = 560,
+        LoaderIconRevealStartScale = 0.58,
+        LoaderIconRevealPeakScale = 1.16,
         LoaderIconLoopDuration = 6.4,
         LoaderIconRockAngle = 6,
         LoaderIconMaxScale = 1.08,
@@ -489,6 +498,7 @@ local UI = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
         FadeOut = {Id = "rbxassetid://90657541635248", Volume = 0.09, PlaybackSpeed = 2 / 3, PitchCompensation = 1.5, TargetDuration = 3},
         PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
+        LoaderCheckpoint = {Id = "rbxassetid://10066936758", Volume = 0.045, PlaybackSpeed = 1, CleanupDelay = 0.8},
         ButtonClick = {Id = "rbxassetid://113397864512278", Volume = 0.08, PlaybackSpeed = 1},
         ButtonHover = {Id = "rbxassetid://10066936758", Volume = 0.045, PlaybackSpeed = 1.08}
     },
@@ -560,19 +570,21 @@ UI.LoadRobloxThumbnailAsset = function(assetId, path)
     return loadRemoteAsset(record.imageUrl, path)
 end
 
-UI.PlaySound = function(name)
+UI.PlaySound = function(name, overrides)
     local preset = UI.AudioLibrary[name]
     if type(preset) ~= "table" or type(preset.Id) ~= "string" or preset.Id == "" then
         return false
     end
+    overrides = type(overrides) == "table" and overrides or {}
     local sound = trackInstance(Instance.new("Sound"))
     sound.Name = "TasuHub" .. tostring(name)
-    sound.SoundId = preset.Id
-    sound.Volume = preset.Volume or 0.15
-    sound.PlaybackSpeed = preset.PlaybackSpeed or 1
-    if preset.PitchCompensation then
+    sound.SoundId = overrides.Id or preset.Id
+    sound.Volume = overrides.Volume or preset.Volume or 0.15
+    sound.PlaybackSpeed = overrides.PlaybackSpeed or preset.PlaybackSpeed or 1
+    local pitchCompensation = overrides.PitchCompensation or preset.PitchCompensation
+    if pitchCompensation then
         local pitchShift = trackInstance(Instance.new("PitchShiftSoundEffect"))
-        pitchShift.Octave = preset.PitchCompensation
+        pitchShift.Octave = pitchCompensation
         pitchShift.Parent = sound
     end
     sound.Parent = SoundService
@@ -582,7 +594,9 @@ UI.PlaySound = function(name)
     if not played then
         played = pcall(function() sound:Play() end)
     end
-    local cleanupDelay = math.max(4, (preset.TargetDuration or (4 / math.max(0.1, sound.PlaybackSpeed))) + 1)
+    local targetDuration = overrides.TargetDuration or preset.TargetDuration
+    local cleanupDelay = overrides.CleanupDelay or preset.CleanupDelay
+        or math.max(4, (targetDuration or (4 / math.max(0.1, sound.PlaybackSpeed))) + 1)
     task.delay(cleanupDelay, function()
         if sound and sound.Parent then
             sound:Destroy()
@@ -1214,7 +1228,7 @@ do
     UI.LoaderContent.Parent = UI.Loader
 
     UI.LoaderIcon = UI.CreateIcon(UI.LoaderContent, "TasuHub", {
-        Size = UDim2.fromOffset(280, 280),
+        Size = UDim2.fromOffset(tokens.LoaderIconSize, tokens.LoaderIconSize),
         ZIndex = 1002
     })
     UI.LoaderIcon.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1222,7 +1236,7 @@ do
     UI.LoaderIcon.Position = UDim2.fromScale(0.5, 0.42)
     UI.LoaderIcon.Visible = false
     UI.LoaderIconScale = Instance.new("UIScale")
-    UI.LoaderIconScale.Scale = 0.82
+    UI.LoaderIconScale.Scale = tokens.LoaderIconRevealStartScale
     UI.LoaderIconScale.Parent = UI.LoaderIcon
 
     UI.LoaderBar = Instance.new("CanvasGroup")
@@ -1312,30 +1326,82 @@ do
     UI.LoaderVersion.ZIndex = 1001
     UI.LoaderVersion.Parent = UI.Loader
 
+    UI.LoaderCheckpoint = 0
+    UI.LoaderCheckpointTarget = 0
+    UI.LoaderCheckpointWorkerRunning = false
+
+    local function runLoaderCheckpoints()
+        if UI.LoaderCheckpointWorkerRunning then
+            return
+        end
+        UI.LoaderCheckpointWorkerRunning = true
+        task.spawn(function()
+            while not unloaded and UI.Loader and UI.Loader.Parent
+                and UI.LoaderCheckpoint < UI.LoaderCheckpointTarget do
+                UI.LoaderCheckpoint = UI.LoaderCheckpoint + 1
+                local checkpointProgress = UI.LoaderCheckpoint / tokens.LoaderCheckpointCount
+                local percentage = tostring(math.floor(checkpointProgress * 100 + 0.5)) .. "%"
+                UI.LoaderPercent.Text = percentage
+                UI.LoaderPercentNegative.Text = percentage
+                animate(
+                    UI.LoaderFill,
+                    {Size = UDim2.fromScale(checkpointProgress, 1)},
+                    tokens.MotionLoaderCheckpoint,
+                    Enum.EasingStyle.Quint
+                )
+                local pitchProgress = tokens.LoaderCheckpointCount > 1
+                    and (UI.LoaderCheckpoint - 1) / (tokens.LoaderCheckpointCount - 1)
+                    or 1
+                UI.PlaySound("LoaderCheckpoint", {
+                    PlaybackSpeed = tokens.LoaderCheckpointPitchLow
+                        + (tokens.LoaderCheckpointPitchHigh - tokens.LoaderCheckpointPitchLow) * pitchProgress
+                })
+                task.wait(tokens.LoaderCheckpointInterval)
+            end
+            UI.LoaderCheckpointWorkerRunning = false
+        end)
+    end
+
     UI.SetLoading = function(progress, status)
         progress = math.clamp(tonumber(progress) or 0, 0, 1)
-        local percentage = tostring(math.floor(progress * 100 + 0.5)) .. "%"
-        UI.LoaderPercent.Text = percentage
-        UI.LoaderPercentNegative.Text = percentage
-        animate(UI.LoaderFill, {Size = UDim2.fromScale(progress, 1)}, tokens.MotionProgress, Enum.EasingStyle.Quint)
         if status and status ~= UI.LoaderStatus.Text then
             UI.LoaderStatus.Text = status
             UI.LoaderStatus.TextTransparency = 0.42
         end
+        local targetCheckpoint = progress >= 1
+            and tokens.LoaderCheckpointCount
+            or math.min(tokens.LoaderCheckpointCount - 1, math.floor(progress * tokens.LoaderCheckpointCount))
+        UI.LoaderCheckpointTarget = math.max(UI.LoaderCheckpointTarget, targetCheckpoint)
+        runLoaderCheckpoints()
+        return UI.LoaderCheckpointTarget
+    end
+
+    UI.WaitForLoadingCheckpoints = function(targetCheckpoint)
+        targetCheckpoint = math.clamp(
+            tonumber(targetCheckpoint) or UI.LoaderCheckpointTarget,
+            0,
+            tokens.LoaderCheckpointCount
+        )
+        while not unloaded and UI.Loader and UI.Loader.Parent
+            and UI.LoaderCheckpoint < targetCheckpoint do
+            task.wait()
+        end
     end
 
     UI.ReportLoading = function(progress, status)
-        UI.SetLoading(progress, status)
-        task.wait()
+        local targetCheckpoint = UI.SetLoading(progress, status)
+        UI.WaitForLoadingCheckpoints(targetCheckpoint)
     end
 
-    local function revealLoaderItem(item, itemScale, revealProperties)
+    local function revealLoaderItem(item, itemScale, revealProperties, startScale, peakScale, popDuration, settleDuration)
         UI.PlaySound("PopIn")
         item.Visible = true
-        itemScale.Scale = 0.82
-        animate(item, revealProperties, tokens.MotionLoaderPop, Enum.EasingStyle.Quint)
-        animate(itemScale, {Scale = 1.035}, tokens.MotionLoaderPop, Enum.EasingStyle.Quint).Completed:Wait()
-        animate(itemScale, {Scale = 1}, tokens.MotionLoaderSettle, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut).Completed:Wait()
+        itemScale.Scale = startScale or 0.82
+        popDuration = popDuration or tokens.MotionLoaderPop
+        settleDuration = settleDuration or tokens.MotionLoaderSettle
+        animate(item, revealProperties, popDuration, Enum.EasingStyle.Quint)
+        animate(itemScale, {Scale = peakScale or 1.035}, popDuration, Enum.EasingStyle.Quint).Completed:Wait()
+        animate(itemScale, {Scale = 1}, settleDuration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut).Completed:Wait()
     end
 
     UI.PlaySound("FadeIn")
@@ -1346,7 +1412,15 @@ do
         BackgroundTransparency = tokens.LoaderBackgroundTransparency
     }, tokens.MotionLoader, Enum.EasingStyle.Quint)
     loaderEntryTween.Completed:Wait()
-    revealLoaderItem(UI.LoaderIcon, UI.LoaderIconScale, {GroupTransparency = 0})
+    revealLoaderItem(
+        UI.LoaderIcon,
+        UI.LoaderIconScale,
+        {GroupTransparency = 0},
+        tokens.LoaderIconRevealStartScale,
+        tokens.LoaderIconRevealPeakScale,
+        tokens.MotionLoaderIconPop,
+        tokens.MotionLoaderIconSettle
+    )
     UI.LoaderIconMotionStartedAt = os.clock()
     UI.LoaderIconMotionActive = true
     revealLoaderItem(UI.LoaderBar, UI.LoaderBarScale, {GroupTransparency = 0})
@@ -6899,7 +6973,8 @@ env.TasuHub = {
 UI.ReportLoading(0.99, "Runtime · executor API ve cleanup hazır")
 
 UI.SetLoading(1)
-task.wait(UI.DesignTokens.MotionProgress)
+UI.WaitForLoadingCheckpoints(UI.DesignTokens.LoaderCheckpointCount)
+task.wait(UI.DesignTokens.MotionLoaderCheckpoint)
 animate(UI.LoaderBar, {
     GroupTransparency = 1
 }, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
