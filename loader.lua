@@ -489,9 +489,11 @@ local UI = {
         CornerButtonRadius = 16,
         CornerButtonStroke = 6,
         CornerButtonBackgroundTransparency = 0.18,
-        CornerRailToggleThickness = 6,
+        CornerRailToggleThickness = 18,
         CornerRailToggleLength = 64,
         CornerRailToggleGap = 10,
+        CornerRailToggleOffsetY = -16,
+        CornerRailToggleStroke = 2,
         CornerDockTravelMargin = 8,
         CornerDragThreshold = 6,
         MotionCornerReveal = 0.34,
@@ -1677,15 +1679,67 @@ do
     end
 
     UI.CornerRailToggle = Instance.new("TextButton")
-    UI.CornerRailToggle.Name = "VisibilityLine"
+    UI.CornerRailToggle.Name = "VisibilityBar"
     UI.CornerRailToggle.AutoButtonColor = false
-    UI.CornerRailToggle.BackgroundColor3 = tokens.TextPrimary
-    UI.CornerRailToggle.BackgroundTransparency = 0.3
+    UI.CornerRailToggle.BackgroundColor3 = tokens.Surface
+    UI.CornerRailToggle.BackgroundTransparency = tokens.CornerButtonBackgroundTransparency
     UI.CornerRailToggle.BorderSizePixel = 0
     UI.CornerRailToggle.Text = ""
     UI.CornerRailToggle.ZIndex = 2004
     UI.CornerRailToggle.Parent = UI.CornerActionRail
     round(UI.CornerRailToggle, 999)
+
+    local toggleOutline = Instance.new("UIStroke")
+    toggleOutline.Name = "Outline"
+    toggleOutline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    toggleOutline.Color = tokens.Canvas
+    toggleOutline.Thickness = tokens.CornerRailToggleStroke
+    toggleOutline.Transparency = 0.08
+    toggleOutline.Parent = UI.CornerRailToggle
+
+    UI.CornerRailToggleArrow = Instance.new("TextLabel")
+    UI.CornerRailToggleArrow.Name = "DirectionArrow"
+    UI.CornerRailToggleArrow.AnchorPoint = Vector2.new(0.5, 0.5)
+    UI.CornerRailToggleArrow.BackgroundTransparency = 1
+    UI.CornerRailToggleArrow.BorderSizePixel = 0
+    UI.CornerRailToggleArrow.FontFace = UI.Fonts.HeadingHeavy
+    UI.CornerRailToggleArrow.Position = UDim2.fromScale(0.5, 0.5)
+    UI.CornerRailToggleArrow.Size = UDim2.fromScale(1, 1)
+    UI.CornerRailToggleArrow.Text = ">"
+    UI.CornerRailToggleArrow.TextColor3 = tokens.TextPrimary
+    UI.CornerRailToggleArrow.TextSize = 16
+    UI.CornerRailToggleArrow.ZIndex = 2005
+    UI.CornerRailToggleArrow.Parent = UI.CornerRailToggle
+
+    local function getCornerToggleArrowRotation(side, hidden)
+        local outwardRotation = {
+            Left = 180,
+            Right = 0,
+            Top = -90,
+            Bottom = 90
+        }
+        local inwardRotation = {
+            Left = 0,
+            Right = 180,
+            Top = 90,
+            Bottom = -90
+        }
+        return (hidden and inwardRotation or outwardRotation)[side] or 0
+    end
+
+    local function updateCornerToggleArrow(side, hidden, animated)
+        local rotation = getCornerToggleArrowRotation(side, hidden)
+        if animated then
+            animate(
+                UI.CornerRailToggleArrow,
+                {Rotation = rotation},
+                tokens.MotionCornerHover,
+                Enum.EasingStyle.Quint
+            )
+        else
+            UI.CornerRailToggleArrow.Rotation = rotation
+        end
+    end
 
     local function getDockLayout(side)
         if side == "Left" then
@@ -1693,7 +1747,10 @@ do
                 RootSize = Vector2.new(sideRailWidth, stackHeight),
                 StackVisible = UDim2.fromOffset(tokens.CornerRailToggleThickness + tokens.CornerRailToggleGap, 0),
                 StackHidden = UDim2.fromOffset(-stackWidth, 0),
-                TogglePosition = UDim2.fromOffset(0, (stackHeight - tokens.CornerRailToggleLength) * 0.5),
+                TogglePosition = UDim2.fromOffset(
+                    0,
+                    (stackHeight - tokens.CornerRailToggleLength) * 0.5 + tokens.CornerRailToggleOffsetY
+                ),
                 ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleThickness, tokens.CornerRailToggleLength)
             }
         elseif side == "Top" then
@@ -1722,7 +1779,7 @@ do
             StackHidden = UDim2.fromOffset(sideRailWidth, 0),
             TogglePosition = UDim2.fromOffset(
                 sideRailWidth - tokens.CornerRailToggleThickness,
-                (stackHeight - tokens.CornerRailToggleLength) * 0.5
+                (stackHeight - tokens.CornerRailToggleLength) * 0.5 + tokens.CornerRailToggleOffsetY
             ),
             ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleThickness, tokens.CornerRailToggleLength)
         }
@@ -1750,6 +1807,7 @@ do
         UI.CornerActionRail.Position = UDim2.fromOffset(rootX, rootY)
         UI.CornerRailToggle.Position = layout.TogglePosition
         UI.CornerRailToggle.Size = layout.ToggleSize
+        updateCornerToggleArrow(side, UI.CornerButtonsHidden, false)
         UI.CornerButtonStack.Position = UI.CornerButtonsHidden and layout.StackHidden or layout.StackVisible
         UI.CornerButtonStack.GroupTransparency = UI.CornerButtonsHidden and 1 or 0
         UI.CornerButtonStack.Visible = not UI.CornerButtonsHidden
@@ -1767,6 +1825,7 @@ do
         local revision = UI.CornerButtonToggleRevision
         UI.CornerButtonsHidden = hidden
         local layout = getDockLayout(UI.CornerDockSide)
+        updateCornerToggleArrow(UI.CornerDockSide, hidden, not instant)
         for _, record in ipairs(UI.CornerButtons) do
             record.Hovered = false
             record.Button.Size = UDim2.fromOffset(tokens.CornerButtonSize, tokens.CornerButtonSize)
@@ -1909,10 +1968,15 @@ do
         end
     end))
     trackConnection(UI.CornerRailToggle.MouseEnter:Connect(function()
-        animate(UI.CornerRailToggle, {BackgroundTransparency = 0.08}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
+        animate(UI.CornerRailToggle, {BackgroundTransparency = 0.04}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
     end))
     trackConnection(UI.CornerRailToggle.MouseLeave:Connect(function()
-        animate(UI.CornerRailToggle, {BackgroundTransparency = 0.3}, tokens.MotionCornerHover, Enum.EasingStyle.Quint)
+        animate(
+            UI.CornerRailToggle,
+            {BackgroundTransparency = tokens.CornerButtonBackgroundTransparency},
+            tokens.MotionCornerHover,
+            Enum.EasingStyle.Quint
+        )
     end))
     trackConnection(UI.CornerRailToggle.Activated:Connect(function()
         if not UI.CornerRailDragMoved and os.clock() >= UI.CornerRailSuppressClickUntil then
