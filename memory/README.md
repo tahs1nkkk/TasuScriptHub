@@ -36,4 +36,4 @@ Feature-specific files live under `features/`. Each file records current behavio
 
 ## Current gate
 
-The loader build at `313375c` was confirmed by the user as complete and working through the executor entrypoint. The post-loader corner-action shell is the next unverified UI step; do not call it runtime-ready until its executor checklist is completed.
+The loader design is user-approved and closed after the final ready-text scale revision. Preserve it as a finished shared system unless the user explicitly reopens loader work. The next UI phase is the general menu launched by the lower corner-action button; its structure and visual specification must be defined before implementation, and it is not runtime-ready until its executor checklist is completed.
