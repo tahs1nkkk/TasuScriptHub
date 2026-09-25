@@ -20,7 +20,7 @@ The entrypoint must remain a single-file bootstrap. If the project becomes modul
 ## Required smoke sequence
 
 1. Execute the canonical entrypoint on a fresh client.
-2. Confirm loader completion, main shell visibility, input, drag, category navigation, and icon fallback.
+2. Confirm the loader stays completely invisible and silent until its required TasuHub icon resolves, then completes normally with main shell visibility, input, drag, and category navigation. Also verify explicit cleanup/abort when the required icon capability path is unavailable; no fallback is permitted.
 3. Execute the entrypoint again and confirm the previous instance unloads without duplicate connections or render-step bindings.
 4. Toggle every feature on and off once; restore altered character, camera, lighting, collision, and gravity state.
 5. Respawn and repeat features that bind to character parts or humanoids.
@@ -30,4 +30,3 @@ The entrypoint must remain a single-file bootstrap. If the project becomes modul
 ## Feature acceptance
 
 Each feature memory file contains focused checks. A feature is not migrated merely because its control appears; enable, update, disable, respawn, reload, and unload paths must all be verified when relevant.
-

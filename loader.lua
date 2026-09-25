@@ -462,18 +462,22 @@ local UI = {
         MotionLoaderSuccess = 1.2,
         MotionLoaderComplete = 0.7,
         LoaderCheckpointCount = 30,
-        LoaderCheckpointInterval = 0.085,
-        LoaderCheckpointPitchLow = 0.72,
+        LoaderCheckpointMinInterval = 0.085,
+        LoaderCheckpointPitchLow = 0.5,
         LoaderCheckpointPitchHigh = 1.42,
         LoaderDotLoopDuration = 5.2,
         LoaderDotEdgeFadeSpan = 0.08,
-        LoaderIconSize = 560,
+        LoaderGridStartY = 0.44,
+        LoaderIconSize = 392,
+        LoaderIconLoadAttempts = 20,
+        LoaderIconRetryDelay = 0.5,
         LoaderIconRevealStartScale = 0.58,
         LoaderIconRevealPeakScale = 1.16,
-        LoaderIconLoopDuration = 6.4,
+        LoaderIconLoopDuration = 6.4 / 1.5,
         LoaderIconRockAngle = 6,
         LoaderIconMaxScale = 1.08,
         LoaderReadyScale = 1.4,
+        LoaderReadySoundPlaybackSpeed = 0.6,
         LoaderExitSoundDelay = 0,
         CornerButtonSize = 70,
         CornerButtonHoverSize = 76,
@@ -498,7 +502,7 @@ local UI = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
         FadeOut = {Id = "rbxassetid://90657541635248", Volume = 0.09, PlaybackSpeed = 2 / 3, PitchCompensation = 1.5, TargetDuration = 3},
         PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
-        LoaderCheckpoint = {Id = "rbxassetid://10066936758", Volume = 0.045, PlaybackSpeed = 1, CleanupDelay = 0.8},
+        LoaderCheckpoint = {Id = "rbxassetid://10066936758", Volume = 0.09, PlaybackSpeed = 1, CleanupDelay = 0.8},
         ButtonClick = {Id = "rbxassetid://113397864512278", Volume = 0.08, PlaybackSpeed = 1},
         ButtonHover = {Id = "rbxassetid://10066936758", Volume = 0.045, PlaybackSpeed = 1.08}
     },
@@ -520,6 +524,7 @@ local UI = {
         Description = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal),
         Heading = Font.new("rbxasset://fonts/families/Nunito.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal),
         HeadingHeavy = Font.new("rbxasset://fonts/families/Nunito.json", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal),
+        HeadingBlack = Font.new("rbxasset://fonts/families/Nunito.json", Enum.FontWeight.Heavy, Enum.FontStyle.Normal),
         Home = Font.new("rbxasset://fonts/families/Ubuntu.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal),
         HomeRegular = Font.new("rbxasset://fonts/families/Ubuntu.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
     },
@@ -756,6 +761,7 @@ UI.IconLibrary.TasuHub = function(parent, options)
     canvas.BorderSizePixel = 0
     canvas.Size = options.Size or UDim2.fromOffset(80, 80)
     canvas.ZIndex = zIndex
+    canvas:SetAttribute("AssetState", "Loading")
     canvas.Parent = parent
 
     local image = Instance.new("ImageLabel")
@@ -770,11 +776,29 @@ UI.IconLibrary.TasuHub = function(parent, options)
     image.Parent = canvas
 
     task.spawn(function()
+        if not capabilities.Http or not capabilities.Files or not capabilities.Folders or not capabilities.CustomAsset then
+            canvas:SetAttribute("AssetState", "Failed")
+            canvas:SetAttribute("AssetError", "required executor HTTP/file/folder/custom-asset capability is unavailable")
+            return
+        end
         local iconAsset = UI.IconAssets.TasuHub
-        local resolved = UI.LoadRobloxThumbnailAsset(iconAsset.AssetId, iconAsset.CachePath)
-        if resolved and image.Parent then
-            image.Image = resolved
-            image.ImageTransparency = 0
+        for attempt = 1, UI.DesignTokens.LoaderIconLoadAttempts do
+            if unloaded or not canvas.Parent or not image.Parent then
+                return
+            end
+            local resolved = UI.LoadRobloxThumbnailAsset(iconAsset.AssetId, iconAsset.CachePath)
+            if resolved then
+                image.Image = resolved
+                image.ImageTransparency = 0
+                canvas:SetAttribute("AssetState", "Ready")
+                canvas:SetAttribute("AssetAttempts", attempt)
+                return
+            end
+            task.wait(UI.DesignTokens.LoaderIconRetryDelay)
+        end
+        if canvas.Parent then
+            canvas:SetAttribute("AssetState", "Failed")
+            canvas:SetAttribute("AssetError", "thumbnail/custom-asset resolution exhausted retries")
         end
     end)
     return canvas
@@ -1124,8 +1148,8 @@ do
     UI.LoaderGrid.BorderSizePixel = 0
     UI.LoaderGrid.ClipsDescendants = true
     UI.LoaderGrid.GroupTransparency = 1
-    UI.LoaderGrid.Position = UDim2.fromScale(0, 0.4)
-    UI.LoaderGrid.Size = UDim2.fromScale(1, 0.6)
+    UI.LoaderGrid.Position = UDim2.fromScale(0, tokens.LoaderGridStartY)
+    UI.LoaderGrid.Size = UDim2.fromScale(1, 1 - tokens.LoaderGridStartY)
     UI.LoaderGrid.ZIndex = 1000
     UI.LoaderGrid.Parent = UI.Loader
     local gridColumns, gridRows = 60, 22
@@ -1356,7 +1380,7 @@ do
                     PlaybackSpeed = tokens.LoaderCheckpointPitchLow
                         + (tokens.LoaderCheckpointPitchHigh - tokens.LoaderCheckpointPitchLow) * pitchProgress
                 })
-                task.wait(tokens.LoaderCheckpointInterval)
+                task.wait(tokens.LoaderCheckpointMinInterval)
             end
             UI.LoaderCheckpointWorkerRunning = false
         end)
@@ -1402,6 +1426,24 @@ do
         animate(item, revealProperties, popDuration, Enum.EasingStyle.Quint)
         animate(itemScale, {Scale = peakScale or 1.035}, popDuration, Enum.EasingStyle.Quint).Completed:Wait()
         animate(itemScale, {Scale = 1}, settleDuration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut).Completed:Wait()
+    end
+
+    while not unloaded and UI.LoaderIcon and UI.LoaderIcon.Parent
+        and UI.LoaderIcon:GetAttribute("AssetState") == "Loading" do
+        task.wait()
+    end
+    if not UI.LoaderIcon or UI.LoaderIcon:GetAttribute("AssetState") ~= "Ready" then
+        local iconError = UI.LoaderIcon and UI.LoaderIcon:GetAttribute("AssetError") or "icon instance lost"
+        for _, connection in ipairs(connections) do
+            pcall(function() connection:Disconnect() end)
+        end
+        for _, instance in ipairs(instances) do
+            pcall(function() instance:Destroy() end)
+        end
+        if ScreenGui then
+            pcall(function() ScreenGui:Destroy() end)
+        end
+        error("[TasuHub] Required loader icon failed before UI start: " .. tostring(iconError))
     end
 
     UI.PlaySound("FadeIn")
@@ -6993,8 +7035,9 @@ local loaderBarCompleteTween = animate(UI.LoaderBarScale, {
 loaderBarCompleteTween.Completed:Wait()
 UI.LoaderBar.Visible = false
 UI.LoaderStatus.Text = "Herşey Hazır!"
+UI.LoaderStatus.FontFace = UI.Fonts.HeadingBlack
 UI.LoaderStatus.TextTransparency = 1
-UI.PlaySound("PopIn")
+UI.PlaySound("PopIn", {PlaybackSpeed = UI.DesignTokens.LoaderReadySoundPlaybackSpeed})
 animate(UI.LoaderStatus, {
     Position = UDim2.fromScale(0.5, 0.76),
     TextColor3 = UI.DesignTokens.Success,
