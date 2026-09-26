@@ -2,11 +2,19 @@ local CatalogModule = {Version = 1}
 
 local STATUS_BY_ID = table.freeze({
     mm2 = "Stable",
-    preview_blox_fruits = "Supported",
+    preview_blox_fruits = "Un-Supported",
     preview_brookhaven = "Un-Supported",
     preview_arsenal = "Un-Supported",
     preview_doors = "Un-Supported",
-    preview_adopt_me = "Un-Supported"
+    preview_adopt_me = "Un-Supported",
+    preview_blade_ball = "Un-Supported",
+    preview_pet_simulator_99 = "Un-Supported",
+    preview_jailbreak = "Un-Supported",
+    preview_tower_of_hell = "Un-Supported",
+    preview_rivals = "Un-Supported",
+    preview_dress_to_impress = "Un-Supported",
+    preview_prison_life = "Un-Supported",
+    preview_build_a_boat = "Un-Supported"
 })
 local FEATURES_BY_ID = table.freeze({
     mm2 = "ESP  •  AIM  •  GUN BRING  •  AUTO SHOOT",
@@ -14,14 +22,30 @@ local FEATURES_BY_ID = table.freeze({
     preview_brookhaven = "ESP  •  VEHICLE  •  TELEPORT",
     preview_arsenal = "ESP  •  AIM  •  TRIGGER",
     preview_doors = "ESP  •  ENTITY ALERT  •  SPEED",
-    preview_adopt_me = "ESP  •  FARM  •  TELEPORT"
+    preview_adopt_me = "ESP  •  FARM  •  TELEPORT",
+    preview_blade_ball = "AUTO PARRY  •  ESP  •  SPEED",
+    preview_pet_simulator_99 = "FARM  •  QUEST  •  TELEPORT",
+    preview_jailbreak = "ESP  •  VEHICLE  •  TELEPORT",
+    preview_tower_of_hell = "ESP  •  CHECKPOINT  •  SPEED",
+    preview_rivals = "ESP  •  AIM  •  TRIGGER",
+    preview_dress_to_impress = "ESP  •  WALK  •  TELEPORT",
+    preview_prison_life = "ESP  •  GUN  •  TELEPORT",
+    preview_build_a_boat = "FARM  •  BUILD  •  TELEPORT"
 })
 local PLACEHOLDERS = table.freeze({
     table.freeze({BuiltInId = "preview_blox_fruits", Name = "Blox Fruits", PlaceId = 2753915549, Placeholder = true}),
     table.freeze({BuiltInId = "preview_brookhaven", Name = "Brookhaven RP", PlaceId = 4924922222, Placeholder = true}),
     table.freeze({BuiltInId = "preview_arsenal", Name = "Arsenal", PlaceId = 286090429, Placeholder = true}),
     table.freeze({BuiltInId = "preview_doors", Name = "DOORS", PlaceId = 6516141723, Placeholder = true}),
-    table.freeze({BuiltInId = "preview_adopt_me", Name = "Adopt Me!", PlaceId = 920587237, Placeholder = true})
+    table.freeze({BuiltInId = "preview_adopt_me", Name = "Adopt Me!", PlaceId = 920587237, Placeholder = true}),
+    table.freeze({BuiltInId = "preview_blade_ball", Name = "Blade Ball", PlaceId = 13772394625, Placeholder = true}),
+    table.freeze({BuiltInId = "preview_pet_simulator_99", Name = "Pet Simulator 99", PlaceId = 8737899170, Placeholder = true}),
+    table.freeze({BuiltInId = "preview_jailbreak", Name = "Jailbreak", PlaceId = 606849621, Placeholder = true}),
+    table.freeze({BuiltInId = "preview_tower_of_hell", Name = "Tower of Hell", PlaceId = 1962086868, Placeholder = true}),
+    table.freeze({BuiltInId = "preview_rivals", Name = "RIVALS", PlaceId = 17625359962, Placeholder = true}),
+    table.freeze({BuiltInId = "preview_dress_to_impress", Name = "Dress To Impress", PlaceId = 15101393044, Placeholder = true}),
+    table.freeze({BuiltInId = "preview_prison_life", Name = "Prison Life", PlaceId = 155615604, Placeholder = true}),
+    table.freeze({BuiltInId = "preview_build_a_boat", Name = "Build A Boat For Treasure", PlaceId = 537413528, Placeholder = true})
 })
 
 local function copyEntry(source)
@@ -164,16 +188,97 @@ function CatalogModule.Create(context)
     header.Parent = clip
 
     local title = Instance.new("TextLabel")
+    title.AnchorPoint = Vector2.new(0.5, 0.5)
     title.BackgroundTransparency = 1
     title.FontFace = fonts.HeadingBlack
-    title.Position = UDim2.fromOffset(130, 0)
-    title.Size = UDim2.new(1, -260, 1, 0)
+    title.Position = UDim2.fromScale(0.5, 0.5)
+    title.Size = UDim2.fromOffset(220, layout.HeaderHeight)
     title.Text = context.Title or "Oyun Kataloğu"
     title.TextColor3 = theme.Signal
     title.TextSize = 22
     title.TextXAlignment = Enum.TextXAlignment.Center
     title.ZIndex = 3003
     title.Parent = header
+
+    local applyFilters = function() end
+    local showAllScripts = false
+
+    local allSwitch = Instance.new("TextButton")
+    allSwitch.Name = "ShowAllScripts"
+    allSwitch.AnchorPoint = Vector2.new(0, 0.5)
+    allSwitch.AutoButtonColor = false
+    allSwitch.BackgroundTransparency = 1
+    allSwitch.BorderSizePixel = 0
+    allSwitch.Position = UDim2.new(0, 14, 0.5, 0)
+    allSwitch.Size = UDim2.fromOffset(92, 32)
+    allSwitch.Text = ""
+    allSwitch.ZIndex = 3005
+    allSwitch.Parent = header
+
+    local switchTrack = Instance.new("Frame")
+    switchTrack.AnchorPoint = Vector2.new(0, 0.5)
+    switchTrack.BackgroundColor3 = theme.Layer
+    switchTrack.BackgroundTransparency = 0.08
+    switchTrack.BorderSizePixel = 0
+    switchTrack.Position = UDim2.new(0, 0, 0.5, 0)
+    switchTrack.Size = UDim2.fromOffset(36, 20)
+    switchTrack.ZIndex = 3006
+    switchTrack.Parent = allSwitch
+    round(switchTrack, 999)
+    outline(switchTrack, 1, 0.25, theme.Signal)
+
+    local switchKnob = Instance.new("Frame")
+    switchKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+    switchKnob.BackgroundColor3 = theme.Signal
+    switchKnob.BorderSizePixel = 0
+    switchKnob.Position = UDim2.new(0, 8, 0.5, 0)
+    switchKnob.Size = UDim2.fromOffset(14, 14)
+    switchKnob.ZIndex = 3007
+    switchKnob.Parent = switchTrack
+    round(switchKnob, 999)
+
+    local switchLabel = Instance.new("TextLabel")
+    switchLabel.BackgroundTransparency = 1
+    switchLabel.FontFace = fonts.HeadingHeavy
+    switchLabel.Position = UDim2.fromOffset(44, 0)
+    switchLabel.Size = UDim2.new(1, -44, 1, 0)
+    switchLabel.Text = "Tümü"
+    switchLabel.TextColor3 = theme.Signal
+    switchLabel.TextSize = 13
+    switchLabel.TextTransparency = 0.18
+    switchLabel.TextXAlignment = Enum.TextXAlignment.Left
+    switchLabel.ZIndex = 3006
+    switchLabel.Parent = allSwitch
+
+    local function refreshAllSwitch(instant)
+        local trackColor = showAllScripts and theme.Signal or theme.Layer
+        local trackTransparency = showAllScripts and 0 or 0.08
+        local knobColor = showAllScripts and theme.Base or theme.Signal
+        local knobPosition = showAllScripts and UDim2.new(1, -8, 0.5, 0) or UDim2.new(0, 8, 0.5, 0)
+        if instant then
+            switchTrack.BackgroundColor3 = trackColor
+            switchTrack.BackgroundTransparency = trackTransparency
+            switchKnob.BackgroundColor3 = knobColor
+            switchKnob.Position = knobPosition
+            return
+        end
+        animate(switchTrack, {
+            BackgroundColor3 = trackColor,
+            BackgroundTransparency = trackTransparency
+        }, motion.Control, Enum.EasingStyle.Quint)
+        animate(switchKnob, {
+            BackgroundColor3 = knobColor,
+            Position = knobPosition
+        }, motion.Control, Enum.EasingStyle.Quint)
+    end
+    refreshAllSwitch(true)
+    connect(allSwitch.Activated, function()
+        if state ~= "Open" then return end
+        showAllScripts = not showAllScripts
+        playSound("ButtonClick")
+        refreshAllSwitch(false)
+        applyFilters(true)
+    end)
 
     local headerDrag = Instance.new("Frame")
     headerDrag.Name = "HeaderDragArea"
@@ -236,50 +341,58 @@ function CatalogModule.Create(context)
     searchHandle.Parent = searchButton
     round(searchHandle, 999)
 
+    local searchShell = Instance.new("Frame")
+    searchShell.Name = "SearchShell"
+    searchShell.Active = true
+    searchShell.AnchorPoint = Vector2.new(1, 0.5)
+    searchShell.BackgroundColor3 = theme.Layer
+    searchShell.BackgroundTransparency = 0.08
+    searchShell.BorderSizePixel = 0
+    searchShell.ClipsDescendants = true
+    searchShell.Position = UDim2.new(1, -110, 0.5, 0)
+    searchShell.Size = UDim2.fromOffset(0, 36)
+    searchShell.Visible = false
+    searchShell.ZIndex = 3005
+    searchShell.Parent = header
+    round(searchShell, 10)
+    outline(searchShell, 2, 0.08)
+
     local searchBox = Instance.new("TextBox")
     searchBox.Name = "SearchInput"
-    searchBox.AnchorPoint = Vector2.new(1, 0.5)
-    searchBox.BackgroundColor3 = theme.Layer
-    searchBox.BackgroundTransparency = 0.08
+    searchBox.BackgroundTransparency = 1
     searchBox.BorderSizePixel = 0
     searchBox.ClearTextOnFocus = false
-    searchBox.ClipsDescendants = true
     searchBox.FontFace = fonts.Body
     searchBox.PlaceholderColor3 = theme.Signal
-    searchBox.PlaceholderText = "Oyun veya durum ara"
-    searchBox.Position = UDim2.new(1, -184, 0.5, 0)
-    searchBox.Size = UDim2.fromOffset(0, 36)
+    searchBox.PlaceholderText = "Ara..."
+    searchBox.Position = UDim2.fromOffset(0, 0)
+    searchBox.Size = UDim2.new(1, -48, 1, 0)
     searchBox.Text = ""
     searchBox.TextColor3 = theme.Signal
     searchBox.TextSize = 14
     searchBox.TextTransparency = 1
     searchBox.TextTruncate = Enum.TextTruncate.AtEnd
     searchBox.TextXAlignment = Enum.TextXAlignment.Left
-    searchBox.Visible = false
-    searchBox.ZIndex = 3005
-    searchBox.Parent = header
-    round(searchBox, 10)
-    outline(searchBox, 2, 0.08)
+    searchBox.ZIndex = 3006
+    searchBox.Parent = searchShell
     local searchPadding = Instance.new("UIPadding")
     searchPadding.PaddingLeft = UDim.new(0, 11)
-    searchPadding.PaddingRight = UDim.new(0, 11)
+    searchPadding.PaddingRight = UDim.new(0, 6)
     searchPadding.Parent = searchBox
 
     local resultLabel = Instance.new("TextLabel")
     resultLabel.Name = "SearchResultCount"
-    resultLabel.AnchorPoint = Vector2.new(1, 0.5)
     resultLabel.BackgroundTransparency = 1
     resultLabel.FontFace = fonts.HeadingHeavy
-    resultLabel.Position = UDim2.new(1, -114, 0.5, 0)
-    resultLabel.Size = UDim2.fromOffset(62, 36)
+    resultLabel.Position = UDim2.new(1, -48, 0, 0)
+    resultLabel.Size = UDim2.fromOffset(48, 36)
     resultLabel.Text = "0 / 0"
     resultLabel.TextColor3 = theme.Signal
     resultLabel.TextSize = 13
-    resultLabel.TextTransparency = 1
+    resultLabel.TextTransparency = 0.18
     resultLabel.TextXAlignment = Enum.TextXAlignment.Center
-    resultLabel.Visible = false
-    resultLabel.ZIndex = 3005
-    resultLabel.Parent = header
+    resultLabel.ZIndex = 3006
+    resultLabel.Parent = searchShell
 
     local body = Instance.new("Frame")
     body.Name = "Body"
@@ -299,22 +412,13 @@ function CatalogModule.Create(context)
     catalogScroll.BorderSizePixel = 0
     catalogScroll.CanvasSize = UDim2.fromOffset(0, 0)
     catalogScroll.ClipsDescendants = true
-    catalogScroll.Position = UDim2.fromOffset(14, 14)
+    catalogScroll.Position = UDim2.fromOffset(layout.ContentPadding, layout.ContentPadding)
     catalogScroll.ScrollBarImageColor3 = theme.Signal
     catalogScroll.ScrollBarImageTransparency = 0.35
     catalogScroll.ScrollBarThickness = 5
-    catalogScroll.Size = UDim2.new(1, -28, 1, -28)
+    catalogScroll.Size = UDim2.new(1, -layout.ContentPadding * 2, 1, -layout.ContentPadding * 2)
     catalogScroll.ZIndex = 3003
     catalogScroll.Parent = body
-
-    local grid = Instance.new("UIGridLayout")
-    grid.CellPadding = UDim2.fromOffset(12, 12)
-    grid.CellSize = UDim2.new(1 / 3, -12, 0, layout.CardHeight)
-    grid.FillDirection = Enum.FillDirection.Horizontal
-    grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    grid.SortOrder = Enum.SortOrder.LayoutOrder
-    grid.VerticalAlignment = Enum.VerticalAlignment.Top
-    grid.Parent = catalogScroll
 
     local emptyLabel = Instance.new("TextLabel")
     emptyLabel.BackgroundTransparency = 1
@@ -348,7 +452,7 @@ function CatalogModule.Create(context)
     toast.BorderSizePixel = 0
     toast.GroupTransparency = 1
     toast.Position = UDim2.new(0.5, 0, 1, 10)
-    toast.Size = UDim2.new(0.62, 0, 0, 36)
+    toast.Size = UDim2.fromOffset(layout.ToastWidth, layout.ToastHeight)
     toast.Visible = false
     toast.ZIndex = 3020
     toast.Parent = window
@@ -364,7 +468,7 @@ function CatalogModule.Create(context)
     toastText.Size = UDim2.fromScale(1, 1)
     toastText.Text = ""
     toastText.TextColor3 = theme.Base
-    toastText.TextSize = 14
+    toastText.TextSize = layout.ToastTextSize
     toastText.TextTruncate = Enum.TextTruncate.AtEnd
     toastText.ZIndex = 3021
     toastText.Parent = toast
@@ -372,12 +476,6 @@ function CatalogModule.Create(context)
     toastPadding.PaddingLeft = UDim.new(0, 14)
     toastPadding.PaddingRight = UDim.new(0, 14)
     toastPadding.Parent = toastText
-
-    local records = {}
-    local function updateCanvas()
-        catalogScroll.CanvasSize = UDim2.fromOffset(0, math.max(0, grid.AbsoluteContentSize.Y + 8))
-    end
-    connect(grid:GetPropertyChangedSignal("AbsoluteContentSize"), updateCanvas)
 
     local function showToast(message, color)
         toastRevision = toastRevision + 1
@@ -407,8 +505,21 @@ function CatalogModule.Create(context)
         end)
     end
 
+    local activeCards = {}
+    local allItems = {}
+    local filteredItems = {}
+    local coverCache = {}
+    local virtualFirstRow = -1
+    local virtualCellWidth = -1
+
     local function createCard(entry, index)
         local status, featureText = getStatus(entry), getFeatures(entry)
+        local cardConnections = {}
+        local function cardConnect(signal, callback)
+            local connection = signal:Connect(callback)
+            table.insert(cardConnections, connection)
+            return connection
+        end
         local slot = Instance.new("Frame")
         slot.Name = "CatalogCardSlot"
         slot.BackgroundTransparency = 1
@@ -428,12 +539,12 @@ function CatalogModule.Create(context)
         card.BorderSizePixel = 0
         card.Image = ""
         card.Position = UDim2.fromScale(0.5, 0.5)
-        card.Size = UDim2.new(1, -4, 1, -4)
+        card.Size = UDim2.fromScale(1, 1)
         card.ZIndex = 3004
         card.Parent = slot
         round(card, 15)
-        outline(card, 2, 0.08)
-        local glow = outline(card, 2, 1, theme.Warning)
+        outline(card, layout.CardStroke, 0.08)
+        local glow = outline(card, layout.CardGlowStroke, 1, theme.Warning)
         glow.Name = "InteractionGlow"
         local scale = Instance.new("UIScale")
         scale.Parent = card
@@ -488,7 +599,7 @@ function CatalogModule.Create(context)
         statusLabel.Size = UDim2.fromScale(1, 1)
         statusLabel.Text = status
         statusLabel.TextColor3 = theme.Base
-        statusLabel.TextSize = 13
+        statusLabel.TextSize = 10
         statusLabel.ZIndex = 3008
         statusLabel.Parent = statusStrip
 
@@ -525,32 +636,32 @@ function CatalogModule.Create(context)
         local function restoreHover()
             if destroyed or not card.Parent then return end
             outcomeActive = false
-            animate(glow, {Color = theme.Warning, Thickness = hovering and 4 or 2, Transparency = hovering and 0.08 or 1}, motion.Glow, Enum.EasingStyle.Quint)
+            animate(glow, {Color = theme.Warning, Transparency = hovering and 0.08 or 1}, motion.Glow, Enum.EasingStyle.Quint)
         end
         local function showOutcome(color, shouldShake)
             outcomeActive, outcomeRevision = true, outcomeRevision + 1
             local revision = outcomeRevision
-            animate(glow, {Color = color, Thickness = 5, Transparency = 0}, motion.Glow, Enum.EasingStyle.Quint)
+            animate(glow, {Color = color, Transparency = 0}, motion.Glow, Enum.EasingStyle.Quint)
             if shouldShake then shakeCard(card) end
             task.delay(layout.OutcomeGlowDuration, function()
                 if revision == outcomeRevision then restoreHover() end
             end)
         end
 
-        connect(card.MouseEnter, function()
+        cardConnect(card.MouseEnter, function()
             hovering = true
             playSound("ButtonHover")
             animate(scale, {Scale = 1.012}, motion.Control, Enum.EasingStyle.Quint)
             animate(card, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
-            if not outcomeActive then animate(glow, {Color = theme.Warning, Thickness = 4, Transparency = 0.08}, motion.Glow, Enum.EasingStyle.Quint) end
+            if not outcomeActive then animate(glow, {Color = theme.Warning, Transparency = 0.08}, motion.Glow, Enum.EasingStyle.Quint) end
         end)
-        connect(card.MouseLeave, function()
+        cardConnect(card.MouseLeave, function()
             hovering = false
             animate(scale, {Scale = 1}, motion.Control, Enum.EasingStyle.Quint)
             animate(card, {BackgroundTransparency = 0.08}, motion.Control, Enum.EasingStyle.Quint)
-            if not outcomeActive then animate(glow, {Thickness = 2, Transparency = 1}, motion.Glow, Enum.EasingStyle.Quint) end
+            if not outcomeActive then animate(glow, {Transparency = 1}, motion.Glow, Enum.EasingStyle.Quint) end
         end)
-        connect(card.Activated, function()
+        cardConnect(card.Activated, function()
             if state ~= "Open" then return end
             playSound("ButtonClick")
             if entry.Placeholder then
@@ -579,17 +690,19 @@ function CatalogModule.Create(context)
 
         if type(context.ResolveCover) == "function" and entry.PlaceId then
             task.spawn(function()
-                local resolved = context.ResolveCover(entry.PlaceId)
+                local cacheKey = tostring(entry.PlaceId)
+                local resolved = coverCache[cacheKey]
+                if type(resolved) ~= "string" or resolved == "" then
+                    resolved = context.ResolveCover(entry.PlaceId)
+                    if type(resolved) == "string" and resolved ~= "" then coverCache[cacheKey] = resolved end
+                end
                 if destroyed or not card.Parent or not cover.Parent then return end
                 if type(resolved) == "string" and resolved ~= "" then
                     cover.Image, cover.ImageTransparency, fallback.Visible = resolved, 0, false
                 end
             end)
         end
-        table.insert(records, {
-            Slot = slot,
-            SearchText = string.lower(tostring(entry.Name or "") .. " " .. tostring(entry.PlaceId or "") .. " " .. tostring(entry.BuiltInId or "") .. " " .. status .. " " .. featureText)
-        })
+        return {Slot = slot, Connections = cardConnections}
     end
 
     local usedIds = {}
@@ -597,25 +710,94 @@ function CatalogModule.Create(context)
     for _, source in ipairs(type(entries) == "table" and entries or {}) do
         local entry = copyEntry(source)
         usedIds[tostring(entry.BuiltInId or "")] = true
-        createCard(entry, #records + 1)
+        table.insert(allItems, {
+            Entry = entry,
+            Status = getStatus(entry),
+            Features = getFeatures(entry),
+            NameKey = string.lower(tostring(entry.Name or "")),
+            SearchText = string.lower(tostring(entry.Name or "") .. " " .. tostring(entry.PlaceId or "") .. " " .. tostring(entry.BuiltInId or "") .. " " .. getStatus(entry) .. " " .. getFeatures(entry))
+        })
     end
     for _, source in ipairs(PLACEHOLDERS) do
-        if not usedIds[tostring(source.BuiltInId)] then createCard(copyEntry(source), #records + 1) end
-    end
-    task.defer(updateCanvas)
-
-    local function applySearch()
-        local query = string.lower(searchBox.Text:gsub("^%s+", ""):gsub("%s+$", ""))
-        local visibleCount = 0
-        for _, record in ipairs(records) do
-            local visible = query == "" or string.find(record.SearchText, query, 1, true) ~= nil
-            record.Slot.Visible = visible
-            if visible then visibleCount = visibleCount + 1 end
+        if not usedIds[tostring(source.BuiltInId)] then
+            local entry = copyEntry(source)
+            table.insert(allItems, {
+                Entry = entry,
+                Status = getStatus(entry),
+                Features = getFeatures(entry),
+                NameKey = string.lower(tostring(entry.Name or "")),
+                SearchText = string.lower(tostring(entry.Name or "") .. " " .. tostring(entry.PlaceId or "") .. " " .. tostring(entry.BuiltInId or "") .. " " .. getStatus(entry) .. " " .. getFeatures(entry))
+            })
         end
-        emptyLabel.Visible = visibleCount == 0
-        resultLabel.Text = tostring(visibleCount) .. " / " .. tostring(#records)
-        task.defer(updateCanvas)
     end
+
+    local statusRank = {Stable = 1, Supported = 2, ["Un-Supported"] = 3}
+    table.sort(allItems, function(left, right)
+        local leftRank = statusRank[left.Status] or 4
+        local rightRank = statusRank[right.Status] or 4
+        if leftRank ~= rightRank then return leftRank < rightRank end
+        if left.NameKey ~= right.NameKey then return left.NameKey < right.NameKey end
+        return tostring(left.Entry.BuiltInId or left.Entry.PlaceId or "") < tostring(right.Entry.BuiltInId or right.Entry.PlaceId or "")
+    end)
+
+    local function clearActiveCards()
+        for _, record in ipairs(activeCards) do
+            for _, connection in ipairs(record.Connections) do
+                pcall(function() connection:Disconnect() end)
+            end
+            if record.Slot and record.Slot.Parent then record.Slot:Destroy() end
+        end
+        table.clear(activeCards)
+    end
+
+    local function renderVirtualPage(force)
+        if destroyed then return end
+        local gap = layout.GridGap
+        local safetyInset = layout.CardGlowStroke + 2
+        local stride = layout.CardHeight + gap
+        local firstRow = math.max(0, math.floor(math.max(0, catalogScroll.CanvasPosition.Y - safetyInset) / math.max(1, stride)))
+        local availableWidth = math.max(1, math.floor(catalogScroll.AbsoluteSize.X) - safetyInset * 2)
+        local cellWidth = math.max(80, math.floor((availableWidth - gap * 2) / 3))
+        if not force and firstRow == virtualFirstRow and cellWidth == virtualCellWidth then return end
+        virtualFirstRow, virtualCellWidth = firstRow, cellWidth
+        clearActiveCards()
+        local rowWidth = cellWidth * 3 + gap * 2
+        local startX = safetyInset + math.max(0, math.floor((availableWidth - rowWidth) * 0.5))
+        local firstIndex = firstRow * 3 + 1
+        for offset = 0, layout.VirtualCardCount - 1 do
+            local globalIndex = firstIndex + offset
+            local item = filteredItems[globalIndex]
+            if not item then break end
+            local record = createCard(item.Entry, globalIndex)
+            local zeroIndex = globalIndex - 1
+            local row, column = math.floor(zeroIndex / 3), zeroIndex % 3
+            record.Slot.Position = UDim2.fromOffset(startX + column * (cellWidth + gap), safetyInset + row * stride)
+            record.Slot.Size = UDim2.fromOffset(cellWidth, layout.CardHeight)
+            table.insert(activeCards, record)
+        end
+    end
+
+    applyFilters = function(resetScroll)
+        local query = string.lower(searchBox.Text:gsub("^%s+", ""):gsub("%s+$", ""))
+        table.clear(filteredItems)
+        for _, item in ipairs(allItems) do
+            local statusAllowed = showAllScripts or item.Status ~= "Un-Supported"
+            local queryAllowed = query == "" or string.find(item.SearchText, query, 1, true) ~= nil
+            if statusAllowed and queryAllowed then table.insert(filteredItems, item) end
+        end
+        local rows = math.ceil(#filteredItems / 3)
+        local safetyInset = layout.CardGlowStroke + 2
+        local canvasHeight = rows > 0 and safetyInset * 2 + rows * layout.CardHeight + math.max(0, rows - 1) * layout.GridGap or 0
+        catalogScroll.CanvasSize = UDim2.fromOffset(0, canvasHeight)
+        resultLabel.Text = tostring(#filteredItems) .. " / " .. tostring(#allItems)
+        emptyLabel.Visible = #filteredItems == 0
+        if resetScroll then catalogScroll.CanvasPosition = Vector2.new(0, 0) end
+        virtualFirstRow = -1
+        renderVirtualPage(true)
+    end
+
+    connect(catalogScroll:GetPropertyChangedSignal("CanvasPosition"), function() renderVirtualPage(false) end)
+    connect(catalogScroll:GetPropertyChangedSignal("AbsoluteSize"), function() renderVirtualPage(true) end)
 
     local searchOpen, searchRevision, searchPointerInside = false, 0, false
     local function setSearchOpen(open, clearText)
@@ -625,17 +807,18 @@ function CatalogModule.Create(context)
         searchOpen, searchRevision = open, searchRevision + 1
         local revision = searchRevision
         if open then
-            searchBox.Visible, resultLabel.Visible = true, true
-            searchBox.Size, searchBox.TextTransparency, resultLabel.TextTransparency = UDim2.fromOffset(0, 36), 1, 1
-            animate(searchBox, {Size = UDim2.fromOffset(layout.SearchWidth, 36), TextTransparency = 0}, motion.SearchOpen, Enum.EasingStyle.Quint)
-            animate(resultLabel, {TextTransparency = 0.18}, motion.SearchOpen, Enum.EasingStyle.Quint)
+            searchShell.Visible = true
+            searchShell.Size = UDim2.fromOffset(0, 36)
+            searchBox.TextTransparency = 1
+            animate(searchShell, {Size = UDim2.fromOffset(layout.SearchWidth, 36)}, motion.SearchOpen, Enum.EasingStyle.Quint)
+            animate(searchBox, {TextTransparency = 0}, motion.SearchOpen, Enum.EasingStyle.Quint)
         else
             searchBox:ReleaseFocus()
-            local tween = animate(searchBox, {Size = UDim2.fromOffset(0, 36), TextTransparency = 1}, motion.SearchClose, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-            animate(resultLabel, {TextTransparency = 1}, motion.SearchClose, Enum.EasingStyle.Quint)
+            local tween = animate(searchShell, {Size = UDim2.fromOffset(0, 36)}, motion.SearchClose, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+            animate(searchBox, {TextTransparency = 1}, motion.SearchClose, Enum.EasingStyle.Quint)
             task.spawn(function()
                 tween.Completed:Wait()
-                if not destroyed and revision == searchRevision and not searchOpen then searchBox.Visible, resultLabel.Visible = false, false end
+                if not destroyed and revision == searchRevision and not searchOpen then searchShell.Visible = false end
             end)
         end
     end
@@ -649,7 +832,7 @@ function CatalogModule.Create(context)
         end)
     end
     connect(searchBox:GetPropertyChangedSignal("Text"), function()
-        applySearch()
+        applyFilters(true)
         if searchBox.Text == "" then scheduleSearchClose() end
     end)
     connect(searchButton.MouseEnter, function()
@@ -660,13 +843,8 @@ function CatalogModule.Create(context)
         searchPointerInside = false
         scheduleSearchClose()
     end)
-    connect(searchBox.MouseEnter, function() searchPointerInside = true end)
-    connect(searchBox.MouseLeave, function()
-        searchPointerInside = false
-        scheduleSearchClose()
-    end)
-    connect(resultLabel.MouseEnter, function() searchPointerInside = true end)
-    connect(resultLabel.MouseLeave, function()
+    connect(searchShell.MouseEnter, function() searchPointerInside = true end)
+    connect(searchShell.MouseLeave, function()
         searchPointerInside = false
         scheduleSearchClose()
     end)
@@ -680,7 +858,7 @@ function CatalogModule.Create(context)
         if state == "Open" then
             playSound("ButtonClick")
             setSearchOpen(true, false)
-            task.defer(function() if searchOpen and searchBox.Visible then searchBox:CaptureFocus() end end)
+            task.defer(function() if searchOpen and searchShell.Visible then searchBox:CaptureFocus() end end)
         end
     end)
 
@@ -725,9 +903,9 @@ function CatalogModule.Create(context)
             windowScale.Scale, window.GroupTransparency = 0, 1
         end
         window.Visible = true
+        local move = animate(window, {Position = UDim2.fromOffset(center.X, center.Y), GroupTransparency = 0}, motion.Open, Enum.EasingStyle.Quint)
+        animate(windowScale, {Scale = 1}, motion.Open, Enum.EasingStyle.Back)
         task.spawn(function()
-            local move = animate(window, {Position = UDim2.fromOffset(center.X, center.Y), GroupTransparency = 0}, motion.Open, Enum.EasingStyle.Quint)
-            animate(windowScale, {Scale = 1}, motion.Open, Enum.EasingStyle.Back)
             move.Completed:Wait()
             if not destroyed and revision == transitionRevision then state = "Open" end
         end)
@@ -741,9 +919,9 @@ function CatalogModule.Create(context)
         dragging = false
         setSearchOpen(false, true)
         toastRevision, toast.Visible = toastRevision + 1, false
+        local move = animate(window, {Position = UDim2.fromOffset(source.X, source.Y), GroupTransparency = 1}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        animate(windowScale, {Scale = 0}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         task.spawn(function()
-            local move = animate(window, {Position = UDim2.fromOffset(source.X, source.Y), GroupTransparency = 1}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-            animate(windowScale, {Scale = 0}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
             move.Completed:Wait()
             if not destroyed and revision == transitionRevision then window.Visible, state = false, "Closed" end
         end)
@@ -753,11 +931,16 @@ function CatalogModule.Create(context)
     local function toggle()
         return (state == "Open" or state == "Opening") and close() or open()
     end
-    connect(closeButton.Activated, function() if state == "Open" then playSound("ButtonClick") close() end end)
+    connect(closeButton.Activated, function()
+        if state == "Open" or state == "Opening" then
+            playSound("ButtonClick")
+            close()
+        end
+    end)
     connect(context.Parent:GetPropertyChangedSignal("AbsoluteSize"), function()
         if not destroyed and (state == "Open" or state == "Opening") then setWindowToTarget() end
     end)
-    applySearch()
+    applyFilters(true)
 
     local controller = {}
     controller.Open, controller.Close, controller.Toggle = open, close, toggle
@@ -765,6 +948,7 @@ function CatalogModule.Create(context)
     controller.Destroy = function()
         if destroyed then return end
         destroyed, transitionRevision, toastRevision = true, transitionRevision + 1, toastRevision + 1
+        clearActiveCards()
         for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
         root:Destroy()
     end

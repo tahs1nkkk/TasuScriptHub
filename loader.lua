@@ -510,10 +510,18 @@ local UI = {
         CatalogHeaderHeight = 60,
         CatalogFooterHeight = 42,
         CatalogBodyTransparency = 0.2,
+        CatalogContentPadding = 20,
+        CatalogGridGap = 12,
         CatalogCardHeight = 238,
         CatalogCoverHeight = 142,
-        CatalogStatusHeight = 26,
-        CatalogSearchWidth = 220,
+        CatalogStatusHeight = 13,
+        CatalogSearchWidth = 160,
+        CatalogVirtualCardCount = 9,
+        CatalogCardStroke = 2,
+        CatalogCardGlowStroke = 3,
+        CatalogToastWidth = 280,
+        CatalogToastHeight = 30,
+        CatalogToastTextSize = 12,
         CatalogToastDuration = 2.35,
         CatalogOutcomeGlowDuration = 1.8,
         MotionCatalogOpen = 0.52,
@@ -1648,7 +1656,7 @@ do
             UI.PlaySound("ButtonClick")
             local callback = UI.CornerButtonActions[index]
             if type(callback) == "function" then
-                task.delay(0.12, callback, index)
+                callback(index)
             end
         end))
     end
@@ -7129,10 +7137,18 @@ do
                 HeaderHeight = UI.DesignTokens.CatalogHeaderHeight,
                 FooterHeight = UI.DesignTokens.CatalogFooterHeight,
                 BodyTransparency = UI.DesignTokens.CatalogBodyTransparency,
+                ContentPadding = UI.DesignTokens.CatalogContentPadding,
+                GridGap = UI.DesignTokens.CatalogGridGap,
                 CardHeight = UI.DesignTokens.CatalogCardHeight,
                 CoverHeight = UI.DesignTokens.CatalogCoverHeight,
                 StatusHeight = UI.DesignTokens.CatalogStatusHeight,
                 SearchWidth = UI.DesignTokens.CatalogSearchWidth,
+                VirtualCardCount = UI.DesignTokens.CatalogVirtualCardCount,
+                CardStroke = UI.DesignTokens.CatalogCardStroke,
+                CardGlowStroke = UI.DesignTokens.CatalogCardGlowStroke,
+                ToastWidth = UI.DesignTokens.CatalogToastWidth,
+                ToastHeight = UI.DesignTokens.CatalogToastHeight,
+                ToastTextSize = UI.DesignTokens.CatalogToastTextSize,
                 ToastDuration = UI.DesignTokens.CatalogToastDuration,
                 OutcomeGlowDuration = UI.DesignTokens.CatalogOutcomeGlowDuration
             },
