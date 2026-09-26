@@ -87,6 +87,7 @@ function CatalogModule.Create(context)
     local destroyed, dragging = false, false
     local transitionRevision, toastRevision = 0, 0
     local state, restingPosition, dragStart, dragWindowStart = "Closed", nil, nil, nil
+    local windowPixelSize = Vector2.new(layout.WindowWidth, layout.WindowHeight)
 
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
@@ -137,6 +138,7 @@ function CatalogModule.Create(context)
 
     local function targetGeometry()
         local viewport, size = windowSize()
+        windowPixelSize = size
         restingPosition = clampCenter(restingPosition or viewport * 0.5, size, viewport)
         return viewport, size, restingPosition
     end
@@ -357,6 +359,18 @@ function CatalogModule.Create(context)
     round(searchShell, 10)
     outline(searchShell, 2, 0.08)
 
+    local searchDragArea = Instance.new("Frame")
+    searchDragArea.Name = "CollapsedSearchDragArea"
+    searchDragArea.Active = true
+    searchDragArea.AnchorPoint = Vector2.new(1, 0.5)
+    searchDragArea.BackgroundTransparency = 1
+    searchDragArea.BorderSizePixel = 0
+    searchDragArea.Position = UDim2.new(1, -110, 0.5, 0)
+    searchDragArea.Size = UDim2.fromOffset(layout.SearchWidth, 36)
+    searchDragArea.Visible = true
+    searchDragArea.ZIndex = 3004
+    searchDragArea.Parent = header
+
     local searchBox = Instance.new("TextBox")
     searchBox.Name = "SearchInput"
     searchBox.BackgroundTransparency = 1
@@ -394,11 +408,12 @@ function CatalogModule.Create(context)
     resultLabel.ZIndex = 3006
     resultLabel.Parent = searchShell
 
-    local body = Instance.new("Frame")
+    local body = Instance.new("CanvasGroup")
     body.Name = "Body"
     body.BackgroundColor3 = theme.Layer
     body.BackgroundTransparency = layout.BodyTransparency
     body.BorderSizePixel = 0
+    body.GroupTransparency = 1
     body.Position = UDim2.fromOffset(0, layout.HeaderHeight)
     body.Size = UDim2.new(1, 0, 1, -(layout.HeaderHeight + layout.FooterHeight))
     body.ZIndex = 3002
@@ -511,6 +526,7 @@ function CatalogModule.Create(context)
     local coverCache = {}
     local virtualFirstRow = -1
     local virtualCellWidth = -1
+    local contentLoaded, filtersDirty = false, true
 
     local function createCard(entry, index)
         local status, featureText = getStatus(entry), getFeatures(entry)
@@ -756,7 +772,7 @@ function CatalogModule.Create(context)
         local safetyInset = layout.CardGlowStroke + 2
         local stride = layout.CardHeight + gap
         local firstRow = math.max(0, math.floor(math.max(0, catalogScroll.CanvasPosition.Y - safetyInset) / math.max(1, stride)))
-        local availableWidth = math.max(1, math.floor(catalogScroll.AbsoluteSize.X) - safetyInset * 2)
+        local availableWidth = math.max(1, math.floor(windowPixelSize.X - layout.ContentPadding * 2) - safetyInset * 2)
         local cellWidth = math.max(80, math.floor((availableWidth - gap * 2) / 3))
         if not force and firstRow == virtualFirstRow and cellWidth == virtualCellWidth then return end
         virtualFirstRow, virtualCellWidth = firstRow, cellWidth
@@ -793,11 +809,20 @@ function CatalogModule.Create(context)
         emptyLabel.Visible = #filteredItems == 0
         if resetScroll then catalogScroll.CanvasPosition = Vector2.new(0, 0) end
         virtualFirstRow = -1
-        renderVirtualPage(true)
+        if contentLoaded and state ~= "Closing" then
+            renderVirtualPage(true)
+            filtersDirty = false
+        else
+            filtersDirty = true
+        end
     end
 
-    connect(catalogScroll:GetPropertyChangedSignal("CanvasPosition"), function() renderVirtualPage(false) end)
-    connect(catalogScroll:GetPropertyChangedSignal("AbsoluteSize"), function() renderVirtualPage(true) end)
+    connect(catalogScroll:GetPropertyChangedSignal("CanvasPosition"), function()
+        if contentLoaded and state ~= "Closing" then renderVirtualPage(false) end
+    end)
+    connect(catalogScroll:GetPropertyChangedSignal("AbsoluteSize"), function()
+        if contentLoaded and state ~= "Closing" then renderVirtualPage(false) end
+    end)
 
     local searchOpen, searchRevision, searchPointerInside = false, 0, false
     local function setSearchOpen(open, clearText)
@@ -807,6 +832,7 @@ function CatalogModule.Create(context)
         searchOpen, searchRevision = open, searchRevision + 1
         local revision = searchRevision
         if open then
+            searchDragArea.Visible = false
             searchShell.Visible = true
             searchShell.Size = UDim2.fromOffset(0, 36)
             searchBox.TextTransparency = 1
@@ -818,7 +844,10 @@ function CatalogModule.Create(context)
             animate(searchBox, {TextTransparency = 1}, motion.SearchClose, Enum.EasingStyle.Quint)
             task.spawn(function()
                 tween.Completed:Wait()
-                if not destroyed and revision == searchRevision and not searchOpen then searchShell.Visible = false end
+                if not destroyed and revision == searchRevision and not searchOpen then
+                    searchShell.Visible = false
+                    searchDragArea.Visible = true
+                end
             end)
         end
     end
@@ -873,6 +902,9 @@ function CatalogModule.Create(context)
     connect(headerDrag.InputBegan, function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then beginDrag(input) end
     end)
+    connect(searchDragArea.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then beginDrag(input) end
+    end)
     connect(footer.InputBegan, function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then beginDrag(input) end
     end)
@@ -901,10 +933,18 @@ function CatalogModule.Create(context)
             local source = context.GetAnchorPoint()
             window.Position = UDim2.fromOffset(source.X, source.Y)
             windowScale.Scale, window.GroupTransparency = 0, 1
+            body.GroupTransparency = 1
         end
         window.Visible = true
         local move = animate(window, {Position = UDim2.fromOffset(center.X, center.Y), GroupTransparency = 0}, motion.Open, Enum.EasingStyle.Quint)
         animate(windowScale, {Scale = 1}, motion.Open, Enum.EasingStyle.Back)
+        if not contentLoaded or filtersDirty then
+            contentLoaded = true
+            virtualFirstRow = -1
+            renderVirtualPage(true)
+            filtersDirty = false
+        end
+        animate(body, {GroupTransparency = 0}, motion.ContentReveal or motion.Open, Enum.EasingStyle.Quint)
         task.spawn(function()
             move.Completed:Wait()
             if not destroyed and revision == transitionRevision then state = "Open" end
@@ -921,9 +961,16 @@ function CatalogModule.Create(context)
         toastRevision, toast.Visible = toastRevision + 1, false
         local move = animate(window, {Position = UDim2.fromOffset(source.X, source.Y), GroupTransparency = 1}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         animate(windowScale, {Scale = 0}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        animate(body, {GroupTransparency = 1}, motion.ContentReveal or motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         task.spawn(function()
             move.Completed:Wait()
-            if not destroyed and revision == transitionRevision then window.Visible, state = false, "Closed" end
+            if not destroyed and revision == transitionRevision then
+                window.Visible, state = false, "Closed"
+                clearActiveCards()
+                contentLoaded, filtersDirty = false, true
+                virtualFirstRow = -1
+                body.GroupTransparency = 1
+            end
         end)
         return true
     end
