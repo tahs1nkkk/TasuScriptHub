@@ -1,6 +1,6 @@
 # Dead-code audit
 
-Audit baseline: executor-verified remote content `c23ef7c`; local rework source matches it.
+Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch is now at catalog revision-2 implementation commit `056e5ab`; it remains pending executor acceptance and is intentionally not merged into `main`.
 
 ## Confirmed dead state
 
