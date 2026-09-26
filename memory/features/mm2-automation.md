@@ -4,7 +4,6 @@ State: MM2 `AutoPickup`, `AutoFire`; manual pickup/fire actions share the same c
 
 Behavior: uses proximity/touch helpers for pickup and discovered gun remotes for firing at the resolved murderer.
 
-Rework: capability-gated actions, cooldown/rate limits, target validation, structured failure reasons, and no claim of success when no supported path exists.
+Rework status: preserved automatic state is exposed through shared-theme `Otomatik Alma` and `Otomatik Ateş` controls; `Silahı Şimdi Al` and `Şimdi Ateş Et` call the same engine actions. The footer reports structured success/failure without a private toast or separate feature window. Capability checks, target validation, and existing 0.15-second loop ownership remain in the engine.
 
-Executor checks: helper present/missing, gun absent, murderer absent, invalid remote, round transition, manual action, automatic loop, disable, and unload.
-
+Executor checks: helper present/missing, gun absent, murderer absent, invalid remote, round transition, both manual actions, both automatic controls, main-system disable, window close/reopen, hub unload, and re-execution. A failed path must show failure and must not claim success; unload must stop the loop and clear retained targets.

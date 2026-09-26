@@ -9,7 +9,7 @@ This map prevents state or behavior from being lost during the rebuild.
 | Full-screen loading experience and live progress | `systems/loader-screen.md` |
 | Legacy visual suppression and final retirement | `systems/legacy-ui-retirement.md` |
 | Capability globals and fallbacks | `systems/capability-detection.md` |
-| Connections, instances, render bindings, unload | `systems/lifecycle.md` |
+| Connections, instances, render bindings, game-controller registry, unload | `systems/lifecycle.md` |
 | `Aim.Enabled`, activation, method, rage, smoothing | `features/aim-core.md` |
 | Aim target part, team/wall/alive rules, distance | `features/aim-targeting.md` |
 | Aim prediction | `features/aim-prediction.md` |
@@ -39,11 +39,11 @@ This map prevents state or behavior from being lost during the rebuild.
 | `Players.Sort`, live directory, player actions | `systems/player-listing.md` |
 | `Stats.*` | `features/stats-overlay.md` |
 | `Keybinds` and bind capture | `systems/keybinds.md` |
-| `Catalog`, source/URL execution, built-in MM2 entry | `systems/script-loading.md` |
+| `Catalog`, source/URL execution, controller registration, dynamic game actions, built-in MM2 entry | `systems/script-loading.md`, `systems/corner-action-buttons.md` |
 | `Waypoints` | `features/waypoints.md` |
 | Search registration/ranking/navigation | `systems/search-index.md` |
 | Config serialization, files, migrations | `systems/config-storage.md` |
-| MM2 script lifecycle | `scripts/mm2.md` |
+| MM2 shared-theme game window and script lifecycle | `scripts/mm2.md` |
 | MM2 role ESP | `features/mm2-role-esp.md` |
 | MM2 gun-drop ESP | `features/mm2-gun-drop.md` |
 | MM2 pickup/fire automatic and manual actions | `features/mm2-automation.md` |

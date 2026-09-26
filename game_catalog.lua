@@ -203,6 +203,7 @@ function CatalogModule.Create(context)
     title.Parent = header
 
     local applyFilters = function() end
+    local close = function() return false end
     local showAllScripts = false
 
     local allSwitch = Instance.new("TextButton")
@@ -287,7 +288,7 @@ function CatalogModule.Create(context)
     headerDrag.Active = true
     headerDrag.BackgroundTransparency = 1
     headerDrag.BorderSizePixel = 0
-    headerDrag.Size = UDim2.new(0.48, 0, 1, 0)
+    headerDrag.Size = UDim2.fromScale(1, 1)
     headerDrag.ZIndex = 3004
     headerDrag.Parent = header
 
@@ -358,18 +359,6 @@ function CatalogModule.Create(context)
     searchShell.Parent = header
     round(searchShell, 10)
     outline(searchShell, 2, 0.08)
-
-    local searchDragArea = Instance.new("Frame")
-    searchDragArea.Name = "CollapsedSearchDragArea"
-    searchDragArea.Active = true
-    searchDragArea.AnchorPoint = Vector2.new(1, 0.5)
-    searchDragArea.BackgroundTransparency = 1
-    searchDragArea.BorderSizePixel = 0
-    searchDragArea.Position = UDim2.new(1, -110, 0.5, 0)
-    searchDragArea.Size = UDim2.fromOffset(layout.SearchWidth, 36)
-    searchDragArea.Visible = true
-    searchDragArea.ZIndex = 3004
-    searchDragArea.Parent = header
 
     local searchBox = Instance.new("TextBox")
     searchBox.Name = "SearchInput"
@@ -605,6 +594,7 @@ function CatalogModule.Create(context)
         cover.BorderSizePixel = 0
         cover.Image = ""
         cover.ImageTransparency = 1
+        cover.ClipsDescendants = true
         cover.Position = UDim2.fromOffset(8, 8)
         cover.ScaleType = Enum.ScaleType.Crop
         cover.Size = UDim2.new(1, -16, 0, layout.CoverHeight)
@@ -617,10 +607,10 @@ function CatalogModule.Create(context)
         statusStrip.BackgroundColor3 = statusColor(status)
         statusStrip.BackgroundTransparency = 0.12
         statusStrip.BorderSizePixel = 0
-        statusStrip.Position = UDim2.new(0, 8, 0, 8 + layout.CoverHeight)
-        statusStrip.Size = UDim2.new(1, -16, 0, layout.StatusHeight)
+        statusStrip.Position = UDim2.fromScale(0, 1)
+        statusStrip.Size = UDim2.new(1, 0, 0, layout.StatusHeight)
         statusStrip.ZIndex = 3007
-        statusStrip.Parent = card
+        statusStrip.Parent = cover
         local statusLabel = Instance.new("TextLabel")
         statusLabel.BackgroundTransparency = 1
         statusLabel.FontFace = fonts.HeadingBlack
@@ -709,6 +699,13 @@ function CatalogModule.Create(context)
                 if result and result.Ok then
                     showOutcome(theme.Success, false)
                     showToast(result.Message or (tostring(entry.Name) .. " çalıştırıldı"), theme.Success)
+                    local closing = close()
+                    if type(result.Activate) == "function" then
+                        task.delay(closing and motion.Close or 0, function()
+                            if destroyed then return end
+                            pcall(result.Activate)
+                        end)
+                    end
                 else
                     showOutcome(theme.Danger, true)
                     showToast(result and result.Message or "Script çalıştırılamadı", theme.Danger)
@@ -840,7 +837,6 @@ function CatalogModule.Create(context)
         searchOpen, searchRevision = open, searchRevision + 1
         local revision = searchRevision
         if open then
-            searchDragArea.Visible = false
             searchShell.Visible = true
             searchShell.Size = UDim2.fromOffset(0, 36)
             searchBox.TextTransparency = 1
@@ -854,7 +850,6 @@ function CatalogModule.Create(context)
                 tween.Completed:Wait()
                 if not destroyed and revision == searchRevision and not searchOpen then
                     searchShell.Visible = false
-                    searchDragArea.Visible = true
                 end
             end)
         end
@@ -908,9 +903,6 @@ function CatalogModule.Create(context)
         dragging, dragStart, dragWindowStart = true, Vector2.new(input.Position.X, input.Position.Y), restingPosition
     end
     connect(headerDrag.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then beginDrag(input) end
-    end)
-    connect(searchDragArea.InputBegan, function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then beginDrag(input) end
     end)
     connect(footer.InputBegan, function(input)
@@ -967,7 +959,7 @@ function CatalogModule.Create(context)
         return true
     end
 
-    local function close()
+    close = function()
         if destroyed or state == "Closed" or state == "Closing" then return false end
         transitionRevision, state = transitionRevision + 1, "Closing"
         local revision, source = transitionRevision, context.GetAnchorPoint()

@@ -433,6 +433,8 @@ local UI = {
     ActionIconAssets = {},
     CornerButtons = {},
     CornerButtonActions = {},
+    GameActionButtons = {},
+    GameControllers = {},
     CornerButtonDefinitions = {
         {Name = "CatalogAction", AssetId = 137753054375497, IntendedAction = "Catalog", CurrentAction = "Catalog"},
         {Name = "GeneralMenuAction", AssetId = 83533116222028, IntendedAction = "GeneralMenu", CurrentAction = nil}
@@ -491,6 +493,7 @@ local UI = {
         CornerButtonPressedIconSize = 46,
         CornerButtonGap = 18,
         CornerButtonRadius = 16,
+        CornerGameIconRadius = 10,
         CornerButtonStroke = 6,
         CornerButtonBackgroundTransparency = 0.18,
         CornerRailToggleThickness = 18,
@@ -531,7 +534,16 @@ local UI = {
         MotionCatalogSearchClose = 0.24,
         MotionCatalogGlow = 0.42,
         MotionCatalogShakeStep = 0.052,
-        MotionCatalogToast = 0.3
+        MotionCatalogToast = 0.3,
+        GameWindowWidth = 620,
+        GameWindowHeight = 420,
+        GameWindowRadius = 18,
+        GameWindowHeaderHeight = 56,
+        GameWindowFooterHeight = 38,
+        GameWindowBodyTransparency = 0.2,
+        GameWindowContentPadding = 18,
+        MotionGameWindowOpen = 0.48,
+        MotionGameWindowClose = 0.4
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
@@ -1508,9 +1520,17 @@ do
     local tokens = UI.DesignTokens
     local stackPadding = tokens.CornerButtonStroke + 2
     local stackWidth = tokens.CornerButtonHoverSize + stackPadding * 2
-    local stackHeight = tokens.CornerButtonHoverSize + tokens.CornerButtonSize + tokens.CornerButtonGap + stackPadding * 2
+    local function calculateStackHeight()
+        local count = math.max(2, #UI.CornerButtons)
+        return tokens.CornerButtonHoverSize
+            + (count - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap)
+            + stackPadding * 2
+    end
+    local stackHeight = calculateStackHeight()
     local sideRailWidth = stackWidth + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
     local capRailHeight = stackHeight + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
+    local applyCornerDock = function() end
+    local beginCornerDockDrag = function() end
 
     UI.CornerDockSide = "Right"
     UI.CornerDockRatio = 1
@@ -1559,7 +1579,7 @@ do
         )
     end
 
-    local function createCornerButton(index, name, backgroundColor, borderColor)
+    local function createCornerButton(index, name, backgroundColor, borderColor, preserveIconColor)
         local action = Instance.new("ImageButton")
         action.Name = name
         action.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1595,7 +1615,7 @@ do
         icon.BackgroundTransparency = 1
         icon.BorderSizePixel = 0
         icon.Image = ""
-        icon.ImageColor3 = tokens.TextPrimary
+        if not preserveIconColor then icon.ImageColor3 = tokens.TextPrimary end
         icon.ImageTransparency = 1
         icon.Position = UDim2.fromScale(0.5, 0.5)
         icon.ScaleType = Enum.ScaleType.Fit
@@ -1608,7 +1628,8 @@ do
             Icon = icon,
             Stroke = outline,
             Hovered = false,
-            IconRevision = 0
+            IconRevision = 0,
+            IsGameAction = false
         }
         UI.CornerButtons[index] = record
 
@@ -1655,15 +1676,41 @@ do
                 return
             end
             UI.PlaySound("ButtonClick")
-            local callback = UI.CornerButtonActions[index]
+            local callback = record.Callback or UI.CornerButtonActions[index]
             if type(callback) == "function" then
                 callback(index)
             end
         end))
+        trackConnection(action.InputBegan:Connect(function(input)
+            beginCornerDockDrag(input)
+        end))
+        return record
     end
 
     createCornerButton(1, UI.CornerButtonDefinitions[1].Name, tokens.Surface, tokens.Canvas)
     createCornerButton(2, UI.CornerButtonDefinitions[2].Name, tokens.Surface, tokens.Canvas)
+
+    local function refreshCornerButtonLayout(redock)
+        local ordered = {}
+        for _, record in ipairs(UI.CornerButtons) do
+            if record.IsGameAction then table.insert(ordered, record) end
+        end
+        for _, record in ipairs(UI.CornerButtons) do
+            if not record.IsGameAction then table.insert(ordered, record) end
+        end
+        for displayIndex, record in ipairs(ordered) do
+            record.Button.Position = UDim2.fromOffset(
+                stackPadding + tokens.CornerButtonHoverSize * 0.5,
+                stackPadding + tokens.CornerButtonHoverSize * 0.5
+                    + (displayIndex - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap)
+            )
+        end
+        stackHeight = calculateStackHeight()
+        capRailHeight = stackHeight + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
+        UI.CornerButtonStack.Size = UDim2.fromOffset(stackWidth, stackHeight)
+        if redock then applyCornerDock(UI.CornerDockSide, UI.CornerDockRatio) end
+    end
+    refreshCornerButtonLayout(false)
 
     UI.SetCornerButtonIcon = function(index, assetId)
         index = tonumber(index)
@@ -1818,7 +1865,7 @@ do
         }
     end
 
-    local function applyCornerDock(side, ratio)
+    applyCornerDock = function(side, ratio)
         side = table.find({"Left", "Right", "Top", "Bottom"}, side) and side or "Right"
         ratio = math.clamp(tonumber(ratio) or 0.5, 0, 1)
         UI.CornerDockSide = side
@@ -1906,7 +1953,7 @@ do
         return UserInputService:GetMouseLocation()
     end
 
-    local function beginCornerDockDrag(input)
+    beginCornerDockDrag = function(input)
         if UI.CornerRailDragging or (input.UserInputType ~= Enum.UserInputType.MouseButton1
             and input.UserInputType ~= Enum.UserInputType.Touch) then
             return
@@ -1984,9 +2031,6 @@ do
         UI.CornerRailDragStart = nil
     end
 
-    for _, record in ipairs(UI.CornerButtons) do
-        trackConnection(record.Button.InputBegan:Connect(beginCornerDockDrag))
-    end
     trackConnection(UI.CornerRailToggle.InputBegan:Connect(beginCornerDockDrag))
     trackConnection(UserInputService.InputChanged:Connect(function(input)
         if UI.CornerRailDragging and (input == UI.CornerRailDragInput
@@ -2016,6 +2060,46 @@ do
             UI.SetCornerButtonsHidden(not UI.CornerButtonsHidden)
         end
     end))
+
+    UI.SetGameActionIcon = function(actionId, image)
+        local record = UI.GameActionButtons[tostring(actionId or "")]
+        if not record or not record.Icon or not record.Icon.Parent then return false end
+        record.IconRevision = record.IconRevision + 1
+        record.Icon.Image = tostring(image or "")
+        record.Icon.ImageTransparency = record.Icon.Image == "" and 1 or 0
+        return true
+    end
+
+    UI.RegisterGameAction = function(actionId, displayName, image, callback)
+        actionId = tostring(actionId or "")
+        if actionId == "" or type(callback) ~= "function" then return nil, "invalid game action" end
+        local existing = UI.GameActionButtons[actionId]
+        if existing then
+            existing.Callback = callback
+            existing.DisplayName = tostring(displayName or actionId)
+            if image ~= nil then UI.SetGameActionIcon(actionId, image) end
+            return existing
+        end
+        local index = #UI.CornerButtons + 1
+        local safeName = actionId:gsub("[^%w_]", "_")
+        local record = createCornerButton(
+            index,
+            "GameAction_" .. safeName,
+            tokens.Surface,
+            tokens.Canvas,
+            true
+        )
+        record.IsGameAction = true
+        record.GameActionId = actionId
+        record.DisplayName = tostring(displayName or actionId)
+        record.Callback = callback
+        record.Icon.ScaleType = Enum.ScaleType.Crop
+        round(record.Icon, tokens.CornerGameIconRadius)
+        UI.GameActionButtons[actionId] = record
+        if image ~= nil then UI.SetGameActionIcon(actionId, image) end
+        refreshCornerButtonLayout(true)
+        return record
+    end
 
     applyCornerDock("Right", 1)
 
@@ -6459,9 +6543,97 @@ local function parsePlaceId(value)
     return matched and tonumber(matched) or nil
 end
 
-local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/main/mm2.lua"
+local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/mm2.lua"
 UI.GameCatalogModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/game_catalog.lua"
 UI.CatalogExecutionLocks = {}
+
+UI.GetGameActionAnchorPoint = function(actionId)
+    local record = UI.GameActionButtons[tostring(actionId or "")]
+    local button = record and record.Button
+    if button and button.Parent then
+        local rootPosition = InterfaceRoot.AbsolutePosition
+        local buttonPosition = button.AbsolutePosition
+        local buttonSize = button.AbsoluteSize
+        return Vector2.new(
+            buttonPosition.X - rootPosition.X + buttonSize.X * 0.5,
+            buttonPosition.Y - rootPosition.Y + buttonSize.Y * 0.5
+        )
+    end
+    return getCanvasSize() * 0.5
+end
+
+UI.GetGameUIContext = function(actionId)
+    actionId = tostring(actionId or "")
+    return {
+        Parent = InterfaceRoot,
+        Theme = {
+            Base = UI.DesignTokens.Canvas,
+            Layer = UI.DesignTokens.Surface,
+            Signal = UI.DesignTokens.TextPrimary,
+            Success = UI.DesignTokens.Success,
+            Warning = UI.DesignTokens.Warning,
+            Danger = UI.DesignTokens.Danger
+        },
+        Fonts = {
+            Body = UI.Fonts.Description,
+            Option = UI.Fonts.Option,
+            HeadingHeavy = UI.Fonts.HeadingHeavy,
+            HeadingBlack = UI.Fonts.HeadingBlack
+        },
+        Motion = {
+            Control = UI.DesignTokens.MotionCornerHover,
+            Open = UI.DesignTokens.MotionGameWindowOpen,
+            Close = UI.DesignTokens.MotionGameWindowClose
+        },
+        Layout = {
+            WindowWidth = UI.DesignTokens.GameWindowWidth,
+            WindowHeight = UI.DesignTokens.GameWindowHeight,
+            WindowRadius = UI.DesignTokens.GameWindowRadius,
+            HeaderHeight = UI.DesignTokens.GameWindowHeaderHeight,
+            FooterHeight = UI.DesignTokens.GameWindowFooterHeight,
+            BodyTransparency = UI.DesignTokens.GameWindowBodyTransparency,
+            ContentPadding = UI.DesignTokens.GameWindowContentPadding,
+            ViewportInset = UI.DesignTokens.CatalogViewportInset
+        },
+        Animate = animate,
+        PlaySound = UI.PlaySound,
+        InputService = UserInputService,
+        GetViewportSize = getCanvasSize,
+        GetAnchorPoint = function() return UI.GetGameActionAnchorPoint(actionId) end
+    }
+end
+
+UI.RegisterGameController = function(entry, controller)
+    if type(entry) ~= "table" or type(controller) ~= "table" then return nil, "game controller is missing" end
+    local actionId = tostring(entry.BuiltInId or entry.Name or entry.PlaceId or "")
+    if actionId == "" or type(controller.Open) ~= "function" then return nil, "game controller contract is invalid" end
+    local toggle = controller.Toggle
+    if type(toggle) ~= "function" then
+        toggle = function()
+            if type(controller.IsOpen) == "function" and controller.IsOpen() and type(controller.Close) == "function" then
+                return controller.Close()
+            end
+            return controller.Open()
+        end
+    end
+    UI.GameControllers[actionId] = controller
+    local placeId = tonumber(entry.PlaceId)
+    local directIcon = placeId and ("rbxthumb://type=GameIcon&id=" .. tostring(placeId) .. "&w=150&h=150") or ""
+    local record, registerError = UI.RegisterGameAction(actionId, entry.Name, directIcon, toggle)
+    if not record then
+        UI.GameControllers[actionId] = nil
+        return nil, registerError
+    end
+    if placeId then
+        task.spawn(function()
+            local resolved = UI.ResolveCatalogGameIconAsset and UI.ResolveCatalogGameIconAsset(placeId)
+            if resolved and UI.GameControllers[actionId] == controller then
+                UI.SetGameActionIcon(actionId, resolved)
+            end
+        end)
+    end
+    return function() return controller.Open() end
+end
 
 UI.ExecuteCatalogEntry = function(entry)
     if type(entry) ~= "table" then
@@ -6494,12 +6666,31 @@ UI.ExecuteCatalogEntry = function(entry)
         UI.CatalogExecutionLocks[executionId] = nil
         return {Ok = false, Message = "Derleme hatası: " .. tostring(compileError)}
     end
-    local ok, runtimeError = pcall(chunk)
+    local ok, runtimeResult = pcall(chunk)
     if not ok then
         UI.CatalogExecutionLocks[executionId] = nil
-        return {Ok = false, Message = "Çalışma hatası: " .. tostring(runtimeError)}
+        return {Ok = false, Message = "Çalışma hatası: " .. tostring(runtimeResult)}
     end
-    return {Ok = true, Message = tostring(entry.Name or "Script") .. " çalıştırıldı"}
+    local controller = type(runtimeResult) == "table" and runtimeResult or nil
+    if not controller and entry.BuiltInId == "mm2" and type(env.TasuHubMM2) == "table" then
+        controller = env.TasuHubMM2
+    end
+    local activate
+    if controller then
+        local registered, registerError = UI.RegisterGameController(entry, controller)
+        if not registered then
+            UI.CatalogExecutionLocks[executionId] = nil
+            local destroy = controller.Destroy or controller.Unload
+            if type(destroy) == "function" then pcall(destroy) end
+            return {Ok = false, Message = registerError or "Oyun arayüzü kaydedilemedi"}
+        end
+        activate = registered
+    end
+    return {
+        Ok = true,
+        Message = tostring(entry.Name or "Script") .. " çalıştırıldı",
+        Activate = activate
+    }
 end
 
 UI.ResolveCatalogCoverAsset = function(placeId)
@@ -6529,6 +6720,29 @@ UI.ResolveCatalogCoverAsset = function(placeId)
     return loadRemoteAsset(
         thumbnail.imageUrl,
         "TasuHub/Catalog/Banners/" .. sanitizeName(placeId) .. ".png"
+    )
+end
+
+UI.ResolveCatalogGameIconAsset = function(placeId)
+    placeId = tonumber(placeId)
+    if not placeId or not capabilities.Http or not capabilities.Files or not capabilities.CustomAsset then
+        return nil
+    end
+    local universeBody = httpGet("https://apis.roblox.com/universes/v1/places/" .. tostring(placeId) .. "/universe")
+    local universeOk, universe = pcall(HttpService.JSONDecode, HttpService, universeBody or "")
+    if not universeOk or type(universe) ~= "table" or not universe.universeId then return nil end
+    local iconBody = httpGet(
+        "https://thumbnails.roblox.com/v1/games/icons?universeIds="
+            .. tostring(universe.universeId)
+            .. "&returnPolicy=PlaceHolder&size=150x150&format=Png&isCircular=false"
+    )
+    local iconOk, decoded = pcall(HttpService.JSONDecode, HttpService, iconBody or "")
+    local icon = iconOk and decoded and decoded.data and decoded.data[1]
+    if not icon or type(icon.imageUrl) ~= "string" then return nil end
+    if not ensureFolder("TasuHub/Catalog/GameIcons") then return nil end
+    return loadRemoteAsset(
+        icon.imageUrl,
+        "TasuHub/Catalog/GameIcons/" .. sanitizeName(placeId) .. ".png"
     )
 end
 
@@ -7181,6 +7395,11 @@ UI.ReportLoading(0.98, UI.GameCatalogController
 unload = function()
     if unloaded then return end
     unloaded = true
+    for actionId, controller in pairs(UI.GameControllers) do
+        local destroy = type(controller) == "table" and (controller.Destroy or controller.Unload) or nil
+        if type(destroy) == "function" then pcall(destroy) end
+        UI.GameControllers[actionId] = nil
+    end
     if UI.GameCatalogController and type(UI.GameCatalogController.Destroy) == "function" then
         pcall(UI.GameCatalogController.Destroy)
         UI.GameCatalogController = nil
@@ -7261,8 +7480,11 @@ env.TasuHub = {
     SetCornerButtonAction = UI.SetCornerButtonAction,
     SetCornerButtonsHidden = UI.SetCornerButtonsHidden,
     SetCornerDock = UI.SetCornerDock,
+    GetGameUIContext = UI.GetGameUIContext,
     CornerButtons = UI.CornerButtons,
     CornerButtonDefinitions = UI.CornerButtonDefinitions,
+    GameActionButtons = UI.GameActionButtons,
+    GameControllers = UI.GameControllers,
     OpenCatalog = function()
         return UI.GameCatalogController and UI.GameCatalogController.Open() or false, UI.GameCatalogError
     end,

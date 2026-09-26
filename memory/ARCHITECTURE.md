@@ -9,7 +9,7 @@
 5. UI shell — navigation, panels, overlays, component library, shared theme, and animation coordinator.
 6. Feature views — declarative control registration only; no gameplay loops or private styling.
 
-`game_catalog.lua` is the first versioned remote view module under this split. It owns catalog presentation, metadata filtering/sorting, nine-card virtualization, active-page cover caching, and popup transition state only. `loader.lua` retains catalog data, HTTP/custom-asset cover resolution, validated script execution, duplicate-run ownership, and global lifecycle handoff. The module receives those abilities through an explicit context and cannot construct or invoke legacy UI.
+`game_catalog.lua` owns catalog presentation, metadata filtering/sorting, nine-card virtualization, active-page cover caching, and popup transition state only. `loader.lua` retains catalog data, HTTP/custom-asset cover and square-icon resolution, validated script execution, duplicate-run ownership, game-controller registration, dynamic rail actions, shared game-window context, and global lifecycle handoff. `mm2.lua` is the first migrated game feature controller/view: it retains its engine and cleanup, consumes only the shared context, mounts below `InterfaceRoot`, and returns its controller rather than creating a separate `ScreenGui`.
 
 ## Contracts
 
@@ -18,6 +18,7 @@
 - Search indexes feature metadata and control commands, not raw Roblox instances.
 - Player listing consumes a player data service; rows do not poll or own gameplay logic.
 - Catalog loading returns structured success/error results and never owns its own visual theme.
+- A loaded game script returns a controller; the loader registers its rail action and lifecycle, while the catalog only consumes the returned activation callback.
 - UI and feature state communicate through stable IDs, not display labels.
 
 ## Migration constraint

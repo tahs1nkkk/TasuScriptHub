@@ -1,17 +1,30 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then return end
+if not LocalPlayer then error("[TasuHub/MM2] LocalPlayer is unavailable") end
 
 local env = getgenv and getgenv() or _G
 if env.TasuHubMM2 and type(env.TasuHubMM2.Unload) == "function" then
     pcall(env.TasuHubMM2.Unload)
 end
+
+local hub = env.TasuHub
+if type(hub) ~= "table" or type(hub.GetGameUIContext) ~= "function" then
+    error("[TasuHub/MM2] Shared TasuHub UI context is unavailable")
+end
+local context = hub.GetGameUIContext("mm2")
+if type(context) ~= "table" or not context.Parent then
+    error("[TasuHub/MM2] Shared game-window context is invalid")
+end
+
+local theme, fonts = context.Theme, context.Fonts
+local motion, layout = context.Motion, context.Layout
+local animate = context.Animate
+local playSound = context.PlaySound or function() end
+local inputService = context.InputService
 
 local State = {
     Enabled = false,
@@ -29,6 +42,23 @@ local function connect(signal, callback)
     local connection = signal:Connect(callback)
     table.insert(connections, connection)
     return connection
+end
+
+local function round(object, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius)
+    corner.Parent = object
+    return corner
+end
+
+local function outline(object, thickness, transparency, color)
+    local item = Instance.new("UIStroke")
+    item.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    item.Color = color or theme.Base
+    item.Thickness = thickness
+    item.Transparency = transparency or 0
+    item.Parent = object
+    return item
 end
 
 local function characterInfo(player)
@@ -94,7 +124,7 @@ local function ensurePlayerESP(player)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Size = UDim2.fromScale(1, 1)
-    label.Font = Enum.Font.BuilderSansBold
+    label.FontFace = fonts.HeadingHeavy
     label.TextSize = 15
     label.TextStrokeTransparency = 0.15
     label.Parent = billboard
@@ -161,7 +191,9 @@ local function requestShot()
     end
     if not targetRoot then return false end
     for _, object in ipairs(gun:GetDescendants()) do
-        if object:IsA("RemoteEvent") and (string.find(string.lower(object.Name), "shoot", 1, true) or string.find(string.lower(object.Name), "fire", 1, true)) then
+        local lowered = string.lower(object.Name)
+        if object:IsA("RemoteEvent")
+            and (string.find(lowered, "shoot", 1, true) or string.find(lowered, "fire", 1, true)) then
             pcall(function() object:FireServer(targetRoot.Position) end)
             return true
         end
@@ -169,124 +201,378 @@ local function requestShot()
     return false
 end
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "TasuHubMM2"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.Parent = (type(env.gethui) == "function" and env.gethui()) or CoreGui
+local root = Instance.new("Frame")
+root.Name = "MM2GameRoot"
+root.BackgroundTransparency = 1
+root.BorderSizePixel = 0
+root.Size = UDim2.fromScale(1, 1)
+root.ZIndex = 4000
+root.Parent = context.Parent
 
-local Window = Instance.new("CanvasGroup")
-Window.AnchorPoint = Vector2.new(0.5, 0.5)
-Window.BackgroundColor3 = Color3.fromRGB(20, 29, 40)
-Window.Position = UDim2.fromScale(0.5, 0.5)
-Window.Size = UDim2.fromOffset(390, 250)
-Window.Visible = false
-Window.GroupTransparency = 1
-Window.Parent = ScreenGui
-Instance.new("UICorner", Window).CornerRadius = UDim.new(0, 14)
+local window = Instance.new("CanvasGroup")
+window.Name = "MM2Window"
+window.AnchorPoint = Vector2.new(0.5, 0.5)
+window.BackgroundColor3 = theme.Layer
+window.BackgroundTransparency = 1
+window.BorderSizePixel = 0
+window.ClipsDescendants = false
+window.GroupTransparency = 1
+window.Size = UDim2.fromOffset(layout.WindowWidth, layout.WindowHeight)
+window.Visible = false
+window.ZIndex = 4001
+window.Parent = root
+round(window, layout.WindowRadius)
+outline(window, 2, 0.06)
 
-local Title = Instance.new("TextLabel")
-Title.BackgroundTransparency = 1
-Title.Position = UDim2.fromOffset(14, 7)
-Title.Size = UDim2.new(1, -58, 0, 36)
-Title.Font = Enum.Font.BuilderSansBold
-Title.Text = "Murder Mystery 2"
-Title.TextColor3 = Color3.fromRGB(244, 248, 255)
-Title.TextSize = 20
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = Window
+local windowScale = Instance.new("UIScale")
+windowScale.Scale = 0
+windowScale.Parent = window
 
-local Close = Instance.new("TextButton")
-Close.AutoButtonColor = false
-Close.BackgroundColor3 = Color3.fromRGB(34, 48, 66)
-Close.Position = UDim2.new(1, -43, 0, 8)
-Close.Size = UDim2.fromOffset(34, 32)
-Close.Font = Enum.Font.BuilderSansBold
-Close.Text = "×"
-Close.TextColor3 = Color3.fromRGB(244, 248, 255)
-Close.TextSize = 21
-Close.Parent = Window
-Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
+local clip = Instance.new("Frame")
+clip.Name = "ContentClip"
+clip.BackgroundTransparency = 1
+clip.BorderSizePixel = 0
+clip.ClipsDescendants = true
+clip.Size = UDim2.fromScale(1, 1)
+clip.ZIndex = 4002
+clip.Parent = window
+round(clip, layout.WindowRadius)
 
-local Body = Instance.new("Frame")
-Body.BackgroundTransparency = 1
-Body.Position = UDim2.fromOffset(12, 52)
-Body.Size = UDim2.new(1, -24, 1, -64)
-Body.Parent = Window
-local Grid = Instance.new("UIGridLayout")
-Grid.CellPadding = UDim2.fromOffset(8, 8)
-Grid.CellSize = UDim2.new(0.5, -4, 0, 40)
-Grid.Parent = Body
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Active = true
+header.BackgroundColor3 = theme.Base
+header.BorderSizePixel = 0
+header.Size = UDim2.new(1, 0, 0, layout.HeaderHeight)
+header.ZIndex = 4002
+header.Parent = clip
 
-local function addToggle(labelText, key)
+local headerDrag = Instance.new("Frame")
+headerDrag.Name = "HeaderDragArea"
+headerDrag.Active = true
+headerDrag.BackgroundTransparency = 1
+headerDrag.BorderSizePixel = 0
+headerDrag.Size = UDim2.fromScale(1, 1)
+headerDrag.ZIndex = 4004
+headerDrag.Parent = header
+
+local title = Instance.new("TextLabel")
+title.AnchorPoint = Vector2.new(0.5, 0.5)
+title.BackgroundTransparency = 1
+title.FontFace = fonts.HeadingBlack
+title.Position = UDim2.fromScale(0.5, 0.5)
+title.Size = UDim2.new(1, -120, 1, 0)
+title.Text = "Murder Mystery 2"
+title.TextColor3 = theme.Signal
+title.TextSize = 21
+title.ZIndex = 4003
+title.Parent = header
+
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "Close"
+closeButton.AnchorPoint = Vector2.new(1, 0.5)
+closeButton.AutoButtonColor = false
+closeButton.BackgroundColor3 = theme.Layer
+closeButton.BackgroundTransparency = 0.12
+closeButton.BorderSizePixel = 0
+closeButton.FontFace = fonts.HeadingHeavy
+closeButton.Position = UDim2.new(1, -12, 0.5, 0)
+closeButton.Size = UDim2.fromOffset(38, 38)
+closeButton.Text = "×"
+closeButton.TextColor3 = theme.Signal
+closeButton.TextSize = 23
+closeButton.ZIndex = 4005
+closeButton.Parent = header
+round(closeButton, 11)
+outline(closeButton, 2, 0.08)
+
+local body = Instance.new("Frame")
+body.Name = "Body"
+body.BackgroundColor3 = theme.Layer
+body.BackgroundTransparency = layout.BodyTransparency
+body.BorderSizePixel = 0
+body.Position = UDim2.fromOffset(0, layout.HeaderHeight)
+body.Size = UDim2.new(1, 0, 1, -(layout.HeaderHeight + layout.FooterHeight))
+body.ZIndex = 4002
+body.Parent = clip
+
+local footer = Instance.new("Frame")
+footer.Name = "Footer"
+footer.Active = true
+footer.AnchorPoint = Vector2.new(0, 1)
+footer.BackgroundColor3 = theme.Base
+footer.BorderSizePixel = 0
+footer.Position = UDim2.fromScale(0, 1)
+footer.Size = UDim2.new(1, 0, 0, layout.FooterHeight)
+footer.ZIndex = 4002
+footer.Parent = clip
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.BackgroundTransparency = 1
+statusLabel.FontFace = fonts.Body
+statusLabel.Position = UDim2.fromOffset(16, 0)
+statusLabel.Size = UDim2.new(1, -32, 1, 0)
+statusLabel.Text = "Hazır"
+statusLabel.TextColor3 = theme.Signal
+statusLabel.TextSize = 13
+statusLabel.TextTransparency = 0.28
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.ZIndex = 4003
+statusLabel.Parent = footer
+
+local function setStatus(message, color)
+    statusLabel.Text = tostring(message or "Hazır")
+    statusLabel.TextColor3 = color or theme.Signal
+    statusLabel.TextTransparency = color and 0 or 0.28
+end
+
+local controls = {}
+local contentPadding = layout.ContentPadding
+local columnGap, rowGap, rowHeight = 12, 12, 62
+
+local function controlPosition(column, row)
+    return UDim2.new(
+        (column - 1) * 0.5,
+        column == 1 and contentPadding or columnGap * 0.5,
+        0,
+        contentPadding + (row - 1) * (rowHeight + rowGap)
+    )
+end
+
+local function controlSize(height)
+    return UDim2.new(0.5, -(contentPadding + columnGap * 0.5), 0, height)
+end
+
+local function addToggle(labelText, key, column, row)
     local button = Instance.new("TextButton")
+    button.Name = key
     button.AutoButtonColor = false
-    button.BackgroundColor3 = Color3.fromRGB(28, 40, 55)
-    button.Font = Enum.Font.BuilderSansBold
-    button.TextColor3 = Color3.fromRGB(244, 248, 255)
-    button.TextSize = 15
-    button.Parent = Body
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 9)
-    local function render()
-        button.Text = labelText .. "  " .. (State[key] and "ON" or "OFF")
-        button.BackgroundColor3 = State[key] and Color3.fromRGB(42, 93, 145) or Color3.fromRGB(28, 40, 55)
+    button.BackgroundColor3 = theme.Base
+    button.BackgroundTransparency = 0.14
+    button.BorderSizePixel = 0
+    button.Position = controlPosition(column, row)
+    button.Size = controlSize(rowHeight)
+    button.Text = ""
+    button.ZIndex = 4003
+    button.Parent = body
+    round(button, 13)
+    local cardStroke = outline(button, 2, 0.16)
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.FontFace = fonts.HeadingHeavy
+    label.Position = UDim2.fromOffset(15, 0)
+    label.Size = UDim2.new(1, -75, 1, 0)
+    label.Text = labelText
+    label.TextColor3 = theme.Signal
+    label.TextSize = 15
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 4004
+    label.Parent = button
+
+    local track = Instance.new("Frame")
+    track.AnchorPoint = Vector2.new(1, 0.5)
+    track.BackgroundColor3 = theme.Layer
+    track.BackgroundTransparency = 0.08
+    track.BorderSizePixel = 0
+    track.Position = UDim2.new(1, -14, 0.5, 0)
+    track.Size = UDim2.fromOffset(38, 22)
+    track.ZIndex = 4004
+    track.Parent = button
+    round(track, 999)
+    outline(track, 1, 0.22, theme.Signal)
+
+    local knob = Instance.new("Frame")
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.BackgroundColor3 = theme.Signal
+    knob.BorderSizePixel = 0
+    knob.Size = UDim2.fromOffset(14, 14)
+    knob.ZIndex = 4005
+    knob.Parent = track
+    round(knob, 999)
+
+    local function render(instant)
+        local enabled = State[key] == true
+        local trackProperties = {
+            BackgroundColor3 = enabled and theme.Signal or theme.Layer,
+            BackgroundTransparency = enabled and 0 or 0.08
+        }
+        local knobProperties = {
+            BackgroundColor3 = enabled and theme.Base or theme.Signal,
+            Position = enabled and UDim2.new(1, -8, 0.5, 0) or UDim2.new(0, 8, 0.5, 0)
+        }
+        if instant then
+            for property, value in pairs(trackProperties) do track[property] = value end
+            for property, value in pairs(knobProperties) do knob[property] = value end
+        else
+            animate(track, trackProperties, motion.Control, Enum.EasingStyle.Quint)
+            animate(knob, knobProperties, motion.Control, Enum.EasingStyle.Quint)
+        end
+        cardStroke.Color = enabled and theme.Signal or theme.Base
     end
-    button.Activated:Connect(function()
-        State[key] = not State[key]
-        render()
+    connect(button.MouseEnter, function()
+        playSound("ButtonHover")
+        animate(button, {BackgroundTransparency = 0.04}, motion.Control, Enum.EasingStyle.Quint)
     end)
-    render()
+    connect(button.MouseLeave, function()
+        animate(button, {BackgroundTransparency = 0.14}, motion.Control, Enum.EasingStyle.Quint)
+    end)
+    connect(button.Activated, function()
+        State[key] = not State[key]
+        playSound("ButtonClick")
+        render(false)
+        setStatus(labelText .. (State[key] and " açıldı" or " kapatıldı"), State[key] and theme.Success or nil)
+    end)
+    controls[key] = {Render = render}
+    render(true)
 end
 
-local function addAction(labelText, callback)
+local function addAction(labelText, callback, column, row)
     local button = Instance.new("TextButton")
     button.AutoButtonColor = false
-    button.BackgroundColor3 = Color3.fromRGB(36, 52, 72)
-    button.Font = Enum.Font.BuilderSansBold
+    button.BackgroundColor3 = theme.Layer
+    button.BackgroundTransparency = 0.04
+    button.BorderSizePixel = 0
+    button.FontFace = fonts.HeadingBlack
+    button.Position = controlPosition(column, row)
+    button.Size = controlSize(48)
     button.Text = labelText
-    button.TextColor3 = Color3.fromRGB(244, 248, 255)
+    button.TextColor3 = theme.Signal
     button.TextSize = 15
-    button.Parent = Body
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 9)
-    button.Activated:Connect(callback)
+    button.ZIndex = 4003
+    button.Parent = body
+    round(button, 13)
+    local actionStroke = outline(button, 2, 0.08, theme.Signal)
+    connect(button.MouseEnter, function()
+        playSound("ButtonHover")
+        animate(button, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
+        animate(actionStroke, {Transparency = 0}, motion.Control, Enum.EasingStyle.Quint)
+    end)
+    connect(button.MouseLeave, function()
+        animate(button, {BackgroundTransparency = 0.04}, motion.Control, Enum.EasingStyle.Quint)
+        animate(actionStroke, {Transparency = 0.08}, motion.Control, Enum.EasingStyle.Quint)
+    end)
+    connect(button.Activated, function()
+        playSound("ButtonClick")
+        local ok = callback()
+        setStatus(ok and (labelText .. " başarılı") or (labelText .. " kullanılamıyor"), ok and theme.Success or theme.Danger)
+    end)
 end
 
-addToggle("Enabled", "Enabled")
-addToggle("Role ESP", "PlayerESP")
-addToggle("GunDrop ESP", "GunDropESP")
-addToggle("Auto Pickup", "AutoPickup")
-addToggle("Auto Fire", "AutoFire")
-addAction("Pickup Now", requestPickup)
-addAction("Fire Now", requestShot)
+addToggle("Ana Sistem", "Enabled", 1, 1)
+addToggle("Rol ESP", "PlayerESP", 2, 1)
+addToggle("GunDrop ESP", "GunDropESP", 1, 2)
+addToggle("Otomatik Alma", "AutoPickup", 2, 2)
+addToggle("Otomatik Ateş", "AutoFire", 1, 3)
+addAction("Silahı Şimdi Al", requestPickup, 1, 4)
+addAction("Şimdi Ateş Et", requestShot, 2, 4)
 
-local dragging, dragStart, windowStart
-connect(Title.InputBegan, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging, dragStart, windowStart = true, input.Position, Window.Position
-    end
+local uiState = "Closed"
+local transitionRevision = 0
+local restingPosition
+local dragging, dragStart, dragWindowStart = false, nil, nil
+
+local function windowSize()
+    local viewport = context.GetViewportSize()
+    return viewport, Vector2.new(
+        math.min(layout.WindowWidth, math.max(360, viewport.X - layout.ViewportInset * 2)),
+        math.min(layout.WindowHeight, math.max(320, viewport.Y - layout.ViewportInset * 2))
+    )
+end
+
+local function clampCenter(point, size, viewport)
+    local margin, halfX, halfY = layout.ViewportInset, size.X * 0.5, size.Y * 0.5
+    local minX, maxX = halfX + margin, viewport.X - halfX - margin
+    local minY, maxY = halfY + margin, viewport.Y - halfY - margin
+    if minX > maxX then minX, maxX = viewport.X * 0.5, viewport.X * 0.5 end
+    if minY > maxY then minY, maxY = viewport.Y * 0.5, viewport.Y * 0.5 end
+    return Vector2.new(math.clamp(point.X, minX, maxX), math.clamp(point.Y, minY, maxY))
+end
+
+local function targetGeometry()
+    local viewport, size = windowSize()
+    restingPosition = clampCenter(restingPosition or viewport * 0.5, size, viewport)
+    return viewport, size, restingPosition
+end
+
+local function beginDrag(input)
+    if uiState ~= "Open" then return end
+    if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+    dragging = true
+    dragStart = Vector2.new(input.Position.X, input.Position.Y)
+    dragWindowStart = restingPosition
+end
+connect(headerDrag.InputBegan, beginDrag)
+connect(footer.InputBegan, beginDrag)
+connect(inputService.InputChanged, function(input)
+    if not dragging or not dragStart or not dragWindowStart then return end
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+    local viewport, size = windowSize()
+    local pointer = Vector2.new(input.Position.X, input.Position.Y)
+    restingPosition = clampCenter(dragWindowStart + pointer - dragStart, size, viewport)
+    window.Position = UDim2.fromOffset(restingPosition.X, restingPosition.Y)
 end)
-connect(UserInputService.InputChanged, function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        Window.Position = windowStart + UDim2.fromOffset(delta.X, delta.Y)
+connect(inputService.InputEnded, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging, dragStart, dragWindowStart = false, nil, nil
     end
-end)
-connect(UserInputService.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
 end)
 
 local function open()
-    Window.Visible = true
-    Window.GroupTransparency = 1
-    TweenService:Create(Window, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {GroupTransparency = 0}):Play()
-end
-local function close()
-    TweenService:Create(Window, TweenInfo.new(0.22, Enum.EasingStyle.Quint), {GroupTransparency = 1}):Play()
-    task.delay(0.23, function()
-        if Window.Parent and Window.GroupTransparency > 0.98 then Window.Visible = false end
+    if unloaded or uiState == "Open" or uiState == "Opening" then return false end
+    local reversingClose = uiState == "Closing"
+    transitionRevision, uiState = transitionRevision + 1, "Opening"
+    local revision = transitionRevision
+    local _, size, center = targetGeometry()
+    window.Size = UDim2.fromOffset(size.X, size.Y)
+    if not reversingClose then
+        local source = context.GetAnchorPoint()
+        window.Position = UDim2.fromOffset(source.X, source.Y)
+        windowScale.Scale, window.GroupTransparency = 0, 1
+    end
+    window.Visible = true
+    local move = animate(window, {Position = UDim2.fromOffset(center.X, center.Y), GroupTransparency = 0}, motion.Open, Enum.EasingStyle.Quint)
+    animate(windowScale, {Scale = 1}, motion.Open, Enum.EasingStyle.Back)
+    task.spawn(function()
+        move.Completed:Wait()
+        if not unloaded and revision == transitionRevision then uiState = "Open" end
     end)
+    return true
 end
-Close.Activated:Connect(close)
+
+local function close()
+    if unloaded or uiState == "Closed" or uiState == "Closing" then return false end
+    transitionRevision, uiState = transitionRevision + 1, "Closing"
+    local revision = transitionRevision
+    local source = context.GetAnchorPoint()
+    dragging = false
+    local move = animate(window, {Position = UDim2.fromOffset(source.X, source.Y), GroupTransparency = 1}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    animate(windowScale, {Scale = 0}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    task.spawn(function()
+        move.Completed:Wait()
+        if not unloaded and revision == transitionRevision then
+            window.Visible, uiState = false, "Closed"
+        end
+    end)
+    return true
+end
+
+connect(closeButton.MouseEnter, function()
+    animate(closeButton, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
+end)
+connect(closeButton.MouseLeave, function()
+    animate(closeButton, {BackgroundTransparency = 0.12}, motion.Control, Enum.EasingStyle.Quint)
+end)
+connect(closeButton.Activated, function()
+    playSound("ButtonClick")
+    close()
+end)
+connect(context.Parent:GetPropertyChangedSignal("AbsoluteSize"), function()
+    if unloaded or (uiState ~= "Open" and uiState ~= "Opening") then return end
+    local _, size, center = targetGeometry()
+    window.Size = UDim2.fromOffset(size.X, size.Y)
+    window.Position = UDim2.fromOffset(center.X, center.Y)
+end)
 
 local clock = 0
 connect(RunService.Heartbeat, function(deltaTime)
@@ -297,15 +583,17 @@ connect(RunService.Heartbeat, function(deltaTime)
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
             local record = ensurePlayerESP(player)
-            local character, humanoid, root = characterInfo(player)
+            local character, humanoid, characterRoot = characterInfo(player)
             local role = replicatedRole(player)
-            local color = role == "Murderer" and Color3.fromRGB(244, 72, 83) or role == "Sheriff" and Color3.fromRGB(65, 145, 255) or nil
-            local visible = State.Enabled and State.PlayerESP and color ~= nil and humanoid and humanoid.Health > 0 and root ~= nil
+            local color = role == "Murderer" and Color3.fromRGB(244, 72, 83)
+                or role == "Sheriff" and Color3.fromRGB(65, 145, 255) or nil
+            local visible = State.Enabled and State.PlayerESP and color ~= nil
+                and humanoid and humanoid.Health > 0 and characterRoot ~= nil
             record.Highlight.Adornee = visible and character or nil
             record.Highlight.FillColor = color or Color3.new(1, 1, 1)
             record.Highlight.OutlineColor = color or Color3.new(1, 1, 1)
             record.Highlight.Enabled = visible
-            record.Billboard.Adornee = visible and root or nil
+            record.Billboard.Adornee = visible and characterRoot or nil
             record.Billboard.Enabled = visible
             record.Label.Text = player.DisplayName
             record.Label.TextColor3 = color or Color3.new(1, 1, 1)
@@ -316,23 +604,43 @@ connect(RunService.Heartbeat, function(deltaTime)
 end)
 connect(Players.PlayerRemoving, destroyPlayerESP)
 
+local controller
 local function unload()
     if unloaded then return end
     unloaded = true
+    transitionRevision = transitionRevision + 1
     for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
     for player in pairs(playerESP) do destroyPlayerESP(player) end
     if gunHighlight then gunHighlight:Destroy() end
-    ScreenGui:Destroy()
-    if env.TasuHubMM2 and env.TasuHubMM2.Unload == unload then env.TasuHubMM2 = nil end
+    if root.Parent then root:Destroy() end
+    if env.TasuHubMM2 == controller then env.TasuHubMM2 = nil end
 end
 
-env.TasuHubMM2 = {
+controller = table.freeze({
     State = State,
     PlaceId = 142823291,
+    GetState = function()
+        local copy = {}
+        for key, value in pairs(State) do copy[key] = value end
+        return copy
+    end,
+    SetState = function(key, value)
+        if State[key] == nil then return false end
+        State[key] = value == true
+        if controls[key] then controls[key].Render(false) end
+        return true
+    end,
+    Enable = function() State.Enabled = true; controls.Enabled.Render(false); return true end,
+    Disable = function() State.Enabled = false; controls.Enabled.Render(false); return true end,
+    RefreshCharacter = function() return true end,
     Open = open,
     Close = close,
     Toggle = function()
-        if Window.Visible then close() else open() end
+        return (uiState == "Open" or uiState == "Opening") and close() or open()
     end,
+    IsOpen = function() return uiState == "Open" or uiState == "Opening" end,
+    Destroy = unload,
     Unload = unload
-}
+})
+env.TasuHubMM2 = controller
+return controller
