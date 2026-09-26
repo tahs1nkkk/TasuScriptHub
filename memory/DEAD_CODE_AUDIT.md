@@ -1,6 +1,6 @@
 # Dead-code audit
 
-Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch is now at catalog revision-2 implementation commit `056e5ab`; it remains pending executor acceptance and is intentionally not merged into `main`.
+Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch now contains catalog revision-3 implementation commit `fdbf25d`; it remains pending executor acceptance and is intentionally not merged into `main`.
 
 ## Confirmed dead state
 
