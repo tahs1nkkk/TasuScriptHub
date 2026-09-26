@@ -13,6 +13,7 @@ This directory is the persistent source of truth for the executor-only UI rework
 ## Script memory
 
 - `scripts/loader.md`
+- `scripts/game_catalog.md`
 - `scripts/mm2.md`
 
 ## Retained systems to rework
@@ -36,4 +37,4 @@ Feature-specific files live under `features/`. Each file records current behavio
 
 ## Current gate
 
-The loader design is user-approved and closed after the final ready-text scale revision. Preserve it as a finished shared system unless the user explicitly reopens loader work. The next UI phase is the general menu launched by the lower corner-action button; its structure and visual specification must be defined before implementation, and it is not runtime-ready until its executor checklist is completed.
+The loader design is user-approved and closed after the final ready-text scale revision. Preserve it as a finished shared system unless the user explicitly reopens loader work. The first game-catalog window revision is implemented through the upper corner-action button and remote `game_catalog.lua` module; it is not runtime-ready until its executor checklist is completed and the user approves visual revisions. The general menu launched by the lower button remains the following UI phase.

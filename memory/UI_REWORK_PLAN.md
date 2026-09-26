@@ -26,4 +26,4 @@ They must not be copied line-for-line or visually reproduced. Their data contrac
 
 ## Current state
 
-Phase 1 is complete. The loader now uses the fixed three-color dark-gray palette, minimal vector icon registry, thin rounded progress bar, and deliberately slow fades. The first phase-3 shell component is implemented as a two-button bottom-right action rail with centralized asset/action registries; its executor verification is pending. Legacy presentation is disabled and cannot become visible after loading; feature engines and state remain active while the new shell is built.
+Phase 1 and the user-approved loader are complete. The phase-3 action rail is implemented, and the first phase-5 service/view migration now has a revision-1 game-catalog window delivered through a versioned remote module. Its executor and visual revision pass is pending. Legacy presentation is disabled and cannot become visible after loading; feature engines and state remain active while the new shell is built.

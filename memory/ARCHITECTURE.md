@@ -9,6 +9,8 @@
 5. UI shell — navigation, panels, overlays, component library, shared theme, and animation coordinator.
 6. Feature views — declarative control registration only; no gameplay loops or private styling.
 
+`game_catalog.lua` is the first versioned remote view module under this split. It owns catalog presentation, local filtering, and popup transition state only. `loader.lua` retains catalog data, HTTP/custom-asset cover resolution, validated script execution, duplicate-run ownership, and global lifecycle handoff. The module receives those abilities through an explicit context and cannot construct or invoke legacy UI.
+
 ## Contracts
 
 - A feature controller exposes `GetState`, `SetState`, `Enable`, `Disable`, `RefreshCharacter`, and `Destroy` as applicable.

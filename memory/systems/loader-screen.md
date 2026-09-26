@@ -44,6 +44,7 @@ Status: implemented, user-approved, and closed pending explicit reopening.
 - 90% — `Catalog · script yükleme sistemi hazır`
 - 92% — `Configs · kayıt ve geri yükleme sistemi bağlanıyor`
 - 97% — `Configs · dosya listesi ve modal hazır`
+- 98% — `Catalog · uzak oyun menüsü hazır` or `Catalog · uzak oyun menüsü kullanılamıyor`
 - 99% — `Runtime · executor API ve cleanup hazır`
 - 100% — `Herşey Hazır!`
 

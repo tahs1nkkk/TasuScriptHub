@@ -24,7 +24,7 @@ The entrypoint must remain a single-file bootstrap. If the project becomes modul
 3. Execute the entrypoint again and confirm the previous instance unloads without duplicate connections or render-step bindings.
 4. Toggle every feature on and off once; restore altered character, camera, lighting, collision, and gravity state.
 5. Respawn and repeat features that bind to character parts or humanoids.
-6. Exercise player join/leave, player selection, search indexing, catalog load, config save/load, and unload.
+6. Exercise player join/leave, player selection, search indexing, remote catalog module load, catalog open/search/close/run paths, config save/load, and unload.
 7. Review executor console for uncaught errors and repeated warnings.
 
 ## Feature acceptance

@@ -432,7 +432,7 @@ local UI = {
     CornerButtons = {},
     CornerButtonActions = {},
     CornerButtonDefinitions = {
-        {Name = "CatalogAction", AssetId = 137753054375497, IntendedAction = "Catalog", CurrentAction = "Unload"},
+        {Name = "CatalogAction", AssetId = 137753054375497, IntendedAction = "Catalog", CurrentAction = "Catalog"},
         {Name = "GeneralMenuAction", AssetId = 83533116222028, IntendedAction = "GeneralMenu", CurrentAction = nil}
     },
     IconAssets = {
@@ -498,7 +498,15 @@ local UI = {
         CornerDragThreshold = 6,
         MotionCornerReveal = 0.34,
         MotionCornerHover = 0.22,
-        MotionCornerToggle = 0.44
+        MotionCornerToggle = 0.44,
+        MotionCatalogStretch = 0.22,
+        MotionCatalogExpand = 0.46,
+        MotionCatalogContent = 0.28,
+        MotionCatalogCloseContent = 0.14,
+        MotionCatalogContract = 0.28,
+        MotionCatalogReturn = 0.22,
+        MotionCatalogSearchOpen = 0.32,
+        MotionCatalogSearchClose = 0.28
     },
     AudioLibrary = {
         FadeIn = {Id = "rbxassetid://1127797047", Volume = 0.12, PlaybackSpeed = 1.18},
@@ -6427,6 +6435,78 @@ local function parsePlaceId(value)
 end
 
 local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/main/mm2.lua"
+UI.GameCatalogModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/game_catalog.lua"
+UI.CatalogExecutionLocks = {}
+
+UI.ExecuteCatalogEntry = function(entry)
+    if type(entry) ~= "table" then
+        return {Ok = false, Message = "Geçersiz katalog girdisi"}
+    end
+    local executionId = tostring(entry.BuiltInId or entry.Name or entry.PlaceId or "catalog-entry")
+    if UI.CatalogExecutionLocks[executionId] then
+        return {Ok = false, Message = "Bu script zaten çalıştırılıyor"}
+    end
+    if entry.BuiltInId == "mm2" and game.PlaceId ~= entry.PlaceId then
+        return {Ok = false, Message = "Bu script yalnızca Murder Mystery 2 içinde çalışır"}
+    end
+    if not capabilities.LoadString then
+        return {Ok = false, Message = "Executor script derlemeyi desteklemiyor"}
+    end
+    local source = entry.Source
+    if not source or source == "" then
+        if type(entry.Url) ~= "string" or not entry.Url:match("^https://") then
+            return {Ok = false, Message = "Geçerli bir HTTPS script kaynağı bulunamadı"}
+        end
+        local remoteSource, requestError = httpGet(entry.Url)
+        if type(remoteSource) ~= "string" or remoteSource == "" then
+            return {Ok = false, Message = requestError or "Script indirilemedi"}
+        end
+        source = remoteSource
+    end
+    UI.CatalogExecutionLocks[executionId] = true
+    local chunk, compileError = loadstring(source, "TasuCatalog:" .. tostring(entry.Name or executionId))
+    if not chunk then
+        UI.CatalogExecutionLocks[executionId] = nil
+        return {Ok = false, Message = "Derleme hatası: " .. tostring(compileError)}
+    end
+    local ok, runtimeError = pcall(chunk)
+    if not ok then
+        UI.CatalogExecutionLocks[executionId] = nil
+        return {Ok = false, Message = "Çalışma hatası: " .. tostring(runtimeError)}
+    end
+    return {Ok = true, Message = tostring(entry.Name or "Script") .. " çalıştırıldı"}
+end
+
+UI.ResolveCatalogCoverAsset = function(placeId)
+    placeId = tonumber(placeId)
+    if not placeId or not capabilities.Http or not capabilities.Files or not capabilities.CustomAsset then
+        return nil
+    end
+    local universeBody = httpGet("https://apis.roblox.com/universes/v1/places/" .. tostring(placeId) .. "/universe")
+    local universeOk, universe = pcall(HttpService.JSONDecode, HttpService, universeBody or "")
+    if not universeOk or type(universe) ~= "table" or not universe.universeId then
+        return nil
+    end
+    local thumbnailBody = httpGet(
+        "https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds="
+            .. tostring(universe.universeId)
+            .. "&countPerUniverse=1&defaults=true&size=768x432&format=Png&isCircular=false"
+    )
+    local thumbnailOk, decoded = pcall(HttpService.JSONDecode, HttpService, thumbnailBody or "")
+    local thumbnail = thumbnailOk and decoded and decoded.data and decoded.data[1]
+        and decoded.data[1].thumbnails and decoded.data[1].thumbnails[1]
+    if not thumbnail or type(thumbnail.imageUrl) ~= "string" then
+        return nil
+    end
+    if not ensureFolder("TasuHub/Catalog/Banners") then
+        return nil
+    end
+    return loadRemoteAsset(
+        thumbnail.imageUrl,
+        "TasuHub/Catalog/Banners/" .. sanitizeName(placeId) .. ".png"
+    )
+end
+
 local function ensureBuiltinCatalogEntries()
     for _, entry in ipairs(State.Catalog) do
         if entry.BuiltInId == "mm2" then
@@ -6534,29 +6614,8 @@ local function openCatalogEditor(index)
     catalogOverlay.Visible = true
 end
 local function runCatalogEntry(entry)
-    if entry.BuiltInId == "mm2" and game.PlaceId ~= entry.PlaceId then
-        showToast("This script can only run inside Murder Mystery 2")
-        return
-    end
-    if not capabilities.LoadString then
-        showToast("Executor cannot compile scripts")
-        return
-    end
-    local source = entry.Source
-    if (not source or source == "") and type(entry.Url) == "string" and entry.Url:match("^https://") then
-        source = httpGet(entry.Url)
-    end
-    if type(source) ~= "string" or source == "" then
-        showToast("This save has no script")
-        return
-    end
-    local chunk, compileError = loadstring(source, "TasuCatalog:" .. tostring(entry.Name))
-    if not chunk then
-        showToast(tostring(compileError))
-        return
-    end
-    local ok, runtimeError = pcall(chunk)
-    showToast(ok and "Script completed" or tostring(runtimeError))
+    local result = UI.ExecuteCatalogEntry(entry)
+    showToast(result.Message)
 end
 local function fetchBanner(entry)
     if not entry or not entry.PlaceId or not capabilities.Http then return end
@@ -6985,9 +7044,95 @@ UI.PlayUnloadScreen = function()
     return
 end
 
+do
+    local function getCatalogAnchorPoint()
+        local record = UI.CornerButtons[1]
+        local button = record and record.Button
+        if button and button.Parent then
+            local rootPosition = InterfaceRoot.AbsolutePosition
+            local buttonPosition = button.AbsolutePosition
+            local buttonSize = button.AbsoluteSize
+            return Vector2.new(
+                buttonPosition.X - rootPosition.X + buttonSize.X * 0.5,
+                buttonPosition.Y - rootPosition.Y + buttonSize.Y * 0.5
+            )
+        end
+        return getCanvasSize() * 0.5
+    end
+
+    local function loadGameCatalogController()
+        if not capabilities.Http or not capabilities.LoadString then
+            return nil, "executor HTTP/loadstring capability is unavailable"
+        end
+        local source, requestError = httpGet(UI.GameCatalogModuleUrl)
+        if type(source) ~= "string" or source == "" then
+            return nil, requestError or "catalog module could not be downloaded"
+        end
+        local chunk, compileError = loadstring(source, "@TasuHub/game_catalog.lua")
+        if not chunk then
+            return nil, "catalog module compile error: " .. tostring(compileError)
+        end
+        local loaded, module = pcall(chunk)
+        if not loaded then
+            return nil, "catalog module runtime error: " .. tostring(module)
+        end
+        if type(module) ~= "table" or module.Version ~= 1 or type(module.Create) ~= "function" then
+            return nil, "catalog module contract/version mismatch"
+        end
+        local created, controller = pcall(module.Create, {
+            Parent = InterfaceRoot,
+            Title = "Oyun Kataloğu",
+            Theme = {
+                Base = UI.DesignTokens.Canvas,
+                Layer = UI.DesignTokens.Surface,
+                Signal = UI.DesignTokens.TextPrimary
+            },
+            Fonts = {
+                Body = UI.Fonts.Description,
+                HeadingHeavy = UI.Fonts.HeadingHeavy,
+                HeadingBlack = UI.Fonts.HeadingBlack
+            },
+            Motion = {
+                Control = UI.DesignTokens.MotionCornerHover,
+                Stretch = UI.DesignTokens.MotionCatalogStretch,
+                Expand = UI.DesignTokens.MotionCatalogExpand,
+                Content = UI.DesignTokens.MotionCatalogContent,
+                CloseContent = UI.DesignTokens.MotionCatalogCloseContent,
+                Contract = UI.DesignTokens.MotionCatalogContract,
+                Return = UI.DesignTokens.MotionCatalogReturn,
+                SearchOpen = UI.DesignTokens.MotionCatalogSearchOpen,
+                SearchClose = UI.DesignTokens.MotionCatalogSearchClose
+            },
+            Animate = animate,
+            PlaySound = UI.PlaySound,
+            TrackConnection = trackConnection,
+            GetAnchorPoint = getCatalogAnchorPoint,
+            GetViewportSize = getCanvasSize,
+            GetEntries = function()
+                return deepCopy(State.Catalog)
+            end,
+            RunEntry = UI.ExecuteCatalogEntry,
+            ResolveCover = UI.ResolveCatalogCoverAsset
+        })
+        if not created or type(controller) ~= "table" or type(controller.Toggle) ~= "function" then
+            return nil, "catalog controller creation failed: " .. tostring(controller)
+        end
+        return controller
+    end
+
+    UI.GameCatalogController, UI.GameCatalogError = loadGameCatalogController()
+end
+UI.ReportLoading(0.98, UI.GameCatalogController
+    and "Catalog · uzak oyun menüsü hazır"
+    or "Catalog · uzak oyun menüsü kullanılamıyor")
+
 unload = function()
     if unloaded then return end
     unloaded = true
+    if UI.GameCatalogController and type(UI.GameCatalogController.Destroy) == "function" then
+        pcall(UI.GameCatalogController.Destroy)
+        UI.GameCatalogController = nil
+    end
     State.Aim.Enabled = false
     State.Visuals.Enabled = false
     State.Movement.Fly = false
@@ -7043,7 +7188,11 @@ unload = function()
 end
 
 UI.SetCornerButtonAction(1, function()
-    unload()
+    if UI.GameCatalogController then
+        UI.GameCatalogController.Toggle()
+    else
+        warn("[TasuHub] Game catalog unavailable: " .. tostring(UI.GameCatalogError))
+    end
 end)
 
 env.TasuHub = {
@@ -7062,6 +7211,15 @@ env.TasuHub = {
     SetCornerDock = UI.SetCornerDock,
     CornerButtons = UI.CornerButtons,
     CornerButtonDefinitions = UI.CornerButtonDefinitions,
+    OpenCatalog = function()
+        return UI.GameCatalogController and UI.GameCatalogController.Open() or false, UI.GameCatalogError
+    end,
+    CloseCatalog = function()
+        return UI.GameCatalogController and UI.GameCatalogController.Close() or false, UI.GameCatalogError
+    end,
+    ToggleCatalog = function()
+        return UI.GameCatalogController and UI.GameCatalogController.Toggle() or false, UI.GameCatalogError
+    end,
     SetUnloadIcon = UI.SetUnloadIcon,
     UpdateLog = UI.UpdateLog,
     Notify = UI.Notify,
