@@ -408,12 +408,11 @@ function CatalogModule.Create(context)
     resultLabel.ZIndex = 3006
     resultLabel.Parent = searchShell
 
-    local body = Instance.new("CanvasGroup")
+    local body = Instance.new("Frame")
     body.Name = "Body"
     body.BackgroundColor3 = theme.Layer
     body.BackgroundTransparency = layout.BodyTransparency
     body.BorderSizePixel = 0
-    body.GroupTransparency = 1
     body.Position = UDim2.fromOffset(0, layout.HeaderHeight)
     body.Size = UDim2.new(1, 0, 1, -(layout.HeaderHeight + layout.FooterHeight))
     body.ZIndex = 3002
@@ -432,6 +431,7 @@ function CatalogModule.Create(context)
     catalogScroll.ScrollBarImageTransparency = 0.35
     catalogScroll.ScrollBarThickness = 5
     catalogScroll.Size = UDim2.new(1, -layout.ContentPadding * 2, 1, -layout.ContentPadding * 2)
+    catalogScroll.Visible = false
     catalogScroll.ZIndex = 3003
     catalogScroll.Parent = body
 
@@ -447,6 +447,17 @@ function CatalogModule.Create(context)
     emptyLabel.Visible = false
     emptyLabel.ZIndex = 3004
     emptyLabel.Parent = body
+
+    local contentRevealOverlay = Instance.new("Frame")
+    contentRevealOverlay.Name = "ContentRevealOverlay"
+    contentRevealOverlay.Active = false
+    contentRevealOverlay.BackgroundColor3 = theme.Layer
+    contentRevealOverlay.BackgroundTransparency = 0
+    contentRevealOverlay.BorderSizePixel = 0
+    contentRevealOverlay.Size = UDim2.fromScale(1, 1)
+    contentRevealOverlay.Visible = false
+    contentRevealOverlay.ZIndex = 3018
+    contentRevealOverlay.Parent = body
 
     local footer = Instance.new("Frame")
     footer.Name = "Footer"
@@ -526,9 +537,10 @@ function CatalogModule.Create(context)
     local coverCache = {}
     local virtualFirstRow = -1
     local virtualCellWidth = -1
-    local contentLoaded, filtersDirty = false, true
+    local contentLoaded, contentRevision = false, 0
 
     local function createCard(entry, index)
+        local cardContentRevision = contentRevision
         local status, featureText = getStatus(entry), getFeatures(entry)
         local cardConnections = {}
         local function cardConnect(signal, callback)
@@ -710,9 +722,10 @@ function CatalogModule.Create(context)
                 local resolved = coverCache[cacheKey]
                 if type(resolved) ~= "string" or resolved == "" then
                     resolved = context.ResolveCover(entry.PlaceId)
+                    if destroyed or not contentLoaded or cardContentRevision ~= contentRevision or not card.Parent or not cover.Parent then return end
                     if type(resolved) == "string" and resolved ~= "" then coverCache[cacheKey] = resolved end
                 end
-                if destroyed or not card.Parent or not cover.Parent then return end
+                if destroyed or not contentLoaded or cardContentRevision ~= contentRevision or not card.Parent or not cover.Parent then return end
                 if type(resolved) == "string" and resolved ~= "" then
                     cover.Image, cover.ImageTransparency, fallback.Visible = resolved, 0, false
                 end
@@ -809,12 +822,7 @@ function CatalogModule.Create(context)
         emptyLabel.Visible = #filteredItems == 0
         if resetScroll then catalogScroll.CanvasPosition = Vector2.new(0, 0) end
         virtualFirstRow = -1
-        if contentLoaded and state ~= "Closing" then
-            renderVirtualPage(true)
-            filtersDirty = false
-        else
-            filtersDirty = true
-        end
+        if contentLoaded and state ~= "Closing" then renderVirtualPage(true) end
     end
 
     connect(catalogScroll:GetPropertyChangedSignal("CanvasPosition"), function()
@@ -933,18 +941,25 @@ function CatalogModule.Create(context)
             local source = context.GetAnchorPoint()
             window.Position = UDim2.fromOffset(source.X, source.Y)
             windowScale.Scale, window.GroupTransparency = 0, 1
-            body.GroupTransparency = 1
         end
+        contentRevision = contentRevision + 1
+        table.clear(coverCache)
+        contentLoaded = false
+        catalogScroll.Visible = true
+        contentRevealOverlay.BackgroundTransparency = 0
+        contentRevealOverlay.Visible = true
         window.Visible = true
         local move = animate(window, {Position = UDim2.fromOffset(center.X, center.Y), GroupTransparency = 0}, motion.Open, Enum.EasingStyle.Quint)
         animate(windowScale, {Scale = 1}, motion.Open, Enum.EasingStyle.Back)
-        if not contentLoaded or filtersDirty then
-            contentLoaded = true
-            virtualFirstRow = -1
-            renderVirtualPage(true)
-            filtersDirty = false
-        end
-        animate(body, {GroupTransparency = 0}, motion.ContentReveal or motion.Open, Enum.EasingStyle.Quint)
+        virtualFirstRow = -1
+        applyFilters(true)
+        contentLoaded = true
+        renderVirtualPage(true)
+        local reveal = animate(contentRevealOverlay, {BackgroundTransparency = 1}, motion.ContentReveal or motion.Open, Enum.EasingStyle.Quint)
+        task.spawn(function()
+            reveal.Completed:Wait()
+            if not destroyed and revision == transitionRevision then contentRevealOverlay.Visible = false end
+        end)
         task.spawn(function()
             move.Completed:Wait()
             if not destroyed and revision == transitionRevision then state = "Open" end
@@ -961,15 +976,23 @@ function CatalogModule.Create(context)
         toastRevision, toast.Visible = toastRevision + 1, false
         local move = animate(window, {Position = UDim2.fromOffset(source.X, source.Y), GroupTransparency = 1}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         animate(windowScale, {Scale = 0}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        animate(body, {GroupTransparency = 1}, motion.ContentReveal or motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         task.spawn(function()
             move.Completed:Wait()
             if not destroyed and revision == transitionRevision then
                 window.Visible, state = false, "Closed"
+                contentRevision = contentRevision + 1
                 clearActiveCards()
-                contentLoaded, filtersDirty = false, true
+                table.clear(coverCache)
+                table.clear(filteredItems)
+                contentLoaded = false
                 virtualFirstRow = -1
-                body.GroupTransparency = 1
+                virtualCellWidth = -1
+                catalogScroll.CanvasPosition = Vector2.new(0, 0)
+                catalogScroll.CanvasSize = UDim2.fromOffset(0, 0)
+                catalogScroll.Visible = false
+                emptyLabel.Visible = false
+                contentRevealOverlay.Visible = false
+                contentRevealOverlay.BackgroundTransparency = 0
             end
         end)
         return true
@@ -994,8 +1017,10 @@ function CatalogModule.Create(context)
     controller.IsOpen = function() return state == "Open" or state == "Opening" end
     controller.Destroy = function()
         if destroyed then return end
-        destroyed, transitionRevision, toastRevision = true, transitionRevision + 1, toastRevision + 1
+        destroyed, transitionRevision, toastRevision, contentRevision = true, transitionRevision + 1, toastRevision + 1, contentRevision + 1
         clearActiveCards()
+        table.clear(coverCache)
+        table.clear(filteredItems)
         for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
         root:Destroy()
     end
