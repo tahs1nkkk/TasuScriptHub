@@ -1,6 +1,6 @@
 # Dead-code audit
 
-Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch contains catalog revisions 3–5 and the pending catalog-revision-6/MM2-window-revision-1 migration; it remains pending executor acceptance and is intentionally not merged into `main`.
+Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch contains catalog revisions 3–5 and catalog-revision-6/MM2-window-revision-1 implementation commit `9460d0b`; it remains pending executor acceptance and is intentionally not merged into `main`.
 
 ## Confirmed dead state
 
