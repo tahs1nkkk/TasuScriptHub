@@ -217,6 +217,7 @@ function CatalogModule.Create(context)
     local searchRing = Instance.new("Frame")
     searchRing.AnchorPoint = Vector2.new(0.5, 0.5)
     searchRing.BackgroundTransparency = 1
+    searchRing.BorderSizePixel = 0
     searchRing.Position = UDim2.fromOffset(18, 17)
     searchRing.Size = UDim2.fromOffset(14, 14)
     searchRing.ZIndex = 3006
@@ -411,6 +412,7 @@ function CatalogModule.Create(context)
         local slot = Instance.new("Frame")
         slot.Name = "CatalogCardSlot"
         slot.BackgroundTransparency = 1
+        slot.BorderSizePixel = 0
         slot.ClipsDescendants = false
         slot.LayoutOrder = index
         slot.ZIndex = 3004
