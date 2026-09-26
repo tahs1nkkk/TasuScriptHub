@@ -26,4 +26,4 @@ They must not be copied line-for-line or visually reproduced. Their data contrac
 
 ## Current state
 
-Phase 1 and the user-approved loader are complete. The phase-3 action rail is implemented, and the first phase-5 service/view migration now has a revision-1 game-catalog window delivered through a versioned remote module. Its executor and visual revision pass is pending. Legacy presentation is disabled and cannot become visible after loading; feature engines and state remain active while the new shell is built.
+Phase 1 and the user-approved loader are complete. The phase-3 action rail is implemented, and the first phase-5 service/view migration now has a revision-2 game-catalog window delivered through a versioned remote module. Its smaller fixed-layout origin transition, drag zones, hover search, preview grid, semantic status strips, and outcome feedback are implemented; its executor and visual revision pass is pending. Legacy presentation is disabled and cannot become visible after loading; feature engines and state remain active while the new shell is built.

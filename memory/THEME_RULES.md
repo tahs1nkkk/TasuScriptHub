@@ -1,14 +1,16 @@
 # Shared theme contract
 
-Status: the rework uses a dark-gray, minimal, vector-first direction, three permanent UI colors, and one transient completion-state color. The complete component language is still being developed step by step.
+Status: the rework uses a dark-gray, minimal, vector-first direction, three permanent UI colors, plus semantic success/warning/danger feedback colors. The complete component language is still being developed step by step.
 
 ## Core three-color palette and success state
 
 - `Base` — RGB `18, 19, 22` / `#121316`: viewport canvas and deepest surfaces.
 - `Layer` — RGB `37, 39, 45` / `#25272D`: tracks, raised surfaces, and inactive controls.
 - `Signal` — RGB `242, 243, 245` / `#F2F3F5`: icon geometry, loader track, primary text, borders, and active states.
-- `Success` — RGB `79, 224, 141` / `#4FE08D`: the sole approved exception, used only for confirmed successful completion feedback such as the loader's final status.
-- New UI code cannot introduce another color. Outside the transient `Success` state, hierarchy is created with transparency, spacing, stroke weight, and typography.
+- `Success` — RGB `79, 224, 141` / `#4FE08D`: confirmed successful completion feedback such as the loader's final status or a completed catalog execution.
+- `Warning` — RGB `245, 196, 81` / `#F5C451`: semantic hover/readiness emphasis and supported-state feedback only.
+- `Danger` — RGB `239, 86, 92` / `#EF565C`: unsupported/error feedback only.
+- New UI code cannot introduce another color. Outside semantic feedback states, hierarchy is created with transparency, spacing, stroke weight, and typography.
 - `TextOnAccent` resolves to `Base`; muted text resolves to `Signal` with transparency rather than a new gray.
 - Runtime/game data colors such as health, team identity, ESP targets, and world effects remain the only exceptions because they communicate gameplay data rather than application theme.
 
@@ -55,23 +57,25 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 - Spacing: a shared 4-based spacing scale; arbitrary padding is forbidden.
 - Motion: `MotionFast`, `MotionControl`, `MotionPanel`, `MotionModal`, `MotionLoader`, the catalog pull/content/search tokens, and shared easing tokens.
 
-## Approved game-catalog window — revision 1
+## Approved game-catalog window — revision 2
 
-- The upper corner action opens one centered popup window supplied by the versioned remote `game_catalog.lua` module. The module receives the existing `Base`, `Layer`, and `Signal` tokens and shared fonts/motion/audio services; it may not define a private palette or expose legacy UI.
-- The responsive window is capped at 1000×680 px with a 16 px viewport inset, 20 px outer radius, and 2 px `Base` outline. Its 70 px header and 46 px footer are fully opaque `Base`. The middle body uses `Layer` at exactly 0.80 background transparency.
-- The header title `Oyun Kataloğu` remains centered. A 42×42 vector search control sits on the right, with a 42×42 `×` close control immediately to its right. Search expands a 240×38 input leftward and filters only the module's catalog cards; it does not replace the future global search index.
-- The body contains a vertically scrolling, centered three-column grid. Each row supports exactly three equal cells with 12 px gaps. Cards use the shared palette, a 142 px cropped automatic game cover, one cover-width horizontal `Signal` divider, a locked status label (`Stable`, `Supported`, or `Un-Supported`), the game/script name, and one run hint.
+- The upper corner action opens one movable popup supplied by the versioned remote `game_catalog.lua` module. The module receives shared theme, layout, motion, input, audio, and lifecycle services; it may not define a private palette or expose legacy UI.
+- The responsive window is capped at 780×520 px with a 14 px viewport inset, 20 px outer radius, and 2 px `Base` outline. Its 60 px header and 42 px footer are fully opaque `Base`. The middle body uses `Layer` at exactly 0.20 background transparency. Header and footer drag zones move the window while clamping the complete window to the viewport.
+- The header title `Oyun Kataloğu` remains centered. A 40×40 vector search control sits on the right, with a 40×40 `×` close control immediately to its right. Hover reveals a clipped 220×36 input to the left; the live result count is placed directly to that input's right. A non-empty query pins the input open, while an empty unfocused/unhovered input collapses without leaking placeholder text outside its bounds.
+- The body contains a vertically scrolling, centered three-column grid. Cards use a 142 px cropped automatic game cover with a 26 px status strip overlaid inside its bottom edge, a larger title, and one compact centered-dot feature line. No run hint or explanatory footer copy is allowed.
+- Official status and feedback colors are semantic: `Stable`/successful execution uses `Success`, `Supported` uses `Warning`, and `Un-Supported`/execution failure uses `Danger`. Hover slowly raises an outward `Warning` outline; failed activation replaces it with `Danger`, shakes the card, and raises a bottom-center reason toast. Successful activation uses the same path with `Success` and no failure shake.
+- The remote module appends five non-executable preview cards with automatic real-game covers so the three-column layout can be evaluated before those scripts exist. Their names, place IDs, statuses, and feature summaries are remote-owned; selecting one reports why it cannot run rather than calling the loader execution service.
 - Game covers resolve automatically from `PlaceId` to Roblox `UniverseId`, then through the official 768×432 game-thumbnail endpoint and executor custom-asset cache. A name-based vector/text fallback remains in place if resolution fails; cover failure cannot shift the card.
 - Status authority lives only inside the remotely loaded module. Local catalog `Status` fields are ignored, the remote status map and copied card entries are frozen, and no status setter is exported. This prevents loaded catalog scripts from changing the official UI status through the supported runtime contract; it is not a claim that client-side executor code is cryptographically tamper-proof.
-- Opening starts at the upper corner button's current center, stretches into a thin horizontal 48%-width strip over 0.22 seconds, then expands to the centered target over 0.46 seconds. Only after the shell reaches full size does its transition fill crossfade into content over 0.28 seconds, keeping grid layout invisible during size animation. Closing crossfades content back to the transition fill over 0.14 seconds, contracts into the same thin strip over 0.28 seconds, then reaches the upper button's newly sampled current center as an 18×42 sliver over 0.22 seconds. Transition revisions cancel stale open/close completions.
+- Opening places the already-final-size window at the upper corner button's current center, then moves it to its saved resting center while one `UIScale` grows the complete visual tree from 0 to 1 over 0.52 seconds. Closing samples the button again, moves back to that point, and scales the complete tree from 1 to exactly 0 over 0.44 seconds before hiding it. No layout-critical `Size` is animated, so header, body, grid, and text never reflow during either transition. Transition revisions cancel stale completions.
 
 ## Motion rules
 
 - Every open, close, expand, collapse, category change, modal, dropdown, tooltip, and drag-settle action uses shared motion tokens.
 - Motion is smooth and deliberately unhurried except for the intentionally responsive loader: controls 0.22–0.32 s, panels 0.45–0.65 s, modals 0.55–0.75 s, loader entry 0.5 s, each of 30 progress steps 0.14 s with a minimum 0.085 s interval, completion collapse 0.7 s, completion-status transition 1.2 s, and whole-loader downward exit approximately 0.567 s.
-- Prefer position and `CanvasGroup.GroupTransparency` transitions. Do not animate layout-critical `Size` values when it can reflow or clip content. The catalog's requested pull transition is the approved exception: its clipped outer shell animates `Size` only while inner content is fully faded, preventing visible grid reflow.
+- Prefer position and `CanvasGroup.GroupTransparency` transitions. Do not animate layout-critical `Size` values when it can reflow or clip content. The catalog transition keeps its final window size throughout and combines position with whole-window scale.
 - Do not hide or destroy content until its closing tween completes.
-- `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. Approved exceptions are the loader bar/status reveal (0.82 → 1.035 → 1), the larger icon arrival (0.58 → 1.16 → 1), icon breathing loop (1 ↔ 1.08), completed bar collapse (1 → 0.02 before hiding), and final status emphasis (1 → 2.10). Corner-action hover and press feedback deliberately animate the fixed-position button and icon `Size` values together; their padded parent bounds and clipping rules reserve the maximum geometry so no neighboring layout reflows.
+- `UIScale` is limited to subtle decorative emphasis in the 0.985–1.015 range. Approved exceptions are the loader bar/status reveal (0.82 → 1.035 → 1), the larger icon arrival (0.58 → 1.16 → 1), icon breathing loop (1 ↔ 1.08), completed bar collapse (1 → 0.02 before hiding), final status emphasis (1 → 2.10), and the catalog's whole-window 0 ↔ 1 origin transition. Corner-action hover and press feedback deliberately animate the fixed-position button and icon `Size` values together; their padded parent bounds and clipping rules reserve the maximum geometry so no neighboring layout reflows.
 - Re-entrant actions cancel or supersede the prior tween cleanly; overlapping tweens may not leave stale transparency, position, or input state.
 - Reduced-motion support must be possible through a single global duration multiplier.
 
