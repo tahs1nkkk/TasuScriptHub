@@ -717,6 +717,9 @@ function CatalogModule.Create(context)
         local drawerTarget = open and UDim2.fromOffset(0, 0) or UDim2.fromOffset(-drawerWidth, 0)
         local buttonTarget = open and UDim2.fromOffset(drawerWidth - 54, 10) or UDim2.fromOffset(14, 10)
         if open then
+            for _, record in ipairs(activeCards) do
+                if type(record.ClearHover) == "function" then record.ClearHover() end
+            end
             filterDrawer.Visible = true
             filterDismiss.Visible = true
         end
@@ -1059,7 +1062,7 @@ function CatalogModule.Create(context)
         local function restoreHover()
             if destroyed or not card.Parent then return end
             outcomeActive = false
-            animate(glow, {Color = theme.Warning, Transparency = hovering and 0.08 or 1}, motion.Glow, Enum.EasingStyle.Quint)
+            animate(glow, {Color = theme.Warning, Transparency = hovering and not filterOpen and 0.08 or 1}, motion.Glow, Enum.EasingStyle.Quint)
         end
         local function showOutcome(color, shouldShake)
             outcomeActive, outcomeRevision = true, outcomeRevision + 1
@@ -1071,7 +1074,16 @@ function CatalogModule.Create(context)
             end)
         end
 
+        local function clearHover()
+            hovering = false
+            favoriteHovered = false
+            renderFavorite(false)
+            animate(scale, {Scale = 1}, motion.Control, Enum.EasingStyle.Quint)
+            animate(card, {BackgroundTransparency = 0.08}, motion.Control, Enum.EasingStyle.Quint)
+            if not outcomeActive then animate(glow, {Transparency = 1}, motion.Glow, Enum.EasingStyle.Quint) end
+        end
         cardConnect(card.MouseEnter, function()
+            if filterOpen then return end
             hovering = true
             renderFavorite(false)
             playSound("ButtonHover")
@@ -1079,16 +1091,9 @@ function CatalogModule.Create(context)
             animate(card, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
             if not outcomeActive then animate(glow, {Color = theme.Warning, Transparency = 0.08}, motion.Glow, Enum.EasingStyle.Quint) end
         end)
-        cardConnect(card.MouseLeave, function()
-            hovering = false
-            favoriteHovered = false
-            renderFavorite(false)
-            animate(scale, {Scale = 1}, motion.Control, Enum.EasingStyle.Quint)
-            animate(card, {BackgroundTransparency = 0.08}, motion.Control, Enum.EasingStyle.Quint)
-            if not outcomeActive then animate(glow, {Transparency = 1}, motion.Glow, Enum.EasingStyle.Quint) end
-        end)
+        cardConnect(card.MouseLeave, clearHover)
         cardConnect(card.Activated, function()
-            if state ~= "Open" then return end
+            if state ~= "Open" or filterOpen then return end
             if entry.Placeholder then
                 playSound("CatalogError")
                 local message = status == "Un-Supported" and (tostring(entry.Name) .. " henüz desteklenmiyor") or (tostring(entry.Name) .. " scripti henüz kataloğa eklenmedi")
@@ -1139,7 +1144,7 @@ function CatalogModule.Create(context)
                 end
             end)
         end
-        return {Slot = slot, Connections = cardConnections}
+        return {Slot = slot, Connections = cardConnections, ClearHover = clearHover}
     end
 
     local usedIds = {}
