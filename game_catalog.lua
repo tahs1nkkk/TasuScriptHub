@@ -866,11 +866,12 @@ function CatalogModule.Create(context)
         local scale = Instance.new("UIScale")
         scale.Parent = card
 
-        local coverClip = Instance.new("Frame")
+        local coverClip = Instance.new("CanvasGroup")
         coverClip.Name = "CoverClip"
         coverClip.BackgroundTransparency = 1
         coverClip.BorderSizePixel = 0
         coverClip.ClipsDescendants = true
+        coverClip.GroupTransparency = 0
         coverClip.Position = UDim2.fromOffset(8, 8)
         coverClip.Size = UDim2.new(1, -16, 0, layout.CoverHeight)
         coverClip.ZIndex = 3005
@@ -885,6 +886,7 @@ function CatalogModule.Create(context)
         fallback.Size = UDim2.fromScale(1, 1)
         fallback.ZIndex = 3005
         fallback.Parent = coverClip
+        round(fallback, 10)
         local fallbackText = Instance.new("TextLabel")
         fallbackText.BackgroundTransparency = 1
         fallbackText.FontFace = fonts.HeadingHeavy
@@ -908,6 +910,7 @@ function CatalogModule.Create(context)
         cover.Size = UDim2.fromScale(1, 1)
         cover.ZIndex = 3006
         cover.Parent = coverClip
+        round(cover, 10)
 
         local hovering, outcomeActive, outcomeRevision = false, false, 0
         local favoriteId = getEntryId(entry)
