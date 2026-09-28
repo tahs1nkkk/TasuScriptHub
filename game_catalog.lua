@@ -418,19 +418,14 @@ function CatalogModule.Create(context)
     filterDismiss.ZIndex = 3028
     filterDismiss.Parent = clip
 
-    local filterDrawer = Instance.new("ScrollingFrame")
+    local filterDrawer = Instance.new("Frame")
     filterDrawer.Name = "FilterDrawer"
     filterDrawer.Active = true
-    filterDrawer.AutomaticCanvasSize = Enum.AutomaticSize.None
     filterDrawer.BackgroundColor3 = theme.Layer
     filterDrawer.BackgroundTransparency = 0.08
     filterDrawer.BorderSizePixel = 0
-    filterDrawer.CanvasSize = UDim2.fromOffset(0, 0)
     filterDrawer.ClipsDescendants = true
     filterDrawer.Position = UDim2.fromOffset(-drawerWidth, 0)
-    filterDrawer.ScrollBarImageColor3 = theme.Signal
-    filterDrawer.ScrollBarImageTransparency = 0.42
-    filterDrawer.ScrollBarThickness = 3
     filterDrawer.Size = UDim2.new(0, drawerWidth, 1, 0)
     filterDrawer.Visible = false
     filterDrawer.ZIndex = 3030
@@ -438,17 +433,41 @@ function CatalogModule.Create(context)
     round(filterDrawer, layout.WindowRadius)
     outline(filterDrawer, 2, 0.06)
 
+    local filterHeader = Instance.new("Frame")
+    filterHeader.Name = "Header"
+    filterHeader.BackgroundColor3 = theme.Base
+    filterHeader.BorderSizePixel = 0
+    filterHeader.Size = UDim2.new(1, 0, 0, layout.HeaderHeight)
+    filterHeader.ZIndex = 3032
+    filterHeader.Parent = filterDrawer
+
+    local filterContent = Instance.new("ScrollingFrame")
+    filterContent.Name = "Content"
+    filterContent.Active = true
+    filterContent.AutomaticCanvasSize = Enum.AutomaticSize.None
+    filterContent.BackgroundTransparency = 1
+    filterContent.BorderSizePixel = 0
+    filterContent.CanvasSize = UDim2.fromOffset(0, 0)
+    filterContent.ClipsDescendants = true
+    filterContent.Position = UDim2.fromOffset(0, layout.HeaderHeight)
+    filterContent.ScrollBarImageColor3 = theme.Signal
+    filterContent.ScrollBarImageTransparency = 0.42
+    filterContent.ScrollBarThickness = 3
+    filterContent.Size = UDim2.new(1, 0, 1, -(layout.HeaderHeight + layout.WindowRadius))
+    filterContent.ZIndex = 3031
+    filterContent.Parent = filterDrawer
+
     local drawerHeading = Instance.new("TextLabel")
     drawerHeading.BackgroundTransparency = 1
     drawerHeading.FontFace = fonts.HeadingBlack
-    drawerHeading.Position = UDim2.fromOffset(16, 10)
-    drawerHeading.Size = UDim2.new(1, -72, 0, 40)
+    drawerHeading.Position = UDim2.fromOffset(16, 0)
+    drawerHeading.Size = UDim2.new(1, -72, 1, 0)
     drawerHeading.Text = "Filtreler"
     drawerHeading.TextColor3 = theme.Signal
     drawerHeading.TextSize = 18
     drawerHeading.TextXAlignment = Enum.TextXAlignment.Left
-    drawerHeading.ZIndex = 3031
-    drawerHeading.Parent = filterDrawer
+    drawerHeading.ZIndex = 3033
+    drawerHeading.Parent = filterHeader
 
     local filterButton = Instance.new("TextButton")
     filterButton.Name = "FilterMenu"
@@ -489,7 +508,7 @@ function CatalogModule.Create(context)
         row.Size = UDim2.new(1, -28, 0, drawerRowHeight)
         row.Text = ""
         row.ZIndex = 3031
-        row.Parent = filterDrawer
+        row.Parent = filterContent
         round(row, 11)
         outline(row, 1, 0.18)
 
@@ -572,18 +591,18 @@ function CatalogModule.Create(context)
         render(true)
     end
 
-    createDrawerSwitch("ShowAllScripts", "Tümünü Göster", 58, function()
+    createDrawerSwitch("ShowAllScripts", "Tümünü Göster", 10, function()
         return showAllScripts
     end, function(value)
         showAllScripts = value
     end, false)
-    createDrawerSwitch("FavoritesOnly", "Favoriler", 58 + drawerRowHeight + 8, function()
+    createDrawerSwitch("FavoritesOnly", "Favoriler", 10 + drawerRowHeight + 8, function()
         return favoritesOnly
     end, function(value)
         favoritesOnly = value
     end, true)
 
-    local featureHeadingY = 58 + (drawerRowHeight + 8) * 2 + 8
+    local featureHeadingY = 10 + (drawerRowHeight + 8) * 2 + 8
     local featureHeading = Instance.new("TextLabel")
     featureHeading.BackgroundTransparency = 1
     featureHeading.FontFace = fonts.HeadingBlack
@@ -595,7 +614,7 @@ function CatalogModule.Create(context)
     featureHeading.TextTransparency = 0.18
     featureHeading.TextXAlignment = Enum.TextXAlignment.Left
     featureHeading.ZIndex = 3031
-    featureHeading.Parent = filterDrawer
+    featureHeading.Parent = filterContent
 
     local function buildFeatureFilters(featureNames)
         local y = featureHeadingY + 32
@@ -610,7 +629,7 @@ function CatalogModule.Create(context)
             row.Size = UDim2.new(1, -28, 0, 36)
             row.Text = ""
             row.ZIndex = 3031
-            row.Parent = filterDrawer
+            row.Parent = filterContent
             round(row, 10)
 
             local box = Instance.new("Frame")
@@ -687,7 +706,7 @@ function CatalogModule.Create(context)
             render(true)
             y = y + 42
         end
-        filterDrawer.CanvasSize = UDim2.fromOffset(0, y + 14)
+        filterContent.CanvasSize = UDim2.fromOffset(0, y + 14)
     end
 
     local function setFilterOpen(open, instant)
@@ -847,16 +866,25 @@ function CatalogModule.Create(context)
         local scale = Instance.new("UIScale")
         scale.Parent = card
 
+        local coverClip = Instance.new("Frame")
+        coverClip.Name = "CoverClip"
+        coverClip.BackgroundTransparency = 1
+        coverClip.BorderSizePixel = 0
+        coverClip.ClipsDescendants = true
+        coverClip.Position = UDim2.fromOffset(8, 8)
+        coverClip.Size = UDim2.new(1, -16, 0, layout.CoverHeight)
+        coverClip.ZIndex = 3005
+        coverClip.Parent = card
+        round(coverClip, 10)
+
         local fallback = Instance.new("Frame")
         fallback.BackgroundColor3 = theme.Base
         fallback.BackgroundTransparency = 0.18
         fallback.BorderSizePixel = 0
-        fallback.ClipsDescendants = true
-        fallback.Position = UDim2.fromOffset(8, 8)
-        fallback.Size = UDim2.new(1, -16, 0, layout.CoverHeight)
+        fallback.Position = UDim2.fromScale(0, 0)
+        fallback.Size = UDim2.fromScale(1, 1)
         fallback.ZIndex = 3005
-        fallback.Parent = card
-        round(fallback, 10)
+        fallback.Parent = coverClip
         local fallbackText = Instance.new("TextLabel")
         fallbackText.BackgroundTransparency = 1
         fallbackText.FontFace = fonts.HeadingHeavy
@@ -875,31 +903,31 @@ function CatalogModule.Create(context)
         cover.BorderSizePixel = 0
         cover.Image = ""
         cover.ImageTransparency = 1
-        cover.ClipsDescendants = true
-        cover.Position = UDim2.fromOffset(8, 8)
+        cover.Position = UDim2.fromScale(0, 0)
         cover.ScaleType = Enum.ScaleType.Crop
-        cover.Size = UDim2.new(1, -16, 0, layout.CoverHeight)
+        cover.Size = UDim2.fromScale(1, 1)
         cover.ZIndex = 3006
-        cover.Parent = card
-        round(cover, 10)
+        cover.Parent = coverClip
 
+        local hovering, outcomeActive, outcomeRevision = false, false, 0
         local favoriteId = getEntryId(entry)
-        local favoriteHovered = false
+        local favoriteHovered, favoriteVisibilityRevision = false, 0
         local favoriteButton = Instance.new("ImageButton")
         favoriteButton.Name = "Favorite"
         favoriteButton.Active = true
         favoriteButton.AnchorPoint = Vector2.new(1, 0)
         favoriteButton.AutoButtonColor = false
         favoriteButton.BackgroundColor3 = theme.Base
-        favoriteButton.BackgroundTransparency = 0.18
+        favoriteButton.BackgroundTransparency = 1
         favoriteButton.BorderSizePixel = 0
         favoriteButton.Image = ""
         favoriteButton.Position = UDim2.new(1, -13, 0, 13)
         favoriteButton.Size = UDim2.fromOffset(32, 32)
+        favoriteButton.Visible = false
         favoriteButton.ZIndex = 3010
         favoriteButton.Parent = card
         round(favoriteButton, 10)
-        outline(favoriteButton, 1, 0.14)
+        local favoriteButtonStroke = outline(favoriteButton, 1, 1)
 
         local favoriteFill = Instance.new("ImageLabel")
         favoriteFill.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -923,16 +951,22 @@ function CatalogModule.Create(context)
         favoriteOutline.Parent = favoriteButton
 
         local function renderFavorite(instant)
+            favoriteVisibilityRevision = favoriteVisibilityRevision + 1
+            local visibilityRevision = favoriteVisibilityRevision
             local selected = favorites[favoriteId] == true
-            local fillTransparency = (selected or favoriteHovered) and 0 or 1
-            local outlineTransparency = (selected and not favoriteHovered) and 1 or 0
+            local fillTransparency = hovering and ((selected or favoriteHovered) and 0 or 1) or 1
+            local outlineTransparency = hovering and ((selected and not favoriteHovered) and 1 or 0) or 1
             local outlineColor = favoriteHovered and theme.Signal or theme.Warning
-            local buttonTransparency = favoriteHovered and 0.04 or 0.18
+            local buttonTransparency = hovering and (favoriteHovered and 0.04 or 0.18) or 1
+            local strokeTransparency = hovering and 0.14 or 1
+            if hovering then favoriteButton.Visible = true end
             if instant then
                 favoriteFill.ImageTransparency = fillTransparency
                 favoriteOutline.ImageTransparency = outlineTransparency
                 favoriteOutline.ImageColor3 = outlineColor
                 favoriteButton.BackgroundTransparency = buttonTransparency
+                favoriteButtonStroke.Transparency = strokeTransparency
+                favoriteButton.Visible = hovering
             else
                 animate(favoriteFill, {ImageTransparency = fillTransparency}, motion.Control, Enum.EasingStyle.Quint)
                 animate(favoriteOutline, {
@@ -940,6 +974,14 @@ function CatalogModule.Create(context)
                     ImageColor3 = outlineColor
                 }, motion.Control, Enum.EasingStyle.Quint)
                 animate(favoriteButton, {BackgroundTransparency = buttonTransparency}, motion.Control, Enum.EasingStyle.Quint)
+                animate(favoriteButtonStroke, {Transparency = strokeTransparency}, motion.Control, Enum.EasingStyle.Quint)
+                if not hovering then
+                    task.delay(motion.Control, function()
+                        if not destroyed and visibilityRevision == favoriteVisibilityRevision and not hovering and favoriteButton.Parent then
+                            favoriteButton.Visible = false
+                        end
+                    end)
+                end
             end
         end
         cardConnect(favoriteButton.MouseEnter, function()
@@ -971,7 +1013,7 @@ function CatalogModule.Create(context)
         statusStrip.Position = UDim2.fromScale(0, 1)
         statusStrip.Size = UDim2.new(1, 0, 0, layout.StatusHeight)
         statusStrip.ZIndex = 3007
-        statusStrip.Parent = cover
+        statusStrip.Parent = coverClip
         local statusLabel = Instance.new("TextLabel")
         statusLabel.BackgroundTransparency = 1
         statusLabel.FontFace = fonts.HeadingBlack
@@ -1011,7 +1053,6 @@ function CatalogModule.Create(context)
         featureLabel.ZIndex = 3005
         featureLabel.Parent = card
 
-        local hovering, outcomeActive, outcomeRevision = false, false, 0
         local function restoreHover()
             if destroyed or not card.Parent then return end
             outcomeActive = false
@@ -1029,6 +1070,7 @@ function CatalogModule.Create(context)
 
         cardConnect(card.MouseEnter, function()
             hovering = true
+            renderFavorite(false)
             playSound("ButtonHover")
             animate(scale, {Scale = 1.012}, motion.Control, Enum.EasingStyle.Quint)
             animate(card, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
@@ -1036,24 +1078,28 @@ function CatalogModule.Create(context)
         end)
         cardConnect(card.MouseLeave, function()
             hovering = false
+            favoriteHovered = false
+            renderFavorite(false)
             animate(scale, {Scale = 1}, motion.Control, Enum.EasingStyle.Quint)
             animate(card, {BackgroundTransparency = 0.08}, motion.Control, Enum.EasingStyle.Quint)
             if not outcomeActive then animate(glow, {Transparency = 1}, motion.Glow, Enum.EasingStyle.Quint) end
         end)
         cardConnect(card.Activated, function()
             if state ~= "Open" then return end
-            playSound("ButtonClick")
             if entry.Placeholder then
+                playSound("CatalogError")
                 local message = status == "Un-Supported" and (tostring(entry.Name) .. " henüz desteklenmiyor") or (tostring(entry.Name) .. " scripti henüz kataloğa eklenmedi")
                 showOutcome(theme.Danger, true)
                 showToast(message, theme.Danger)
                 return
             end
             if status == "Un-Supported" then
+                playSound("CatalogError")
                 showOutcome(theme.Danger, true)
                 showToast(tostring(entry.Name) .. " şu anda desteklenmiyor", theme.Danger)
                 return
             end
+            playSound("ButtonClick")
             task.spawn(function()
                 local result = context.RunEntry(entry)
                 if destroyed or not card.Parent then return end
@@ -1068,6 +1114,7 @@ function CatalogModule.Create(context)
                         end)
                     end
                 else
+                    playSound("CatalogError")
                     showOutcome(theme.Danger, true)
                     showToast(result and result.Message or "Script çalıştırılamadı", theme.Danger)
                 end

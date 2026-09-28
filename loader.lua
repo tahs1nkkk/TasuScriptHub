@@ -554,7 +554,8 @@ local UI = {
         PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
         LoaderCheckpoint = {Id = "rbxassetid://10066936758", Volume = 0.09, PlaybackSpeed = 1, CleanupDelay = 0.8},
         ButtonClick = {Id = "rbxassetid://113397864512278", Volume = 0.08, PlaybackSpeed = 1},
-        ButtonHover = {Id = "rbxassetid://10066936758", Volume = 0.045, PlaybackSpeed = 1.08}
+        ButtonHover = {Id = "rbxassetid://10066936758", Volume = 0.045, PlaybackSpeed = 1.08},
+        CatalogError = {Id = "rbxassetid://122330788129561", Volume = 0.16, PlaybackSpeed = 1}
     },
     Flags = {},
     Controls = {},
