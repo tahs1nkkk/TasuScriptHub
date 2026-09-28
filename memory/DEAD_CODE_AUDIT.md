@@ -1,6 +1,6 @@
 # Dead-code audit
 
-Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch contains catalog revisions 3–5, catalog-revision-6/MM2-window-revision-1 implementation commit `9460d0b`, and catalog filter/favorites revision-7 commit `7ec20e7`; it remains pending executor acceptance and is intentionally not merged into `main`.
+Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch contains catalog revisions 3–5, catalog-revision-6/MM2-window-revision-1 implementation commit `9460d0b`, catalog filter/favorites revision-7 commit `7ec20e7`, and catalog hover/filter-layout revision-8 commit `41e1ca5`; it remains pending executor acceptance and is intentionally not merged into `main`.
 
 ## Confirmed dead state
 
