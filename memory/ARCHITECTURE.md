@@ -9,7 +9,7 @@
 5. UI shell — navigation, panels, overlays, component library, shared theme, and animation coordinator.
 6. Feature views — declarative control registration only; no gameplay loops or private styling.
 
-`game_catalog.lua` owns catalog presentation, metadata filtering/sorting, nine-card virtualization, active-page cover caching, and popup transition state only. `loader.lua` retains catalog data, HTTP/custom-asset cover and square-icon resolution, validated script execution, duplicate-run ownership, game-controller registration, dynamic rail actions, shared game-window context, and global lifecycle handoff. `mm2.lua` is the first migrated game feature controller/view: it retains its engine and cleanup, consumes only the shared context, mounts below `InterfaceRoot`, and returns its controller rather than creating a separate `ScreenGui`.
+`game_catalog.lua` owns catalog presentation, immutable metadata filtering/sorting, session-only favorite/filter state, internal drawer/card interaction, nine-card virtualization, active-page cover caching, and popup transition state only. `loader.lua` retains catalog data, shared drawer geometry tokens, HTTP/custom-asset cover and square-icon resolution, validated script execution, duplicate-run ownership, game-controller registration, dynamic rail actions, shared game-window context, and global lifecycle handoff. `mm2.lua` is the first migrated game feature controller/view: it retains its engine and cleanup, consumes only the shared context, mounts below `InterfaceRoot`, and returns its controller rather than creating a separate `ScreenGui`.
 
 ## Contracts
 

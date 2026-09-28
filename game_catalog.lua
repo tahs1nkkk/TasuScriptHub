@@ -47,6 +47,8 @@ local PLACEHOLDERS = table.freeze({
     table.freeze({BuiltInId = "preview_prison_life", Name = "Prison Life", PlaceId = 155615604, Placeholder = true}),
     table.freeze({BuiltInId = "preview_build_a_boat", Name = "Build A Boat For Treasure", PlaceId = 537413528, Placeholder = true})
 })
+local FAVORITE_FILLED_IMAGE = "rbxasset://textures/ui/InspectMenu/ico_favorite.png"
+local FAVORITE_OUTLINE_IMAGE = "rbxasset://textures/ui/InspectMenu/ico_favorite_off.png"
 
 local function copyEntry(source)
     local copy = {}
@@ -62,6 +64,19 @@ end
 
 local function getFeatures(entry)
     return FEATURES_BY_ID[tostring(entry.BuiltInId or "")] or "CUSTOM  •  SCRIPT"
+end
+
+local function getEntryId(entry)
+    return tostring(entry.BuiltInId or entry.PlaceId or entry.Name or "catalog-entry")
+end
+
+local function getFeatureSet(featureText)
+    local featureSet = {}
+    for feature in string.gmatch(tostring(featureText or ""), "([^•]+)") do
+        feature = string.upper(feature:gsub("^%s+", ""):gsub("%s+$", ""))
+        if feature ~= "" then featureSet[feature] = true end
+    end
+    return featureSet
 end
 
 function CatalogModule.Create(context)
@@ -204,84 +219,11 @@ function CatalogModule.Create(context)
 
     local applyFilters = function() end
     local close = function() return false end
-    local showAllScripts = false
-
-    local allSwitch = Instance.new("TextButton")
-    allSwitch.Name = "ShowAllScripts"
-    allSwitch.AnchorPoint = Vector2.new(0, 0.5)
-    allSwitch.AutoButtonColor = false
-    allSwitch.BackgroundTransparency = 1
-    allSwitch.BorderSizePixel = 0
-    allSwitch.Position = UDim2.new(0, 14, 0.5, 0)
-    allSwitch.Size = UDim2.fromOffset(92, 32)
-    allSwitch.Text = ""
-    allSwitch.ZIndex = 3005
-    allSwitch.Parent = header
-
-    local switchTrack = Instance.new("Frame")
-    switchTrack.AnchorPoint = Vector2.new(0, 0.5)
-    switchTrack.BackgroundColor3 = theme.Layer
-    switchTrack.BackgroundTransparency = 0.08
-    switchTrack.BorderSizePixel = 0
-    switchTrack.Position = UDim2.new(0, 0, 0.5, 0)
-    switchTrack.Size = UDim2.fromOffset(36, 20)
-    switchTrack.ZIndex = 3006
-    switchTrack.Parent = allSwitch
-    round(switchTrack, 999)
-    outline(switchTrack, 1, 0.25, theme.Signal)
-
-    local switchKnob = Instance.new("Frame")
-    switchKnob.AnchorPoint = Vector2.new(0.5, 0.5)
-    switchKnob.BackgroundColor3 = theme.Signal
-    switchKnob.BorderSizePixel = 0
-    switchKnob.Position = UDim2.new(0, 8, 0.5, 0)
-    switchKnob.Size = UDim2.fromOffset(14, 14)
-    switchKnob.ZIndex = 3007
-    switchKnob.Parent = switchTrack
-    round(switchKnob, 999)
-
-    local switchLabel = Instance.new("TextLabel")
-    switchLabel.BackgroundTransparency = 1
-    switchLabel.FontFace = fonts.HeadingHeavy
-    switchLabel.Position = UDim2.fromOffset(44, 0)
-    switchLabel.Size = UDim2.new(1, -44, 1, 0)
-    switchLabel.Text = "Tümü"
-    switchLabel.TextColor3 = theme.Signal
-    switchLabel.TextSize = 13
-    switchLabel.TextTransparency = 0.18
-    switchLabel.TextXAlignment = Enum.TextXAlignment.Left
-    switchLabel.ZIndex = 3006
-    switchLabel.Parent = allSwitch
-
-    local function refreshAllSwitch(instant)
-        local trackColor = showAllScripts and theme.Signal or theme.Layer
-        local trackTransparency = showAllScripts and 0 or 0.08
-        local knobColor = showAllScripts and theme.Base or theme.Signal
-        local knobPosition = showAllScripts and UDim2.new(1, -8, 0.5, 0) or UDim2.new(0, 8, 0.5, 0)
-        if instant then
-            switchTrack.BackgroundColor3 = trackColor
-            switchTrack.BackgroundTransparency = trackTransparency
-            switchKnob.BackgroundColor3 = knobColor
-            switchKnob.Position = knobPosition
-            return
-        end
-        animate(switchTrack, {
-            BackgroundColor3 = trackColor,
-            BackgroundTransparency = trackTransparency
-        }, motion.Control, Enum.EasingStyle.Quint)
-        animate(switchKnob, {
-            BackgroundColor3 = knobColor,
-            Position = knobPosition
-        }, motion.Control, Enum.EasingStyle.Quint)
-    end
-    refreshAllSwitch(true)
-    connect(allSwitch.Activated, function()
-        if state ~= "Open" then return end
-        showAllScripts = not showAllScripts
-        playSound("ButtonClick")
-        refreshAllSwitch(false)
-        applyFilters(true)
-    end)
+    local showAllScripts, favoritesOnly = false, false
+    local favorites, selectedFeatures = {}, {}
+    local activeCards, allItems, filteredItems, coverCache = {}, {}, {}, {}
+    local virtualFirstRow, virtualCellWidth = -1, -1
+    local contentLoaded, contentRevision = false, 0
 
     local headerDrag = Instance.new("Frame")
     headerDrag.Name = "HeaderDragArea"
@@ -459,6 +401,353 @@ function CatalogModule.Create(context)
     footer.ZIndex = 3002
     footer.Parent = clip
 
+    local drawerWidth = layout.FilterDrawerWidth or 260
+    local drawerRowHeight = layout.FilterRowHeight or 42
+    local checkboxSize = layout.FilterCheckboxSize or 22
+    local filterOpen, filterRevision = false, 0
+
+    local filterDismiss = Instance.new("TextButton")
+    filterDismiss.Name = "FilterDismiss"
+    filterDismiss.Active = true
+    filterDismiss.AutoButtonColor = false
+    filterDismiss.BackgroundTransparency = 1
+    filterDismiss.BorderSizePixel = 0
+    filterDismiss.Size = UDim2.fromScale(1, 1)
+    filterDismiss.Text = ""
+    filterDismiss.Visible = false
+    filterDismiss.ZIndex = 3028
+    filterDismiss.Parent = clip
+
+    local filterDrawer = Instance.new("ScrollingFrame")
+    filterDrawer.Name = "FilterDrawer"
+    filterDrawer.Active = true
+    filterDrawer.AutomaticCanvasSize = Enum.AutomaticSize.None
+    filterDrawer.BackgroundColor3 = theme.Layer
+    filterDrawer.BackgroundTransparency = 0.08
+    filterDrawer.BorderSizePixel = 0
+    filterDrawer.CanvasSize = UDim2.fromOffset(0, 0)
+    filterDrawer.ClipsDescendants = true
+    filterDrawer.Position = UDim2.fromOffset(-drawerWidth, 0)
+    filterDrawer.ScrollBarImageColor3 = theme.Signal
+    filterDrawer.ScrollBarImageTransparency = 0.42
+    filterDrawer.ScrollBarThickness = 3
+    filterDrawer.Size = UDim2.new(0, drawerWidth, 1, 0)
+    filterDrawer.Visible = false
+    filterDrawer.ZIndex = 3030
+    filterDrawer.Parent = clip
+    round(filterDrawer, layout.WindowRadius)
+    outline(filterDrawer, 2, 0.06)
+
+    local drawerHeading = Instance.new("TextLabel")
+    drawerHeading.BackgroundTransparency = 1
+    drawerHeading.FontFace = fonts.HeadingBlack
+    drawerHeading.Position = UDim2.fromOffset(16, 10)
+    drawerHeading.Size = UDim2.new(1, -72, 0, 40)
+    drawerHeading.Text = "Filtreler"
+    drawerHeading.TextColor3 = theme.Signal
+    drawerHeading.TextSize = 18
+    drawerHeading.TextXAlignment = Enum.TextXAlignment.Left
+    drawerHeading.ZIndex = 3031
+    drawerHeading.Parent = filterDrawer
+
+    local filterButton = Instance.new("TextButton")
+    filterButton.Name = "FilterMenu"
+    filterButton.Active = true
+    filterButton.AutoButtonColor = false
+    filterButton.BackgroundColor3 = theme.Layer
+    filterButton.BackgroundTransparency = 0.12
+    filterButton.BorderSizePixel = 0
+    filterButton.Position = UDim2.fromOffset(14, 10)
+    filterButton.Size = UDim2.fromOffset(40, 40)
+    filterButton.Text = ""
+    filterButton.ZIndex = 3034
+    filterButton.Parent = clip
+    round(filterButton, 12)
+    outline(filterButton, 2, 0.08)
+
+    for lineIndex = 1, 3 do
+        local line = Instance.new("Frame")
+        line.Name = "Line" .. tostring(lineIndex)
+        line.AnchorPoint = Vector2.new(0.5, 0.5)
+        line.BackgroundColor3 = theme.Signal
+        line.BorderSizePixel = 0
+        line.Position = UDim2.fromOffset(20, 13 + (lineIndex - 1) * 7)
+        line.Size = UDim2.fromOffset(lineIndex == 2 and 18 or 22, 2)
+        line.ZIndex = 3035
+        line.Parent = filterButton
+        round(line, 999)
+    end
+
+    local function createDrawerSwitch(name, labelText, y, getValue, setValue, withStar)
+        local row = Instance.new("TextButton")
+        row.Name = name
+        row.AutoButtonColor = false
+        row.BackgroundColor3 = theme.Base
+        row.BackgroundTransparency = 0.12
+        row.BorderSizePixel = 0
+        row.Position = UDim2.fromOffset(14, y)
+        row.Size = UDim2.new(1, -28, 0, drawerRowHeight)
+        row.Text = ""
+        row.ZIndex = 3031
+        row.Parent = filterDrawer
+        round(row, 11)
+        outline(row, 1, 0.18)
+
+        local label = Instance.new("TextLabel")
+        label.BackgroundTransparency = 1
+        label.FontFace = fonts.HeadingHeavy
+        label.Position = UDim2.fromOffset(withStar and 42 or 14, 0)
+        label.Size = UDim2.new(1, withStar and -102 or -74, 1, 0)
+        label.Text = labelText
+        label.TextColor3 = theme.Signal
+        label.TextSize = 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.ZIndex = 3032
+        label.Parent = row
+
+        if withStar then
+            local star = Instance.new("ImageLabel")
+            star.BackgroundTransparency = 1
+            star.Image = FAVORITE_FILLED_IMAGE
+            star.ImageColor3 = theme.Warning
+            star.Position = UDim2.fromOffset(14, 11)
+            star.Size = UDim2.fromOffset(20, 20)
+            star.ZIndex = 3032
+            star.Parent = row
+        end
+
+        local track = Instance.new("Frame")
+        track.AnchorPoint = Vector2.new(1, 0.5)
+        track.BackgroundColor3 = theme.Layer
+        track.BackgroundTransparency = 0.08
+        track.BorderSizePixel = 0
+        track.Position = UDim2.new(1, -12, 0.5, 0)
+        track.Size = UDim2.fromOffset(38, 22)
+        track.ZIndex = 3032
+        track.Parent = row
+        round(track, 999)
+        outline(track, 1, 0.24, theme.Signal)
+
+        local knob = Instance.new("Frame")
+        knob.AnchorPoint = Vector2.new(0.5, 0.5)
+        knob.BackgroundColor3 = theme.Signal
+        knob.BorderSizePixel = 0
+        knob.Size = UDim2.fromOffset(14, 14)
+        knob.ZIndex = 3033
+        knob.Parent = track
+        round(knob, 999)
+
+        local function render(instant)
+            local enabled = getValue() == true
+            local trackProperties = {
+                BackgroundColor3 = enabled and theme.Signal or theme.Layer,
+                BackgroundTransparency = enabled and 0 or 0.08
+            }
+            local knobProperties = {
+                BackgroundColor3 = enabled and theme.Base or theme.Signal,
+                Position = enabled and UDim2.new(1, -8, 0.5, 0) or UDim2.new(0, 8, 0.5, 0)
+            }
+            if instant then
+                for property, value in pairs(trackProperties) do track[property] = value end
+                for property, value in pairs(knobProperties) do knob[property] = value end
+            else
+                animate(track, trackProperties, motion.Control, Enum.EasingStyle.Quint)
+                animate(knob, knobProperties, motion.Control, Enum.EasingStyle.Quint)
+            end
+        end
+        connect(row.MouseEnter, function()
+            playSound("ButtonHover")
+            animate(row, {BackgroundTransparency = 0.04}, motion.Control, Enum.EasingStyle.Quint)
+        end)
+        connect(row.MouseLeave, function()
+            animate(row, {BackgroundTransparency = 0.12}, motion.Control, Enum.EasingStyle.Quint)
+        end)
+        connect(row.Activated, function()
+            if state ~= "Open" then return end
+            playSound("ButtonClick")
+            setValue(not getValue())
+            render(false)
+            applyFilters(true)
+        end)
+        render(true)
+    end
+
+    createDrawerSwitch("ShowAllScripts", "Tümünü Göster", 58, function()
+        return showAllScripts
+    end, function(value)
+        showAllScripts = value
+    end, false)
+    createDrawerSwitch("FavoritesOnly", "Favoriler", 58 + drawerRowHeight + 8, function()
+        return favoritesOnly
+    end, function(value)
+        favoritesOnly = value
+    end, true)
+
+    local featureHeadingY = 58 + (drawerRowHeight + 8) * 2 + 8
+    local featureHeading = Instance.new("TextLabel")
+    featureHeading.BackgroundTransparency = 1
+    featureHeading.FontFace = fonts.HeadingBlack
+    featureHeading.Position = UDim2.fromOffset(16, featureHeadingY)
+    featureHeading.Size = UDim2.new(1, -32, 0, 28)
+    featureHeading.Text = "İçerik"
+    featureHeading.TextColor3 = theme.Signal
+    featureHeading.TextSize = 14
+    featureHeading.TextTransparency = 0.18
+    featureHeading.TextXAlignment = Enum.TextXAlignment.Left
+    featureHeading.ZIndex = 3031
+    featureHeading.Parent = filterDrawer
+
+    local function buildFeatureFilters(featureNames)
+        local y = featureHeadingY + 32
+        for _, featureName in ipairs(featureNames) do
+            local row = Instance.new("TextButton")
+            row.Name = "Feature_" .. featureName:gsub("[^%w_]", "_")
+            row.AutoButtonColor = false
+            row.BackgroundColor3 = theme.Base
+            row.BackgroundTransparency = 0.18
+            row.BorderSizePixel = 0
+            row.Position = UDim2.fromOffset(14, y)
+            row.Size = UDim2.new(1, -28, 0, 36)
+            row.Text = ""
+            row.ZIndex = 3031
+            row.Parent = filterDrawer
+            round(row, 10)
+
+            local box = Instance.new("Frame")
+            box.AnchorPoint = Vector2.new(0, 0.5)
+            box.BackgroundColor3 = theme.Layer
+            box.BackgroundTransparency = 0.06
+            box.BorderSizePixel = 0
+            box.Position = UDim2.new(0, 12, 0.5, 0)
+            box.Size = UDim2.fromOffset(checkboxSize, checkboxSize)
+            box.ZIndex = 3032
+            box.Parent = row
+            round(box, 6)
+            local boxStroke = outline(box, 2, 0.05, theme.Signal)
+
+            local check = Instance.new("TextLabel")
+            check.BackgroundTransparency = 1
+            check.FontFace = fonts.HeadingBlack
+            check.Size = UDim2.fromScale(1, 1)
+            check.Text = "✓"
+            check.TextColor3 = theme.Base
+            check.TextSize = 16
+            check.TextTransparency = 1
+            check.ZIndex = 3033
+            check.Parent = box
+            local checkScale = Instance.new("UIScale")
+            checkScale.Scale = 0.55
+            checkScale.Parent = check
+
+            local label = Instance.new("TextLabel")
+            label.BackgroundTransparency = 1
+            label.FontFace = fonts.HeadingHeavy
+            label.Position = UDim2.fromOffset(46, 0)
+            label.Size = UDim2.new(1, -58, 1, 0)
+            label.Text = featureName
+            label.TextColor3 = theme.Signal
+            label.TextSize = 13
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.ZIndex = 3032
+            label.Parent = row
+
+            local function render(instant)
+                local selected = selectedFeatures[featureName] == true
+                local boxProperties = {
+                    BackgroundColor3 = selected and theme.Signal or theme.Layer,
+                    BackgroundTransparency = selected and 0 or 0.06
+                }
+                local checkProperties = {TextTransparency = selected and 0 or 1}
+                local scaleProperties = {Scale = selected and 1 or 0.55}
+                if instant then
+                    for property, value in pairs(boxProperties) do box[property] = value end
+                    for property, value in pairs(checkProperties) do check[property] = value end
+                    for property, value in pairs(scaleProperties) do checkScale[property] = value end
+                else
+                    animate(box, boxProperties, motion.Control, Enum.EasingStyle.Quint)
+                    animate(check, checkProperties, motion.Control, Enum.EasingStyle.Quint)
+                    animate(checkScale, scaleProperties, motion.Control, Enum.EasingStyle.Back)
+                end
+                boxStroke.Transparency = selected and 1 or 0.05
+            end
+            connect(row.MouseEnter, function()
+                playSound("ButtonHover")
+                animate(row, {BackgroundTransparency = 0.08}, motion.Control, Enum.EasingStyle.Quint)
+            end)
+            connect(row.MouseLeave, function()
+                animate(row, {BackgroundTransparency = 0.18}, motion.Control, Enum.EasingStyle.Quint)
+            end)
+            connect(row.Activated, function()
+                if state ~= "Open" then return end
+                playSound("ButtonClick")
+                selectedFeatures[featureName] = not selectedFeatures[featureName] or nil
+                render(false)
+                applyFilters(true)
+            end)
+            render(true)
+            y = y + 42
+        end
+        filterDrawer.CanvasSize = UDim2.fromOffset(0, y + 14)
+    end
+
+    local function setFilterOpen(open, instant)
+        open = open == true
+        if filterOpen == open and not instant then return end
+        filterOpen, filterRevision = open, filterRevision + 1
+        local revision = filterRevision
+        local drawerTarget = open and UDim2.fromOffset(0, 0) or UDim2.fromOffset(-drawerWidth, 0)
+        local buttonTarget = open and UDim2.fromOffset(drawerWidth - 54, 10) or UDim2.fromOffset(14, 10)
+        if open then
+            filterDrawer.Visible = true
+            filterDismiss.Visible = true
+        end
+        if instant then
+            filterDrawer.Position = drawerTarget
+            filterButton.Position = buttonTarget
+            filterDrawer.Visible = open
+            filterDismiss.Visible = open
+            return
+        end
+        local tween = animate(
+            filterDrawer,
+            {Position = drawerTarget},
+            open and motion.SearchOpen or motion.SearchClose,
+            Enum.EasingStyle.Quint,
+            open and Enum.EasingDirection.Out or Enum.EasingDirection.In
+        )
+        animate(
+            filterButton,
+            {Position = buttonTarget},
+            open and motion.SearchOpen or motion.SearchClose,
+            Enum.EasingStyle.Quint,
+            open and Enum.EasingDirection.Out or Enum.EasingDirection.In
+        )
+        if not open then
+            task.spawn(function()
+                tween.Completed:Wait()
+                if not destroyed and revision == filterRevision and not filterOpen then
+                    filterDrawer.Visible = false
+                    filterDismiss.Visible = false
+                end
+            end)
+        end
+    end
+
+    connect(filterButton.MouseEnter, function()
+        animate(filterButton, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
+    end)
+    connect(filterButton.MouseLeave, function()
+        animate(filterButton, {BackgroundTransparency = 0.12}, motion.Control, Enum.EasingStyle.Quint)
+    end)
+    connect(filterButton.Activated, function()
+        if state ~= "Open" then return end
+        playSound("ButtonClick")
+        setFilterOpen(not filterOpen, false)
+    end)
+    connect(filterDismiss.Activated, function()
+        if filterOpen then setFilterOpen(false, false) end
+    end)
+
     local toast = Instance.new("CanvasGroup")
     toast.Name = "CatalogStatusToast"
     toast.AnchorPoint = Vector2.new(0.5, 1)
@@ -519,14 +808,6 @@ function CatalogModule.Create(context)
             end
         end)
     end
-
-    local activeCards = {}
-    local allItems = {}
-    local filteredItems = {}
-    local coverCache = {}
-    local virtualFirstRow = -1
-    local virtualCellWidth = -1
-    local contentLoaded, contentRevision = false, 0
 
     local function createCard(entry, index)
         local cardContentRevision = contentRevision
@@ -601,6 +882,86 @@ function CatalogModule.Create(context)
         cover.ZIndex = 3006
         cover.Parent = card
         round(cover, 10)
+
+        local favoriteId = getEntryId(entry)
+        local favoriteHovered = false
+        local favoriteButton = Instance.new("ImageButton")
+        favoriteButton.Name = "Favorite"
+        favoriteButton.Active = true
+        favoriteButton.AnchorPoint = Vector2.new(1, 0)
+        favoriteButton.AutoButtonColor = false
+        favoriteButton.BackgroundColor3 = theme.Base
+        favoriteButton.BackgroundTransparency = 0.18
+        favoriteButton.BorderSizePixel = 0
+        favoriteButton.Image = ""
+        favoriteButton.Position = UDim2.new(1, -13, 0, 13)
+        favoriteButton.Size = UDim2.fromOffset(32, 32)
+        favoriteButton.ZIndex = 3010
+        favoriteButton.Parent = card
+        round(favoriteButton, 10)
+        outline(favoriteButton, 1, 0.14)
+
+        local favoriteFill = Instance.new("ImageLabel")
+        favoriteFill.AnchorPoint = Vector2.new(0.5, 0.5)
+        favoriteFill.BackgroundTransparency = 1
+        favoriteFill.Image = FAVORITE_FILLED_IMAGE
+        favoriteFill.ImageColor3 = theme.Warning
+        favoriteFill.ImageTransparency = 1
+        favoriteFill.Position = UDim2.fromScale(0.5, 0.5)
+        favoriteFill.Size = UDim2.fromOffset(20, 20)
+        favoriteFill.ZIndex = 3011
+        favoriteFill.Parent = favoriteButton
+
+        local favoriteOutline = Instance.new("ImageLabel")
+        favoriteOutline.AnchorPoint = Vector2.new(0.5, 0.5)
+        favoriteOutline.BackgroundTransparency = 1
+        favoriteOutline.Image = FAVORITE_OUTLINE_IMAGE
+        favoriteOutline.ImageColor3 = theme.Warning
+        favoriteOutline.Position = UDim2.fromScale(0.5, 0.5)
+        favoriteOutline.Size = UDim2.fromOffset(20, 20)
+        favoriteOutline.ZIndex = 3012
+        favoriteOutline.Parent = favoriteButton
+
+        local function renderFavorite(instant)
+            local selected = favorites[favoriteId] == true
+            local fillTransparency = (selected or favoriteHovered) and 0 or 1
+            local outlineTransparency = (selected and not favoriteHovered) and 1 or 0
+            local outlineColor = favoriteHovered and theme.Signal or theme.Warning
+            local buttonTransparency = favoriteHovered and 0.04 or 0.18
+            if instant then
+                favoriteFill.ImageTransparency = fillTransparency
+                favoriteOutline.ImageTransparency = outlineTransparency
+                favoriteOutline.ImageColor3 = outlineColor
+                favoriteButton.BackgroundTransparency = buttonTransparency
+            else
+                animate(favoriteFill, {ImageTransparency = fillTransparency}, motion.Control, Enum.EasingStyle.Quint)
+                animate(favoriteOutline, {
+                    ImageTransparency = outlineTransparency,
+                    ImageColor3 = outlineColor
+                }, motion.Control, Enum.EasingStyle.Quint)
+                animate(favoriteButton, {BackgroundTransparency = buttonTransparency}, motion.Control, Enum.EasingStyle.Quint)
+            end
+        end
+        cardConnect(favoriteButton.MouseEnter, function()
+            favoriteHovered = true
+            playSound("ButtonHover")
+            renderFavorite(false)
+        end)
+        cardConnect(favoriteButton.MouseLeave, function()
+            favoriteHovered = false
+            renderFavorite(false)
+        end)
+        cardConnect(favoriteButton.Activated, function()
+            if state ~= "Open" then return end
+            playSound("ButtonClick")
+            favorites[favoriteId] = not favorites[favoriteId] or nil
+            if favoritesOnly then
+                applyFilters(false)
+            else
+                renderFavorite(false)
+            end
+        end)
+        renderFavorite(true)
 
         local statusStrip = Instance.new("Frame")
         statusStrip.AnchorPoint = Vector2.new(0, 1)
@@ -735,24 +1096,28 @@ function CatalogModule.Create(context)
     local entries = context.GetEntries()
     for _, source in ipairs(type(entries) == "table" and entries or {}) do
         local entry = copyEntry(source)
+        local featureText = getFeatures(entry)
         usedIds[tostring(entry.BuiltInId or "")] = true
         table.insert(allItems, {
             Entry = entry,
             Status = getStatus(entry),
-            Features = getFeatures(entry),
+            Features = featureText,
+            FeatureSet = getFeatureSet(featureText),
             NameKey = string.lower(tostring(entry.Name or "")),
-            SearchText = string.lower(tostring(entry.Name or "") .. " " .. tostring(entry.PlaceId or "") .. " " .. tostring(entry.BuiltInId or "") .. " " .. getStatus(entry) .. " " .. getFeatures(entry))
+            SearchText = string.lower(tostring(entry.Name or "") .. " " .. tostring(entry.PlaceId or "") .. " " .. tostring(entry.BuiltInId or "") .. " " .. getStatus(entry) .. " " .. featureText)
         })
     end
     for _, source in ipairs(PLACEHOLDERS) do
         if not usedIds[tostring(source.BuiltInId)] then
             local entry = copyEntry(source)
+            local featureText = getFeatures(entry)
             table.insert(allItems, {
                 Entry = entry,
                 Status = getStatus(entry),
-                Features = getFeatures(entry),
+                Features = featureText,
+                FeatureSet = getFeatureSet(featureText),
                 NameKey = string.lower(tostring(entry.Name or "")),
-                SearchText = string.lower(tostring(entry.Name or "") .. " " .. tostring(entry.PlaceId or "") .. " " .. tostring(entry.BuiltInId or "") .. " " .. getStatus(entry) .. " " .. getFeatures(entry))
+                SearchText = string.lower(tostring(entry.Name or "") .. " " .. tostring(entry.PlaceId or "") .. " " .. tostring(entry.BuiltInId or "") .. " " .. getStatus(entry) .. " " .. featureText)
             })
         end
     end
@@ -765,6 +1130,14 @@ function CatalogModule.Create(context)
         if left.NameKey ~= right.NameKey then return left.NameKey < right.NameKey end
         return tostring(left.Entry.BuiltInId or left.Entry.PlaceId or "") < tostring(right.Entry.BuiltInId or right.Entry.PlaceId or "")
     end)
+
+    local featureNameSet, featureNames = {}, {}
+    for _, item in ipairs(allItems) do
+        for featureName in pairs(item.FeatureSet) do featureNameSet[featureName] = true end
+    end
+    for featureName in pairs(featureNameSet) do table.insert(featureNames, featureName) end
+    table.sort(featureNames)
+    buildFeatureFilters(featureNames)
 
     local function clearActiveCards()
         for _, record in ipairs(activeCards) do
@@ -808,8 +1181,18 @@ function CatalogModule.Create(context)
         table.clear(filteredItems)
         for _, item in ipairs(allItems) do
             local statusAllowed = showAllScripts or item.Status ~= "Un-Supported"
+            local favoriteAllowed = not favoritesOnly or favorites[getEntryId(item.Entry)] == true
             local queryAllowed = query == "" or string.find(item.SearchText, query, 1, true) ~= nil
-            if statusAllowed and queryAllowed then table.insert(filteredItems, item) end
+            local featuresAllowed = true
+            for featureName in pairs(selectedFeatures) do
+                if not item.FeatureSet[featureName] then
+                    featuresAllowed = false
+                    break
+                end
+            end
+            if statusAllowed and favoriteAllowed and queryAllowed and featuresAllowed then
+                table.insert(filteredItems, item)
+            end
         end
         local rows = math.ceil(#filteredItems / 3)
         local safetyInset = layout.CardGlowStroke + 2
@@ -964,6 +1347,7 @@ function CatalogModule.Create(context)
         transitionRevision, state = transitionRevision + 1, "Closing"
         local revision, source = transitionRevision, context.GetAnchorPoint()
         dragging = false
+        setFilterOpen(false, false)
         setSearchOpen(false, true)
         toastRevision, toast.Visible = toastRevision + 1, false
         local move = animate(window, {Position = UDim2.fromOffset(source.X, source.Y), GroupTransparency = 1}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
@@ -1009,7 +1393,7 @@ function CatalogModule.Create(context)
     controller.IsOpen = function() return state == "Open" or state == "Opening" end
     controller.Destroy = function()
         if destroyed then return end
-        destroyed, transitionRevision, toastRevision, contentRevision = true, transitionRevision + 1, toastRevision + 1, contentRevision + 1
+        destroyed, transitionRevision, toastRevision, contentRevision, filterRevision = true, transitionRevision + 1, toastRevision + 1, contentRevision + 1, filterRevision + 1
         clearActiveCards()
         table.clear(coverCache)
         table.clear(filteredItems)
