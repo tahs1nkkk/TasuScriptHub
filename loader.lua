@@ -7450,7 +7450,7 @@ UI.ReportLoading(0.98, UI.GameCatalogController
     and "Catalog · uzak oyun menüsü hazır"
     or "Catalog · uzak oyun menüsü kullanılamıyor")
 
-do
+UI.MainMenuController, UI.MainMenuError = (function()
     local mainCategories = {
         Home = true,
         Players = true,
@@ -7609,8 +7609,8 @@ do
         return controller
     end
 
-    UI.MainMenuController, UI.MainMenuError = loadMainMenuController()
-end
+    return loadMainMenuController()
+end)()
 UI.ReportLoading(0.985, UI.MainMenuController
     and "Main UI · kategori ve arama menüsü hazır"
     or "Main UI · genel menü kullanılamıyor")

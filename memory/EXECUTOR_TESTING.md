@@ -12,14 +12,14 @@ The entrypoint must remain a single-file bootstrap. If the project becomes modul
 
 ## Meaning of a pass
 
-- Luau compilation is only a preflight check; it is never proof of runtime correctness.
+- Luau compilation is only a preflight check; it is never proof of runtime correctness. The preflight must generate bytecode (for example compiler `--null` mode), not stop after parsing, so local-register allocation failures are detected.
 - A runtime pass must occur in the intended executor and Roblox client.
 - Record executor name/version, game/place, client state, error text and line, and whether this was first load, reload, respawn, or teleport.
 - Unsupported executor capabilities must degrade through explicit capability checks and user-facing status, not silent failure.
 
 ## Required smoke sequence
 
-1. Execute the canonical entrypoint on a fresh client.
+1. Execute the canonical entrypoint on a fresh client. Treat any `Out of local registers` error as a bootstrap failure; no loader or UI behavior can be considered tested after it.
 2. Confirm the loader stays completely invisible and silent until its required TasuHub icon resolves, then completes normally with main shell visibility, input, drag, and category navigation. Also verify explicit cleanup/abort when the required icon capability path is unavailable; no fallback is permitted.
 3. Execute the entrypoint again and confirm the previous instance unloads without duplicate connections or render-step bindings.
 4. Toggle every feature on and off once; restore altered character, camera, lighting, collision, and gravity state.

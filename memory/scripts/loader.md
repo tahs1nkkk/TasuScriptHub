@@ -10,6 +10,8 @@ Current presentation state: `UI.LegacyUIEnabled` is permanently false during the
 
 `loader.lua` downloads and `loadstring`-compiles both `game_catalog.lua` and `main_menu.lua`, validates contract version 1, and passes only shared services plus narrow callbacks. The main context exposes copied stable control descriptors and `Get`/`Set`/`Activate`/options/visibility services; the module never receives `State`, `UI.Controls`, or legacy instances. Added shared tokens cover the 230→72 px sidebar, 46 px category rows, 18 px content padding, 12 px section gap, 0.38-second sidebar motion, and 0.24/0.34 page transitions while reusing catalog window/header/search geometry. Existing catalog/game-controller responsibilities remain unchanged.
 
+Main-menu integration is constructed inside its own immediately invoked function scope. This is a required executor compatibility boundary: the monolithic loader already keeps many top-level locals alive, and declaring the main-menu helper functions in that outer frame exceeded Luau's 200-local-register allocation at `loadMainMenuController`, aborting before any runtime UI could start. The isolated scope preserves the exact service/controller contract while keeping its helper registers out of the loader's outer frame.
+
 Rework target: keep `loader.lua` as a small executor bootstrap. Move feature behavior behind controllers and UI registration behind descriptors while preserving the one-line remote entrypoint.
 
 Critical guarantees: second execution unloads the prior instance; all render-step names and connections are released; altered client state is restored; missing executor APIs degrade explicitly.
