@@ -14,6 +14,7 @@ This directory is the persistent source of truth for the executor-only UI rework
 
 - `scripts/loader.md`
 - `scripts/game_catalog.md`
+- `scripts/main_menu.md`
 - `scripts/mm2.md`
 
 ## Retained systems to rework
@@ -37,4 +38,4 @@ Feature-specific files live under `features/`. Each file records current behavio
 
 ## Current gate
 
-The loader design is user-approved and closed after the final ready-text scale revision. Preserve it as a finished shared system unless the user explicitly reopens loader work. Game-catalog revision 10 is implemented through the upper base action button and remote `game_catalog.lua`: revision-9 rounded cover/status composition plus revision-8 filters/favorites/error feedback. Opening the filter drawer now clears and blocks every underlying card hover/favorite response until the drawer closes. The fixed drawer visuals, header, and curve-safe scroll bounds are unchanged. Search, status, favorites, and AND-feature filters compose while deterministic ordering and nine-card virtualization remain intact. MM2 game-window revision 1 preserves its feature engines behind a shared-theme 620×420 controller view. Successful launch closes the catalog, prepends an official-icon game button to the dock, and opens that smaller window automatically. These revisions are not runtime-ready until their executor checklists are completed and the user approves the visuals. The general menu launched by the lower base button remains the following UI phase.
+The loader design is user-approved and closed after the final ready-text scale revision. Preserve it as a finished shared system unless the user explicitly reopens loader work. Game-catalog revision 10 remains on the upper base action. Main-menu revision 1 now uses the lower base action: a separate same-size `main_menu.lua` controller with header-only composition, default-expanded/collapsible icon navigation, descriptor-backed feature pages, indexed search, directional page transitions, shared dragging, and no legacy presentation. Catalog and main windows are mutually exclusive. MM2 game-window revision 1 preserves its engines behind the smaller shared-theme controller view. These revisions remain pending executor/visual acceptance before merging to `main`.

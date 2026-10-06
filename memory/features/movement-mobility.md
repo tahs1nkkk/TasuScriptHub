@@ -8,3 +8,4 @@ Rework: isolate input listeners, avoid duplicate jump requests, respect text foc
 
 Executor checks: each feature alone/together, chat/text focus, grounded/airborne, respawn, rapid toggle, and unload.
 
+Main UI revision 1: mobility toggles are descriptor-backed `Diğer` rows. Verify focus guards and no duplicate input path after repeated category changes.

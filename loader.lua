@@ -437,7 +437,7 @@ local UI = {
     GameControllers = {},
     CornerButtonDefinitions = {
         {Name = "CatalogAction", AssetId = 137753054375497, IntendedAction = "Catalog", CurrentAction = "Catalog"},
-        {Name = "GeneralMenuAction", AssetId = 83533116222028, IntendedAction = "GeneralMenu", CurrentAction = nil}
+        {Name = "GeneralMenuAction", AssetId = 83533116222028, IntendedAction = "GeneralMenu", CurrentAction = "GeneralMenu"}
     },
     IconAssets = {
         TasuHub = {AssetId = 138667112902223, CachePath = "TasuHub/Icons/TasuHub.png"}
@@ -530,6 +530,14 @@ local UI = {
         CatalogToastTextSize = 12,
         CatalogToastDuration = 2.35,
         CatalogOutcomeGlowDuration = 1.8,
+        MainSidebarExpandedWidth = 230,
+        MainSidebarCollapsedWidth = 72,
+        MainNavigationHeight = 46,
+        MainContentPadding = 18,
+        MainSectionGap = 12,
+        MotionMainSidebar = 0.38,
+        MotionMainPageOut = 0.24,
+        MotionMainPageIn = 0.34,
         MotionCatalogOpen = 0.52,
         MotionCatalogClose = 0.44,
         MotionCatalogContentReveal = 0.36,
@@ -2505,6 +2513,9 @@ local function refreshControls()
     for _, refresh in ipairs(controlRefreshers) do
         pcall(refresh)
     end
+    if UI.MainMenuController and type(UI.MainMenuController.Refresh) == "function" then
+        pcall(UI.MainMenuController.Refresh)
+    end
 end
 
 UI.RefreshControls = refreshControls
@@ -2705,6 +2716,8 @@ local function addAction(card, text, callback)
     end)
     local flag = UI.ControlFlag(card, text)
     UI.Register(flag, {
+        Kind = "Action",
+        DisplayLabel = text,
         Instance = item,
         Activate = function()
             pcall(callback, item)
@@ -2746,6 +2759,8 @@ local function addInput(card, placeholder, defaultText, callback, multiLine)
     end
     local flag = UI.ControlFlag(card, placeholder)
     UI.Register(flag, {
+        Kind = "Input",
+        DisplayLabel = placeholder,
         Set = function(_, value)
             input.Text = tostring(value or "")
             if callback then
@@ -2820,6 +2835,8 @@ local function addToggle(card, text, getter, setter, bindable)
     end)
     render()
     return UI.Register(bindId, {
+        Kind = "Toggle",
+        DisplayLabel = text,
         Render = render,
         Row = row,
         Label = label,
@@ -2901,6 +2918,14 @@ local function addSlider(card, text, minimum, maximum, getter, setter, decimals,
     render()
     local flag = UI.ControlFlag(card, text)
     return UI.Register(flag, {
+        Kind = "Slider",
+        DisplayLabel = text,
+        Minimum = minimum,
+        Maximum = maximum,
+        Decimals = precision,
+        IsVisible = function()
+            return not visibleGetter or visibleGetter()
+        end,
         Render = render,
         Holder = holder,
         Title = title,
@@ -3053,6 +3078,12 @@ UI.AddDropdown = function(card, text, values, getter, setter, multiple)
     end))
     local flag = UI.ControlFlag(card, text)
     controller = UI.Register(flag, {
+        Kind = "Dropdown",
+        DisplayLabel = text,
+        Multiple = multiple == true,
+        GetOptions = function()
+            return table.clone(values)
+        end,
         Holder = holder,
         Get = getter,
         Render = render,
@@ -3245,6 +3276,23 @@ UI.AddPlayerDropdown = function(card, text, getter, setter)
         end
     end))
     controller = UI.Register(UI.ControlFlag(card, text), {
+        Kind = "PlayerDropdown",
+        DisplayLabel = text,
+        GetOptions = function()
+            local available = {}
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer then
+                    table.insert(available, {
+                        Label = player.DisplayName .. "  (@" .. player.Name .. ")",
+                        Value = player.UserId
+                    })
+                end
+            end
+            table.sort(available, function(first, second)
+                return string.lower(first.Label) < string.lower(second.Label)
+            end)
+            return available
+        end,
         Holder = holder,
         Instance = selector,
         Get = function()
@@ -3411,6 +3459,8 @@ UI.AddColorPicker = function(card, text, getter, setter)
     end))
     local flag = UI.ControlFlag(card, text)
     local controller = UI.Register(flag, {
+        Kind = "Color",
+        DisplayLabel = text,
         Holder = holder,
         Get = getter,
         Render = render,
@@ -6549,6 +6599,7 @@ end
 
 local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/mm2.lua"
 UI.GameCatalogModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/game_catalog.lua"
+UI.MainMenuModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/main_menu.lua"
 UI.CatalogExecutionLocks = {}
 
 UI.GetGameActionAnchorPoint = function(actionId)
@@ -7399,6 +7450,171 @@ UI.ReportLoading(0.98, UI.GameCatalogController
     and "Catalog · uzak oyun menüsü hazır"
     or "Catalog · uzak oyun menüsü kullanılamıyor")
 
+do
+    local mainCategories = {
+        Home = true,
+        Players = true,
+        Visuals = true,
+        Aim = true,
+        Movement = true,
+        World = true,
+        Misc = true,
+        Configs = true
+    }
+
+    local function getMainAnchorPoint()
+        local record = UI.CornerButtons[2]
+        local button = record and record.Button
+        if button and button.Parent then
+            local rootPosition = InterfaceRoot.AbsolutePosition
+            local buttonPosition = button.AbsolutePosition
+            local buttonSize = button.AbsoluteSize
+            return Vector2.new(
+                buttonPosition.X - rootPosition.X + buttonSize.X * 0.5,
+                buttonPosition.Y - rootPosition.Y + buttonSize.Y * 0.5
+            )
+        end
+        return getCanvasSize() * 0.5
+    end
+
+    local function getMainIndexEntries()
+        local entries = {}
+        for flag, control in pairs(UI.Controls) do
+            local category, section, label = string.match(tostring(flag), "^([^/]+)/([^/]+)/(.+)$")
+            if category and section and label and mainCategories[category] and type(control.Kind) == "string" and control.Kind ~= "Color" then
+                table.insert(entries, {
+                    Flag = tostring(flag),
+                    Category = category,
+                    Section = section,
+                    Label = tostring(control.DisplayLabel or label),
+                    Kind = control.Kind,
+                    Minimum = control.Minimum,
+                    Maximum = control.Maximum,
+                    Decimals = control.Decimals,
+                    Multiple = control.Multiple == true
+                })
+            end
+        end
+        return entries
+    end
+
+    local function getMainControl(flag)
+        return UI.Controls[tostring(flag or "")]
+    end
+
+    local function loadMainMenuController()
+        if not capabilities.Http or not capabilities.LoadString then
+            return nil, "executor HTTP/loadstring capability is unavailable"
+        end
+        local source, requestError = httpGet(UI.MainMenuModuleUrl)
+        if type(source) ~= "string" or source == "" then
+            return nil, requestError or "main menu module could not be downloaded"
+        end
+        local chunk, compileError = loadstring(source, "@TasuHub/main_menu.lua")
+        if not chunk then
+            return nil, "main menu module compile error: " .. tostring(compileError)
+        end
+        local loaded, module = pcall(chunk)
+        if not loaded then
+            return nil, "main menu module runtime error: " .. tostring(module)
+        end
+        if type(module) ~= "table" or module.Version ~= 1 or type(module.Create) ~= "function" then
+            return nil, "main menu module contract/version mismatch"
+        end
+        local created, controller = pcall(module.Create, {
+            Parent = InterfaceRoot,
+            Title = "TasuHub",
+            Theme = {
+                Base = UI.DesignTokens.Canvas,
+                Layer = UI.DesignTokens.Surface,
+                Signal = UI.DesignTokens.TextPrimary,
+                Success = UI.DesignTokens.Success,
+                Warning = UI.DesignTokens.Warning,
+                Danger = UI.DesignTokens.Danger
+            },
+            Fonts = {
+                Body = UI.Fonts.Description,
+                HeadingHeavy = UI.Fonts.HeadingHeavy,
+                HeadingBlack = UI.Fonts.HeadingBlack
+            },
+            Motion = {
+                Control = UI.DesignTokens.MotionCornerHover,
+                Open = UI.DesignTokens.MotionCatalogOpen,
+                Close = UI.DesignTokens.MotionCatalogClose,
+                Sidebar = UI.DesignTokens.MotionMainSidebar,
+                PageOut = UI.DesignTokens.MotionMainPageOut,
+                PageIn = UI.DesignTokens.MotionMainPageIn,
+                SearchOpen = UI.DesignTokens.MotionCatalogSearchOpen,
+                SearchClose = UI.DesignTokens.MotionCatalogSearchClose
+            },
+            Layout = {
+                WindowWidth = UI.DesignTokens.CatalogWindowWidth,
+                WindowHeight = UI.DesignTokens.CatalogWindowHeight,
+                ViewportInset = UI.DesignTokens.CatalogViewportInset,
+                WindowRadius = UI.DesignTokens.CatalogWindowRadius,
+                HeaderHeight = UI.DesignTokens.CatalogHeaderHeight,
+                BodyTransparency = UI.DesignTokens.CatalogBodyTransparency,
+                SearchWidth = UI.DesignTokens.CatalogSearchWidth,
+                SidebarExpandedWidth = UI.DesignTokens.MainSidebarExpandedWidth,
+                SidebarCollapsedWidth = UI.DesignTokens.MainSidebarCollapsedWidth,
+                NavigationHeight = UI.DesignTokens.MainNavigationHeight,
+                ContentPadding = UI.DesignTokens.MainContentPadding,
+                SectionGap = UI.DesignTokens.MainSectionGap
+            },
+            Animate = animate,
+            PlaySound = UI.PlaySound,
+            TrackConnection = trackConnection,
+            InputService = UserInputService,
+            GetAnchorPoint = getMainAnchorPoint,
+            GetViewportSize = getCanvasSize,
+            GetIndexEntries = getMainIndexEntries,
+            GetControlValue = function(flag)
+                local control = getMainControl(flag)
+                if not control or type(control.Get) ~= "function" then return nil end
+                local ok, value = pcall(control.Get, control)
+                return ok and value or nil
+            end,
+            SetControlValue = function(flag, value)
+                local control = getMainControl(flag)
+                if not control or type(control.Set) ~= "function" then return false end
+                local ok = pcall(control.Set, control, value)
+                if ok then refreshControls() end
+                return ok
+            end,
+            ActivateControl = function(flag)
+                local control = getMainControl(flag)
+                if not control or type(control.Activate) ~= "function" then return false end
+                return pcall(control.Activate, control)
+            end,
+            GetControlOptions = function(flag)
+                local control = getMainControl(flag)
+                if not control or type(control.GetOptions) ~= "function" then return {} end
+                local ok, values = pcall(control.GetOptions, control)
+                return ok and type(values) == "table" and deepCopy(values) or {}
+            end,
+            IsControlVisible = function(flag)
+                local control = getMainControl(flag)
+                if not control then return false end
+                if type(control.IsVisible) == "function" then
+                    local ok, visible = pcall(control.IsVisible)
+                    if ok then return visible ~= false end
+                end
+                local instance = control.Instance or control.Holder or control.Row
+                return not instance or instance.Visible ~= false
+            end
+        })
+        if not created or type(controller) ~= "table" or type(controller.Toggle) ~= "function" then
+            return nil, "main menu controller creation failed: " .. tostring(controller)
+        end
+        return controller
+    end
+
+    UI.MainMenuController, UI.MainMenuError = loadMainMenuController()
+end
+UI.ReportLoading(0.985, UI.MainMenuController
+    and "Main UI · kategori ve arama menüsü hazır"
+    or "Main UI · genel menü kullanılamıyor")
+
 unload = function()
     if unloaded then return end
     unloaded = true
@@ -7406,6 +7622,10 @@ unload = function()
         local destroy = type(controller) == "table" and (controller.Destroy or controller.Unload) or nil
         if type(destroy) == "function" then pcall(destroy) end
         UI.GameControllers[actionId] = nil
+    end
+    if UI.MainMenuController and type(UI.MainMenuController.Destroy) == "function" then
+        pcall(UI.MainMenuController.Destroy)
+        UI.MainMenuController = nil
     end
     if UI.GameCatalogController and type(UI.GameCatalogController.Destroy) == "function" then
         pcall(UI.GameCatalogController.Destroy)
@@ -7467,9 +7687,19 @@ end
 
 UI.SetCornerButtonAction(1, function()
     if UI.GameCatalogController then
+        if UI.MainMenuController and UI.MainMenuController.IsOpen() then UI.MainMenuController.Close() end
         UI.GameCatalogController.Toggle()
     else
         warn("[TasuHub] Game catalog unavailable: " .. tostring(UI.GameCatalogError))
+    end
+end)
+
+UI.SetCornerButtonAction(2, function()
+    if UI.MainMenuController then
+        if UI.GameCatalogController and UI.GameCatalogController.IsOpen() then UI.GameCatalogController.Close() end
+        UI.MainMenuController.Toggle()
+    else
+        warn("[TasuHub] Main menu unavailable: " .. tostring(UI.MainMenuError))
     end
 end)
 
@@ -7501,15 +7731,26 @@ env.TasuHub = {
     ToggleCatalog = function()
         return UI.GameCatalogController and UI.GameCatalogController.Toggle() or false, UI.GameCatalogError
     end,
+    OpenMainMenu = function()
+        return UI.MainMenuController and UI.MainMenuController.Open() or false, UI.MainMenuError
+    end,
+    CloseMainMenu = function()
+        return UI.MainMenuController and UI.MainMenuController.Close() or false, UI.MainMenuError
+    end,
+    ToggleMainMenu = function()
+        return UI.MainMenuController and UI.MainMenuController.Toggle() or false, UI.MainMenuError
+    end,
     SetUnloadIcon = UI.SetUnloadIcon,
     UpdateLog = UI.UpdateLog,
     Notify = UI.Notify,
     ApplyTheme = UI.ApplyTheme,
     Capabilities = capabilities,
-    Open = function() return false, "UI rework in progress" end,
-    Close = function() return true end,
-    Toggle = function() return false, "UI rework in progress" end,
-    ShowCategory = function() return false, "UI rework in progress" end,
+    Open = function() return UI.MainMenuController and UI.MainMenuController.Open() or false, UI.MainMenuError end,
+    Close = function() return UI.MainMenuController and UI.MainMenuController.Close() or false, UI.MainMenuError end,
+    Toggle = function() return UI.MainMenuController and UI.MainMenuController.Toggle() or false, UI.MainMenuError end,
+    ShowCategory = function(category)
+        return UI.MainMenuController and UI.MainMenuController.SelectCategory(category) or false, UI.MainMenuError
+    end,
     SaveConfig = saveConfig,
     LoadConfig = loadConfig,
     Unload = unload

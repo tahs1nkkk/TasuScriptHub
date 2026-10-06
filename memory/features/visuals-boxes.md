@@ -8,3 +8,4 @@ Rework: keep renderer interchangeable, avoid physical/collision impact, update b
 
 Executor checks: R6/R15, scaled avatars, accessories, seated/dead players, fill on/off, thickness limits, respawn, and unload.
 
+Main UI revision 1: box/fill/thickness controls are descriptor-backed `Görseller` rows; renderer ownership is unchanged. Verify search targeting and page replacement.

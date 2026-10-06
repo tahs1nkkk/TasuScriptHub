@@ -8,3 +8,4 @@ Rework: mode strategies share one time source and cleanup contract; player selec
 
 Executor checks: every mode, parameter limits, target move/leave/die, local respawn, select change, disable, and unload.
 
+Main UI revision 1: player selection, mode, toggle, and values are exposed through `Diğer`. Verify option refresh, target leave, page replacement, and unload.

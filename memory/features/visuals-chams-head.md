@@ -8,3 +8,4 @@ Rework: ensure adornments never affect character physics, handle missing heads, 
 
 Executor checks: enable combinations, character replacement, transparent avatars, missing head, team/RGB color changes, and unload.
 
+Main UI revision 1: chams/head controls are reconstructed in `Görseller`; category transitions must not change adornment ownership.

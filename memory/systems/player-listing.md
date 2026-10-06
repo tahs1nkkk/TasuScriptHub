@@ -4,7 +4,8 @@ Keep the user flow: live join/leave updates, username/display-name search, sorti
 
 Rework requirements: one player data service owns character/health/distance/avatar metadata; UI rows are virtualized or updated only when data changes; action availability is explicit; camera/view state restores on deselection and unload.
 
+Main UI revision 1 exposes the existing player sort/search controller descriptors on the `Players` category through the shared control bridge. The live join/leave row list, player actions, avatar metadata, and virtualized player-data view are not yet migrated; they must not be represented as complete until the dedicated player-listing controller replaces the dormant legacy presentation.
+
 No row may own a heartbeat connection. The view uses shared list-row, button, icon, and empty-state components.
 
 Executor checks: join/leave, respawn, search, every sort mode, select/deselect, view restore, teleport with missing root, and fling cleanup.
-

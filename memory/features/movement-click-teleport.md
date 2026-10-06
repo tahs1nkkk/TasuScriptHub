@@ -8,3 +8,4 @@ Rework: central input binding, processed-input guard, valid ray target, safe cha
 
 Executor checks: valid ground, sky/no target, UI click, text focus, missing root, respawn, rapid toggle, and unload.
 
+Main UI revision 1: the toggle appears through the `Diğer` descriptor page. Confirm new-UI clicks never trigger world teleport and page/search transitions do not duplicate input ownership.

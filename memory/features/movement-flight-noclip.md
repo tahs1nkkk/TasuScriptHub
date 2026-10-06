@@ -8,3 +8,4 @@ Rework: one flight controller, normalized diagonal speed, stable camera replacem
 
 Executor checks: both methods, all directions, diagonal/vertical movement, changing camera, seated/dead state, respawn, disable, and unload.
 
+Main UI revision 1: toggles, method, and speed are reconstructed from stable `Hareket` descriptors. Verify conditional rows, page replacement, and close/reopen without state loss.

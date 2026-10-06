@@ -8,3 +8,4 @@ Rework: explicit target/session ownership, bounded physics values, anti-fling pr
 
 Executor checks: every mode, no target, target leave/death, local respawn, anti-fling interaction, fly controls, disable, and unload.
 
+Main UI revision 1: fling controls are reconstructed in `Diğer`; physics/session ownership is unchanged. Verify mode/value updates, mutual-exclusion refresh, and unload during page motion.

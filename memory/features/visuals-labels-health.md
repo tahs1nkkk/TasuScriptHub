@@ -8,3 +8,4 @@ Rework: throttle text updates, clamp health safely, support missing humanoids, a
 
 Executor checks: display names, long names, zero/max health, changing max health, distance updates, out-of-range hiding, and respawn.
 
+Main UI revision 1: names/distance/health controls are descriptor-backed `Görseller` rows. Verify toggles through page and search navigation.

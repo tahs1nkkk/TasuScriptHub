@@ -56,7 +56,7 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 - Typography: `Heading`, `Body`, `Label`, `Mono`; sizes come from one type scale.
 - Shape: `RadiusSmall`, `RadiusMedium`, `RadiusLarge`, `StrokeThin`, `StrokeStrong`.
 - Spacing: a shared 4-based spacing scale; arbitrary padding is forbidden.
-- Motion: `MotionFast`, `MotionControl`, `MotionPanel`, `MotionModal`, `MotionLoader`, the catalog pull/content/search tokens, and shared easing tokens.
+- Motion: `MotionFast`, `MotionControl`, `MotionPanel`, `MotionModal`, `MotionLoader`, the catalog pull/content/search tokens, main sidebar/page tokens, and shared easing tokens.
 
 ## Approved game-catalog window — revision 10
 
@@ -74,6 +74,14 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 - Status authority lives only inside the remotely loaded module. Local catalog `Status` fields are ignored, the remote status map and copied card entries are frozen, and no status setter is exported. This prevents loaded catalog scripts from changing the official UI status through the supported runtime contract; it is not a claim that client-side executor code is cryptographically tamper-proof.
 - Opening places the already-final-size window at the upper corner button's current center, then moves it to its saved resting center while one `UIScale` grows the complete visual tree from 0 to 1 over 0.52 seconds. The middle body uses one non-interactive `Layer` reveal overlay whose transparency animates over 0.36 seconds; the body itself remains a normal `Frame`, avoiding a nested off-screen render surface and never changing child geometry. Closing samples the button again, moves back to that point, and scales the complete tree from 1 to exactly 0 over 0.44 seconds before hiding it and releasing all open-session content. The launcher callback and both initial tween creations execute synchronously in the activation call—there is no artificial click delay or task-scheduler frame before motion begins. No layout-critical `Size` is animated, so header, body, grid, and text never reflow during either transition. Transition and content-generation revisions cancel stale completions.
 - A successful executable card must receive a controller from the loader. It immediately begins catalog close, waits only for the existing 0.44-second close motion, then opens that game's smaller UI from its newly registered game-action button. The catalog is never left open behind the game window.
+
+## Approved main window — revision 1
+
+- Corner-action slot 2 opens one remote `main_menu.lua` controller. Its popup uses the catalog's exact 780×520 maximum size, 14 px viewport inset, 20 px outer radius, 60 px opaque `Base` header, `Layer` body at 0.20 transparency, 2 px `Base` outline, 160×36 search shell, and shared anchor-aware open/close timings. It has no footer. Slot 1 and slot 2 windows are mutually exclusive.
+- The left category rail is a permanent body child, expanded by default to 230 px. Eight 46 px-high horizontal buttons use shared 30 px category glyph containers, labels, 8 px vertical gaps, and the existing surface/border typography. The header's three-line control animates the rail to 72 px; every label fades but each category retains a centered 48×46 icon button. The page host animates from `230 + 18` to `72 + 18` px and expands its width by the same delta, so its contents recenter smoothly rather than snapping or rebuilding.
+- Category changes use a two-part directional language: the previous page moves 28 px upward while fading over 0.24 seconds; the next page begins 28 px above its rest position and fades/slides downward over 0.34 seconds. Only the selected page tree remains after completion. Sections use `Layer` surfaces, 14 px corners, 2 px shared outlines, and 12 px gaps. Control views use only the permanent palette and call stable controller contracts.
+- The header search/close controls reproduce the catalog geometry and interaction: hover opens the clipped shell, non-empty input pins it, a reserved 48 px zone shows the result count, and `×` closes the window. Indexed results are a `Base` overlay using stable category/section/control descriptors; selecting one changes category, scrolls to the target, and applies one temporary surface highlight. The index never walks raw UI descendants.
+- Non-control header space drags and clamps the complete window. Open/close samples slot 2's current center. Main/category/search/sidebar/page transitions are revision guarded, and missing sound/assets never stop motion.
 
 ## Shared game windows and MM2 revision 1
 

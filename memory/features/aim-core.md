@@ -8,3 +8,4 @@ Rework: controller owns targeting cadence and input state; UI only edits validat
 
 Executor checks: all activation modes, camera/mouse methods, enable/disable, lost focus, respawn, double load, and unload restoration.
 
+Main UI revision 1: existing controls are exposed through stable Aim descriptors in `Nişan`; the view calls controller `Get`/`Set` only. Add page/search, conditional rage visibility, external refresh, and unload-mid-transition to executor coverage.

@@ -8,3 +8,4 @@ Rework: shared overlay component, throttled sampling, missing-stat fallback, sta
 
 Executor checks: every metric combination, unavailable ping/memory, resolution change, drag, hide/show, reload, and unload.
 
+Main UI revision 1: registered stats toggles appear on `Ana Sayfa` and call the existing overlay controller. The dormant legacy stats presentation remains forbidden.

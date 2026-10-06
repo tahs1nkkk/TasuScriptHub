@@ -8,3 +8,4 @@ Rework: define deterministic eligibility and scoring, handle R6/R15 missing part
 
 Executor checks: team/no-team games, dead characters, missing target part, walls, off-screen targets, distance boundary, join/leave, and respawn.
 
+Main UI revision 1: targeting controls use stable Aim descriptors. Eligibility/scoring behavior and the `AliveCheck` decision are unchanged; verify new-page input and external refresh.

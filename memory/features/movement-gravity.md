@@ -8,3 +8,4 @@ Rework: lifecycle owner records one baseline and avoids overwriting a newer exte
 
 Executor checks: zero/high values, toggle, game gravity change while active, respawn, repeated load, and unload restoration.
 
+Main UI revision 1: gravity toggle/value use stable `Hareket` descriptors. Verify slider input, conditional visibility, and external refresh.

@@ -8,3 +8,4 @@ Rework: one world-visual controller owns effects, captures originals once, updat
 
 Executor checks: every mode, parameter limits, game lighting changes, camera replacement, mode switching, disable/default, and unload.
 
+Main UI revision 1: lighting mode/values are reconstructed from stable `Dünya` descriptors. Verify conditional rows and rapid mode/page changes.

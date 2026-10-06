@@ -8,3 +8,4 @@ Rework: bind to camera replacement, capture originals per session, and restore o
 
 Executor checks: FOV limits, first/third-person games, camera replacement, respawn, game camera scripts, disable, and unload.
 
+Main UI revision 1: camera controls are descriptor-backed `Dünya` rows. Verify external camera replacement and page close/reopen.

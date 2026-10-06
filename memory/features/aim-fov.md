@@ -8,3 +8,4 @@ Rework: FOV rendering becomes a feature overlay, not part of the application win
 
 Executor checks: different resolutions/insets, visible/hidden, radius limits, RGB on/off, UI open/closed, and unload cleanup.
 
+Main UI revision 1: registered FOV controls are descriptor-backed rows in `Nişan`; overlay ownership is unchanged. Verify slider/toggle updates and search navigation.

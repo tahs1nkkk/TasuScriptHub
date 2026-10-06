@@ -8,3 +8,4 @@ Rework: one camera controller with explicit enter/exit snapshots, input priority
 
 Executor checks: movement/look, speed, character freeze, teleport action, respawn, camera replacement, UI input, disable, and unload.
 
+Main UI revision 1: toggle/speed/action use stable `Dünya` descriptors. Verify UI focus guards, action activation, and close/reopen without implicit disable.
