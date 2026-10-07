@@ -22,6 +22,8 @@ The remote main-menu controller owns one `MainMenuRoot`, persistent shell/sideba
 
 `player_service.lua` owns one shared 0.2-second sample connection, join/leave listeners, subscriber set, one Walk revision/session, one atomic route folder, and one Fling action revision. It owns no UI. Destroy invalidates both sessions before disconnecting; action restore executes even when its revision is cancelled. Loader destroys the main view first, then the player service, before catalog/root cleanup.
 
+The replacement player and stats paths are now atomic: the hidden legacy player row tree/0.1-second sampler and legacy stats panel/tween/drag tree were physically removed. Only the loader stats sampler, player service sampler, main view subscriptions, and their explicit teardown paths remain.
+
 Each migrated game module owns its controller view and feature-local resources below the shared `InterfaceRoot`, but receives palette, motion, input, audio, viewport, and action-button anchor services from `GetGameUIContext`. MM2 owns one root, one heartbeat connection, its player-removal connection, drag listeners, highlights/billboards, and transition revision. Its `Destroy`/`Unload` path is idempotent, disables feature loops, removes feature instances, disconnects local connections, destroys the root, and clears its compatibility export. It must never destroy the shared hub root or corner rail.
 
 Executor checks: double load, unload during catalog/game-window animation or asynchronous game-icon resolution, unload with every MM2 feature enabled, respawn during enable/disable, and unload after a partial remote-module/controller-registration failure. Confirm no game button, controller root, heartbeat, highlight, billboard, drag listener, or late icon survives.
