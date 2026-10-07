@@ -8,4 +8,4 @@ Rework: shared overlay component, throttled sampling, missing-stat fallback, sta
 
 Executor checks: every metric combination, unavailable ping/memory, resolution change, drag, hide/show, reload, and unload.
 
-Main UI revision 1: registered stats toggles appear on `Ana Sayfa` and call the existing overlay controller. The dormant legacy stats presentation remains forbidden.
+Main UI revision 2: `Show Stats` is the first Home/Stats Overlay control. FPS, Ping, Player Count, and Memory rows are visible only while it is enabled. Loader's existing throttled sampler publishes immutable snapshots; the draggable shared-theme `Live Stats` view subscribes and owns no heartbeat. The dormant legacy panel remains forbidden.

@@ -8,4 +8,4 @@ Rework: clamp unstable velocity, reset target history on character change, and k
 
 Executor checks: stationary, walking, jumping, sudden direction change, teleport, high ping, prediction off, and target switch.
 
-Main UI revision 1: prediction controls are descriptor-backed `Nişan` rows; the view owns no prediction cadence. Verify conditional visibility and page cleanup.
+Main UI revision 2: prediction controls are descriptor-backed `Aim` rows; the view owns no prediction cadence. Verify conditional visibility and page cleanup.

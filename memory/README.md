@@ -15,6 +15,7 @@ This directory is the persistent source of truth for the executor-only UI rework
 - `scripts/loader.md`
 - `scripts/game_catalog.md`
 - `scripts/main_menu.md`
+- `scripts/player_service.md`
 - `scripts/mm2.md`
 
 ## Retained systems to rework
@@ -38,4 +39,4 @@ Feature-specific files live under `features/`. Each file records current behavio
 
 ## Current gate
 
-The loader design is user-approved and closed after the final ready-text scale revision. Preserve it as a finished shared system unless the user explicitly reopens loader work. Game-catalog revision 10 remains on the upper base action. Main-menu revision 1 now uses the lower base action: a separate same-size `main_menu.lua` controller with header-only composition, default-expanded/collapsible icon navigation, descriptor-backed feature pages, indexed search, directional page transitions, shared dragging, and no legacy presentation. Catalog and main windows are mutually exclusive. MM2 game-window revision 1 preserves its engines behind the smaller shared-theme controller view. These revisions remain pending executor/visual acceptance before merging to `main`.
+The loader design is user-approved and closed after the final ready-text scale revision. Preserve it as a finished shared system unless the user explicitly reopens loader work. Game-catalog revision 10 remains on the upper base action. Main-menu revision 2 uses the lower base action: a versioned `main_menu.lua` view plus the separate `player_service.lua` engine, nine English categories, fixed-geometry collapsible navigation, two-column cards, hierarchical search, shared dropdowns, responsive whole-window scaling, offscreen-aware reopening, live stats snapshots, and no legacy presentation. Catalog and main windows are mutually exclusive. MM2 game-window revision 1 preserves its engines behind the smaller shared-theme controller view. Bytecode compilation is complete; executor and visual acceptance are still required before merging to `main`.

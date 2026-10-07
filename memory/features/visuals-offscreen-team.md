@@ -8,4 +8,4 @@ Rework: use safe viewport bounds and inset handling, stable arrow rotation, and 
 
 Executor checks: every screen edge, target behind camera, no team, neutral players, team change, tiny viewport, and maximum distance.
 
-Main UI revision 1: offscreen/team controls are exposed through `Görseller` descriptors. Verify state survives close/reopen.
+Main UI revision 2: offscreen/team controls are exposed through `Visuals` descriptors. Verify state survives close/reopen.

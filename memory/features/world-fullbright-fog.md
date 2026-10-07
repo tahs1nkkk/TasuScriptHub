@@ -8,4 +8,4 @@ Rework: preserve exact original properties, compose with lighting modes predicta
 
 Executor checks: each toggle alone/together, game property changes, lighting mode switch, repeated load, disable, and unload restoration.
 
-Main UI revision 1: fullbright/fog toggles are descriptor-backed `Dünya` rows. Verify cross-control refresh and unload.
+Main UI revision 2: fullbright/fog toggles are displayed under `Lighting` while stable flags stay unchanged. Verify cross-control refresh and unload.

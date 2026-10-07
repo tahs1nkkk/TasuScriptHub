@@ -8,4 +8,4 @@ Rework: distinguish normal fast movement from hostile fling, keep recovery bound
 
 Executor checks: ordinary movement, vehicle/seated state, knockback, extreme velocity, flight interaction, respawn, disable, and unload.
 
-Main UI revision 1: anti-fling is a descriptor-backed `Diğer` toggle. Verify cross-control refresh when fling is enabled.
+Main UI revision 2: anti-fling is a descriptor-backed `Misc` toggle. Player-service targeted fling temporarily suspends and restores it; verify both cross-control refresh paths.

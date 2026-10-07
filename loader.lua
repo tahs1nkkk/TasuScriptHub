@@ -425,7 +425,6 @@ local UI = {
     ActionIconUrls = {
         Brand = "https://i.imgur.com/1UBgp0L.png", Search = "", Close = "",
         WaypointSave = "", WaypointTeleport = "", WaypointDelete = "",
-        PlayerFling = "", PlayerView = "", PlayerStop = "", PlayerTeleport = "",
         CatalogNew = "", CatalogRun = "", CatalogView = "", CatalogEdit = "", CatalogDelete = "",
         Unload = "", FreecamTeleport = ""
     },
@@ -567,16 +566,21 @@ local UI = {
     },
     Flags = {},
     Controls = {},
+    ControlRegistrationCounter = 0,
+    SectionRegistrationCounter = 0,
+    SectionRegistrationOrders = {},
+    StatsSubscribers = {},
+    StatsSnapshot = {},
     AccordionOpeners = {},
     ThemeBindings = {},
     GradientBindings = {},
     CategoryIconUrls = {
         Home = "", Catalog = "", Players = "", Visuals = "", Aim = "",
-        Movement = "", World = "", Misc = "", Configs = ""
+        Movement = "", World = "", Lighting = "", Misc = "", Configs = ""
     },
     CategoryIconBackgrounds = {
         Home = "AccentSoft", Catalog = "AccentSoft", Players = "AccentSoft", Visuals = "AccentSoft", Aim = "AccentSoft",
-        Movement = "AccentSoft", World = "AccentSoft", Misc = "AccentSoft", Configs = "AccentSoft"
+        Movement = "AccentSoft", World = "AccentSoft", Lighting = "AccentSoft", Misc = "AccentSoft", Configs = "AccentSoft"
     },
     Fonts = {
         Option = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
@@ -632,6 +636,27 @@ UI.LoadRobloxThumbnailAsset = function(assetId, path)
         return nil
     end
     return loadRemoteAsset(record.imageUrl, path)
+end
+
+UI.ResolveCategoryIconAsset = function(category)
+    local raw = tostring(UI.CategoryIconUrls[category] or "")
+    if raw == "" then return "" end
+    UI.MainCategoryIconAssets = UI.MainCategoryIconAssets or {}
+    local cacheKey = tostring(category) .. "|" .. raw
+    if UI.MainCategoryIconAssets[cacheKey] ~= nil then return UI.MainCategoryIconAssets[cacheKey] end
+    local resolved = ""
+    local hash = 5381
+    for index = 1, #raw do hash = (hash * 33 + string.byte(raw, index)) % 2147483647 end
+    local cachePath = "TasuHub/Icons/Category_" .. tostring(category) .. "_" .. tostring(hash) .. ".png"
+    if string.match(raw, "^%d+$") then
+        resolved = UI.LoadRobloxThumbnailAsset(tonumber(raw), cachePath) or ""
+    elseif string.match(raw, "^rbxassetid://%d+$") then
+        resolved = raw
+    elseif string.match(raw, "^https?://") then
+        resolved = loadRemoteAsset(raw, cachePath) or ""
+    end
+    if resolved ~= "" then UI.MainCategoryIconAssets[cacheKey] = resolved end
+    return resolved
 end
 
 UI.PlaySound = function(name, overrides)
@@ -734,6 +759,16 @@ UI.ApplyTheme = function(name, preserveAccent)
 end
 
 UI.Register = function(flag, control)
+    UI.ControlRegistrationCounter = UI.ControlRegistrationCounter + 1
+    control.RegistrationOrder = control.RegistrationOrder or UI.ControlRegistrationCounter
+    local category, section = string.match(tostring(flag), "^([^/]+)/([^/]+)/")
+    local sectionKey = category and section and (category .. "/" .. section) or nil
+    if sectionKey and not UI.SectionRegistrationOrders[sectionKey] then
+        UI.SectionRegistrationCounter = UI.SectionRegistrationCounter + 1
+        UI.SectionRegistrationOrders[sectionKey] = UI.SectionRegistrationCounter
+    end
+    control.SectionOrder = control.SectionOrder or (sectionKey and UI.SectionRegistrationOrders[sectionKey])
+    control.MainCategory = control.MainCategory or category
     UI.Flags[flag] = control
     UI.Controls[flag] = control
     control.Flag = flag
@@ -1380,7 +1415,7 @@ do
     UI.LoaderStatus.FontFace = UI.Fonts.Description
     UI.LoaderStatus.Position = UDim2.new(0.5, 0, 0.8, 34)
     UI.LoaderStatus.Size = UDim2.fromOffset(480, 60)
-    UI.LoaderStatus.Text = "Arayüz hazırlanıyor"
+    UI.LoaderStatus.Text = "Preparing interface"
     UI.LoaderStatus.TextColor3 = tokens.TextSecondary
     UI.LoaderStatus.TextSize = 18
     UI.LoaderStatus.TextTransparency = 1
@@ -2132,7 +2167,7 @@ do
     end
 end
 
-UI.ReportLoading(0.06, "Core · tema, ikon ve loader hazır")
+UI.ReportLoading(0.06, "Core · theme, icons and loader ready")
 
 local TopBar = Instance.new("Frame")
 TopBar.Name = "CategoryBar"
@@ -2397,61 +2432,11 @@ do
     end)
 end
 
-local StatsPanel = Instance.new("CanvasGroup")
-StatsPanel.Name = "TasuHubStats"
-StatsPanel.BackgroundColor3 = Theme.Surface
-StatsPanel.BackgroundTransparency = 0.08
-StatsPanel.GroupTransparency = 1
-StatsPanel.ClipsDescendants = true
-StatsPanel.Position = UDim2.fromOffset(24, 120)
-StatsPanel.Size = UDim2.fromOffset(190, 92)
-StatsPanel.Visible = false
-StatsPanel.ZIndex = 30
-StatsPanel.Parent = LegacyUIRoot
-UI.BindTheme(StatsPanel, "BackgroundColor3", "Surface")
-round(StatsPanel, 12)
-gradient(StatsPanel, "Surface", "Surface2", 90)
-addShadow(StatsPanel, 0.7)
-local StatsTitle = textLabel(StatsPanel, "TasuHub Stats", UDim2.new(1, -34, 0, 30), UDim2.fromOffset(10, 2), 16, Theme.Text)
-StatsTitle.FontFace = UI.Fonts.HeadingHeavy
-StatsTitle.ZIndex = 31
-local StatsClose = button(StatsPanel, "×", UDim2.fromOffset(26, 24), UDim2.new(1, -29, 0, 3))
-StatsClose.ZIndex = 31
-StatsClose.TextSize = 17
-local StatsBody = textLabel(StatsPanel, "", UDim2.new(1, -20, 1, -34), UDim2.fromOffset(10, 31), 14, Theme.Text)
-StatsBody.FontFace = UI.Fonts.Description
-StatsBody.TextYAlignment = Enum.TextYAlignment.Top
-StatsBody.ZIndex = 31
-local StatsScale = Instance.new("UIScale")
-StatsScale.Parent = StatsPanel
-makeDraggable(StatsPanel, StatsTitle)
-local statsTransition = 0
 UI.RefreshStatsWindow = function()
-    if not UI.LegacyUIEnabled then
-        StatsPanel.Visible = false
-        return
-    end
-    statsTransition = statsTransition + 1
-    local revision = statsTransition
-    if State.Stats.Visible then
-        StatsPanel.Visible = true
-        StatsPanel.GroupTransparency = 1
-        StatsScale.Scale = 0.9
-        animate(StatsPanel, {GroupTransparency = 0}, 0.28, Enum.EasingStyle.Quint)
-        animate(StatsScale, {Scale = 1}, 0.32, Enum.EasingStyle.Quint)
-    else
-        animate(StatsPanel, {GroupTransparency = 1}, 0.22, Enum.EasingStyle.Quint)
-        animate(StatsScale, {Scale = 0.92}, 0.22, Enum.EasingStyle.Quint)
-        task.delay(0.23, function()
-            if revision == statsTransition and not State.Stats.Visible and StatsPanel.Parent then StatsPanel.Visible = false end
-        end)
+    if UI.MainMenuController and type(UI.MainMenuController.Refresh) == "function" then
+        pcall(UI.MainMenuController.Refresh)
     end
 end
-StatsClose.Activated:Connect(function()
-    State.Stats.Visible = false
-    UI.RefreshStatsWindow()
-    UI.RefreshControls()
-end)
 local statsElapsed, statsFrames, statsFPS = 0, 0, 0
 trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
     statsElapsed = statsElapsed + deltaTime
@@ -2460,22 +2445,24 @@ trackConnection(RunService.RenderStepped:Connect(function(deltaTime)
     statsFPS = math.floor(statsFrames / statsElapsed + 0.5)
     statsElapsed, statsFrames = 0, 0
     if not State.Stats.Visible then return end
-    local lines = {}
-    if State.Stats.FPS then table.insert(lines, "FPS   " .. tostring(statsFPS)) end
-    if State.Stats.Ping then
-        local ok, ping = pcall(function() return LocalPlayer:GetNetworkPing() * 1000 end)
-        table.insert(lines, "PING  " .. (ok and string.format("%.0f ms", ping) or "n/a"))
+    local pingOk, ping = pcall(function() return LocalPlayer:GetNetworkPing() * 1000 end)
+    local memoryOk, memory = pcall(function() return StatsService:GetTotalMemoryUsageMb() end)
+    UI.StatsSnapshot = {
+        FPS = statsFPS,
+        Ping = pingOk and ping or nil,
+        PlayerCount = #Players:GetPlayers(),
+        Memory = memoryOk and memory or nil,
+        ShowFPS = State.Stats.FPS == true,
+        ShowPing = State.Stats.Ping == true,
+        ShowPlayerCount = State.Stats.Players == true,
+        ShowMemory = State.Stats.Memory == true
+    }
+    for callback in pairs(UI.StatsSubscribers) do
+        task.spawn(function() pcall(callback, deepCopy(UI.StatsSnapshot)) end)
     end
-    if State.Stats.Players then table.insert(lines, "PLAYERS  " .. tostring(#Players:GetPlayers())) end
-    if State.Stats.Memory then
-        local ok, memory = pcall(function() return StatsService:GetTotalMemoryUsageMb() end)
-        table.insert(lines, "MEMORY  " .. (ok and string.format("%.0f MB", memory) or "n/a"))
-    end
-    StatsBody.Text = table.concat(lines, "\n")
-    StatsPanel.Size = UDim2.fromOffset(190, 38 + math.max(1, #lines) * 18)
 end))
 
-UI.ReportLoading(0.18, "UI · pencere ve durum bileşenleri hazır")
+UI.ReportLoading(0.18, "UI · window and status components ready")
 
 local topBarCollapsed = false
 local topBarTransition = 0
@@ -2724,55 +2711,6 @@ local function addAction(card, text, callback)
         end
     })
     return item
-end
-
-local function addInput(card, placeholder, defaultText, callback, multiLine)
-    resetCompactRow(card)
-    local input = Instance.new("TextBox")
-    input.BackgroundColor3 = Theme.Surface2
-    input.BackgroundTransparency = 0.06
-    input.ClearTextOnFocus = false
-    input.PlaceholderText = placeholder
-    input.PlaceholderColor3 = Theme.Muted
-    input.Text = defaultText or ""
-    input.TextColor3 = Theme.Text
-    input.TextSize = 17
-    input.FontFace = UI.Fonts.Option
-    input.TextXAlignment = Enum.TextXAlignment.Left
-    input.MultiLine = multiLine or false
-    input.TextWrapped = multiLine or false
-    input.Size = UDim2.new(1, 0, 0, multiLine and 76 or 36)
-    input.Parent = card
-    UI.BindTheme(input, "BackgroundColor3", "Surface2")
-    UI.BindTheme(input, "TextColor3", "Text")
-    UI.BindTheme(input, "PlaceholderColor3", "Muted")
-    round(input, 8)
-    gradient(input, "Surface", "Surface2", 90)
-    local padding = Instance.new("UIPadding")
-    padding.PaddingLeft = UDim.new(0, 8)
-    padding.PaddingRight = UDim.new(0, 8)
-    padding.Parent = input
-    if callback then
-        input.FocusLost:Connect(function(enterPressed)
-            pcall(callback, input.Text, enterPressed, input)
-        end)
-    end
-    local flag = UI.ControlFlag(card, placeholder)
-    UI.Register(flag, {
-        Kind = "Input",
-        DisplayLabel = placeholder,
-        Set = function(_, value)
-            input.Text = tostring(value or "")
-            if callback then
-                pcall(callback, input.Text, false, input)
-            end
-        end,
-        Get = function()
-            return input.Text
-        end,
-        Instance = input
-    })
-    return input
 end
 
 local pendingKeybind
@@ -3707,10 +3645,10 @@ for index, name in ipairs(categories) do
     end)
 end
 
-UI.ReportLoading(0.25, "Categories · 9 kategori sayfası hazır")
+UI.ReportLoading(0.25, "Categories · navigation pages ready")
 
 UI.SetCategoryIcon = function(category, url, background)
-    if not categoryButtons[category] then return false end
+    if UI.CategoryIconUrls[category] == nil then return false end
     UI.CategoryIconUrls[category] = tostring(url or "")
     if background ~= nil then
         UI.CategoryIconBackgrounds[category] = background
@@ -3720,11 +3658,14 @@ UI.SetCategoryIcon = function(category, url, background)
             UI.ApplyCategoryIcon(target, category, UI.CategoryIconUrls[category])
         end
     end
+    if UI.MainMenuController and type(UI.MainMenuController.SetCategoryIcon) == "function" then
+        UI.MainMenuController.SetCategoryIcon(category, UI.ResolveCategoryIconAsset(category))
+    end
     return true
 end
 
 UI.SetCategoryIconBackground = function(category, background)
-    if not categoryButtons[category] then return false end
+    if UI.CategoryIconBackgrounds[category] == nil then return false end
     if typeof(background) ~= "Color3" and (type(background) ~= "string" or Theme[background] == nil) then
         return false
     end
@@ -3778,7 +3719,7 @@ UI.GlobalSearchListPadding.PaddingTop = UDim.new(0, 6)
 UI.GlobalSearchListPadding.PaddingBottom = UDim.new(0, 6)
 UI.GlobalSearchListPadding.Parent = UI.GlobalSearchList
 
-UI.ReportLoading(0.3, "Search · indeks ve sonuç görünümü bağlanıyor")
+UI.ReportLoading(0.3, "Search · connecting index and results")
 
 local windowTransition = 0
 
@@ -4123,8 +4064,14 @@ trackConnection(RunService.RenderStepped:Connect(function()
         keepGuiOnScreen(ContentWindow)
     end
 end))
+UI.SubscribeStats = function(callback)
+    if type(callback) ~= "function" then return nil end
+    UI.StatsSubscribers[callback] = true
+    task.defer(function() pcall(callback, deepCopy(UI.StatsSnapshot)) end)
+    return {Disconnect = function() UI.StatsSubscribers[callback] = nil end}
+end
 
-UI.ReportLoading(0.38, "Search · indeksleme ve gezinme sistemi hazır")
+UI.ReportLoading(0.38, "Search · indexing and navigation ready")
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.BackgroundTransparency = 1
@@ -4253,7 +4200,7 @@ trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
     end
 end))
 
-UI.ReportLoading(0.46, "Aim · hedefleme ve tahmin motoru hazır")
+UI.ReportLoading(0.46, "Aim · targeting and prediction ready")
 
 local espRecords = {}
 
@@ -4661,7 +4608,7 @@ end)
 
 trackConnection(Players.PlayerRemoving:Connect(destroyESP))
 
-UI.ReportLoading(0.54, "Visuals · ESP ve çizim motoru hazır")
+UI.ReportLoading(0.54, "Visuals · ESP and drawing engine ready")
 
 local freecamState
 local FREECAM_SINK_ACTION = "TasuHubFreecamMovementSink"
@@ -5252,7 +5199,9 @@ trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
         if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.yAxis end
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then direction = direction - Vector3.yAxis end
         if direction.Magnitude > 0 then
-            freecamState.Position = freecamState.Position + direction.Unit * State.World.FreecamSpeed * 60 * deltaTime
+            local validatedSpeed = math.clamp(tonumber(State.World.FreecamSpeed) or Defaults.World.FreecamSpeed, 0.2, 50)
+            State.World.FreecamSpeed = validatedSpeed
+            freecamState.Position = freecamState.Position + direction.Unit * validatedSpeed * 60 * deltaTime
         end
         camera.CFrame = CFrame.new(freecamState.Position) * rotation
     elseif freecamState then
@@ -5470,7 +5419,7 @@ trackConnection(Workspace.DescendantAdded:Connect(function(object)
     end
 end))
 
-UI.ReportLoading(0.6, "Runtime · hareket ve dünya motorları hazır")
+UI.ReportLoading(0.6, "Runtime · movement and world engines ready")
 
 local function applyWorld()
     if State.World.Fullbright then
@@ -5497,37 +5446,39 @@ local function applyWorld()
     local worldRGB = State.World.RGB.World.Enabled or lightingMode == "RGB Vision"
     colorCorrection.Enabled = lightingMode ~= "Default" or worldRGB
     bloom.Enabled = lightingMode == "Glow" or lightingMode == "Neon Glow" or worldRGB
-    if worldRGB then
-        bloom.Intensity = State.World.GlowIntensity * 0.65
-        bloom.Size = 28
-        bloom.Threshold = 0.9
-        colorCorrection.TintColor = getRGBColor("World", 0)
-        colorCorrection.Brightness = 0.04
-        colorCorrection.Contrast = 0.08
-        colorCorrection.Saturation = 0.28
-    elseif lightingMode == "Glow" then
+    if lightingMode == "Glow" then
         bloom.Intensity = State.World.GlowIntensity
         bloom.Size = 36
         bloom.Threshold = 0.78
-        colorCorrection.TintColor = Color3.new(1, 1, 1)
-        colorCorrection.Brightness = 0.08
-        colorCorrection.Contrast = 0.14
-        colorCorrection.Saturation = 0.18
     elseif lightingMode == "Neon Glow" then
         bloom.Intensity = State.World.NeonIntensity
         bloom.Size = State.World.NeonSize
         bloom.Threshold = State.World.NeonThreshold
-        colorCorrection.TintColor = Color3.new(1, 1, 1)
+    elseif worldRGB then
+        bloom.Intensity = State.World.GlowIntensity * 0.65
+        bloom.Size = 28
+        bloom.Threshold = 0.9
+    end
+    colorCorrection.TintColor = worldRGB
+        and getRGBColor("World", 0)
+        or (lightingMode == "Manual" and Color3.fromRGB(State.World.ManualRed, State.World.ManualGreen, State.World.ManualBlue) or Color3.new(1, 1, 1))
+    if lightingMode == "Glow" then
+        colorCorrection.Brightness = 0.08
+        colorCorrection.Contrast = 0.14
+        colorCorrection.Saturation = 0.18
+    elseif lightingMode == "Neon Glow" then
         colorCorrection.Brightness = 0.1
         colorCorrection.Contrast = 0.24
         colorCorrection.Saturation = 0.5
     elseif lightingMode == "Manual" then
-        colorCorrection.TintColor = Color3.fromRGB(State.World.ManualRed, State.World.ManualGreen, State.World.ManualBlue)
         colorCorrection.Brightness = State.World.ManualBrightness
         colorCorrection.Contrast = State.World.ManualContrast
         colorCorrection.Saturation = State.World.ManualSaturation
+    elseif worldRGB then
+        colorCorrection.Brightness = 0.04
+        colorCorrection.Contrast = 0.08
+        colorCorrection.Saturation = 0.28
     else
-        colorCorrection.TintColor = Color3.new(1, 1, 1)
         colorCorrection.Brightness = 0
         colorCorrection.Contrast = 0
         colorCorrection.Saturation = 0
@@ -5541,7 +5492,7 @@ local function applyWorld()
 end
 
 do
-UI.ReportLoading(0.64, "Categories · özellik panelleri oluşturuluyor")
+UI.ReportLoading(0.64, "Categories · building feature panels")
 
 local HomePage = pages.Home
 local HomeCard = UI.AddAccordion(HomePage, "TasuHub", true)
@@ -5553,14 +5504,21 @@ HomeSubtitle.TextSize = 16
 HomeSubtitle.FontFace = UI.Fonts.HomeRegular
 local StatsCard = createCard(HomePage, "Stats Overlay")
 StatsCard.Parent.LayoutOrder = 2
-addToggle(StatsCard, "Show Stats", function() return State.Stats.Visible end, function(value)
+local showStatsControl = addToggle(StatsCard, "Show Stats", function() return State.Stats.Visible end, function(value)
     State.Stats.Visible = value
     UI.RefreshStatsWindow()
 end)
-addToggle(StatsCard, "FPS", function() return State.Stats.FPS end, function(value) State.Stats.FPS = value end)
-addToggle(StatsCard, "Ping", function() return State.Stats.Ping end, function(value) State.Stats.Ping = value end)
-addToggle(StatsCard, "Player Count", function() return State.Stats.Players end, function(value) State.Stats.Players = value end)
-addToggle(StatsCard, "Memory", function() return State.Stats.Memory end, function(value) State.Stats.Memory = value end)
+showStatsControl.RegistrationOrder = 1
+local statsDetailControls = {
+    addToggle(StatsCard, "FPS", function() return State.Stats.FPS end, function(value) State.Stats.FPS = value end),
+    addToggle(StatsCard, "Ping", function() return State.Stats.Ping end, function(value) State.Stats.Ping = value end),
+    addToggle(StatsCard, "Player Count", function() return State.Stats.Players end, function(value) State.Stats.Players = value end),
+    addToggle(StatsCard, "Memory", function() return State.Stats.Memory end, function(value) State.Stats.Memory = value end)
+}
+for _, control in ipairs(statsDetailControls) do
+    control.VisibleWhen = "Home/Stats Overlay/Show Stats"
+    control.IsVisible = function() return State.Stats.Visible end
+end
 local StatusCard = UI.AddStaticCard(HomePage, "Live Session")
 StatusCard.Parent.LayoutOrder = 1
 local StatusText = addNote(StatusCard, "")
@@ -5990,7 +5948,7 @@ setupVisualPreview()
 
 end
 
-UI.ReportLoading(0.72, "Visuals · önizleme ve kontrol seçenekleri hazır")
+UI.ReportLoading(0.72, "Visuals · preview and controls ready")
 
 local MiscPage = pages.Misc
 do
@@ -6138,7 +6096,7 @@ addSlider(OrbitCard, "Feature Offset", 0, 10, function() return State.Movement.O
 end)
 end
 
-UI.ReportLoading(0.78, "Movement · hareket ve koruma özellikleri hazır")
+UI.ReportLoading(0.78, "Movement · mobility and protection ready")
 
 do
 local WorldPage = pages.World
@@ -6223,7 +6181,7 @@ addToggle(FreecamCard, "Freecam", function() return State.World.Freecam end, fun
     State.World.Freecam = value
     refreshControls()
 end, true)
-addSlider(FreecamCard, "Freecam Speed", 0.2, 8, function() return State.World.FreecamSpeed end, function(value) State.World.FreecamSpeed = value end, 1, function() return State.World.Freecam end)
+addSlider(FreecamCard, "Freecam Speed", 0.2, 50, function() return State.World.FreecamSpeed end, function(value) State.World.FreecamSpeed = math.clamp(value, 0.2, 50) end, 1, function() return State.World.Freecam end)
 local freecamTeleportButton = addAction(FreecamCard, "Teleport Player to Freecam", function()
     local camera = Workspace.CurrentCamera
     local _, _, root = getCharacter(LocalPlayer)
@@ -6375,193 +6333,9 @@ UI.Register("Misc/Waypoints/Delete Selected Waypoint", {Instance = UI.WaypointDe
 UI.RefreshWaypointList()
 end
 
-UI.ReportLoading(0.83, "World · ışık, kamera ve waypoint sistemi hazır")
+UI.ReportLoading(0.83, "World · lighting, camera and waypoints ready")
 
-do
-local PlayersPage = pages.Players
-PlayersPage.ScrollingEnabled = false
-PlayersPage.ScrollBarThickness = 0
-local PlayerCard = UI.AddStaticCard(PlayersPage, "Live Players")
-UI.AddDropdown(PlayerCard, "Sort Players", {"Nearest", "Name A-Z", "Health High-Low", "Health Low-High"}, function()
-    return State.Players.Sort
-end, function(value)
-    State.Players.Sort = value
-end, false)
-local playerSearch = addInput(PlayerCard, "Search username or display name", "")
-local PlayerList = Instance.new("ScrollingFrame")
-PlayerList.BackgroundColor3 = Theme.Surface2
-PlayerList.BackgroundTransparency = 0.2
-PlayerList.BorderSizePixel = 0
-PlayerList.ClipsDescendants = true
-PlayerList.Active = true
-PlayerList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-PlayerList.CanvasSize = UDim2.new()
-PlayerList.ScrollingDirection = Enum.ScrollingDirection.Y
-PlayerList.ScrollBarThickness = 4
-PlayerList.ScrollBarImageColor3 = Theme.Accent
-PlayerList.Size = UDim2.new(1, 0, 0, 220)
-PlayerList.Parent = PlayerCard
-round(PlayerList, 10)
-UI.BindTheme(PlayerList, "BackgroundColor3", "Surface2")
-UI.BindTheme(PlayerList, "ScrollBarImageColor3", "Accent")
-local PlayerListLayout = Instance.new("UIListLayout")
-PlayerListLayout.Padding = UDim.new(0, 5)
-PlayerListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-PlayerListLayout.Parent = PlayerList
-local PlayerListPadding = Instance.new("UIPadding")
-PlayerListPadding.PaddingLeft = UDim.new(0, 6)
-PlayerListPadding.PaddingRight = UDim.new(0, 6)
-PlayerListPadding.PaddingTop = UDim.new(0, 6)
-PlayerListPadding.PaddingBottom = UDim.new(0, 6)
-PlayerListPadding.Parent = PlayerList
-local playerRows = {}
-
-local function createPlayerRow(player)
-    local row = Instance.new("Frame")
-    row.Name = tostring(player.UserId)
-    row.BackgroundColor3 = Theme.Surface
-    row.BackgroundTransparency = 0.06
-    row.Size = UDim2.new(1, 0, 0, 42)
-    row.Parent = PlayerList
-    round(row, 9)
-    UI.BindTheme(row, "BackgroundColor3", "Surface")
-    local avatar = Instance.new("ImageLabel")
-    avatar.BackgroundColor3 = Theme.AccentSoft
-    avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=150&h=150"
-    avatar.Size = UDim2.fromOffset(32, 32)
-    avatar.Position = UDim2.fromOffset(6, 5)
-    avatar.Parent = row
-    UI.BindTheme(avatar, "BackgroundColor3", "AccentSoft")
-    round(avatar, 16)
-    local name = textLabel(row, player.DisplayName, UDim2.new(1, -312, 0, 19), UDim2.fromOffset(46, 3), 14, Theme.Text)
-    name.FontFace = UI.Fonts.Option
-    local details = textLabel(row, "", UDim2.new(1, -312, 0, 16), UDim2.fromOffset(46, 22), 12, Theme.Muted)
-    local healthTrack = Instance.new("Frame")
-    healthTrack.BackgroundColor3 = Color3.fromRGB(220, 234, 244)
-    healthTrack.Size = UDim2.fromOffset(94, 5)
-    healthTrack.Position = UDim2.new(1, -255, 0, 7)
-    healthTrack.Parent = row
-    UI.BindTheme(healthTrack, "BackgroundColor3", "Track")
-    round(healthTrack, 5)
-    local healthFill = Instance.new("Frame")
-    healthFill.BackgroundColor3 = Color3.fromRGB(93, 202, 133)
-    healthFill.Size = UDim2.fromScale(1, 1)
-    healthFill.Parent = healthTrack
-    round(healthFill, 5)
-    local healthText = textLabel(row, "", UDim2.fromOffset(94, 16), UDim2.new(1, -255, 0, 19), 12, Theme.Muted, Enum.TextXAlignment.Center)
-    local fling = button(row, "Fling", UDim2.fromOffset(62, 28), UDim2.new(1, -154, 0.5, -14))
-    local view = button(row, "◉", UDim2.fromOffset(48, 28), UDim2.new(1, -86, 0.5, -14))
-    local teleport = button(row, "TP", UDim2.fromOffset(30, 28), UDim2.new(1, -34, 0.5, -14))
-    fling.TextSize = 14
-    view.TextSize = 19
-    teleport.TextSize = 14
-    local flingIcon = UI.BindActionIcon(fling, "PlayerFling", nil, "      Fling")
-    flingIcon.Position = UDim2.fromOffset(14, 14)
-    flingIcon.Size = UDim2.fromOffset(16, 16)
-    local viewIcon = UI.BindActionIcon(view, "PlayerView")
-    local teleportIcon = UI.BindActionIcon(teleport, "PlayerTeleport")
-    teleportIcon.Size = UDim2.fromOffset(18, 18)
-    fling.Activated:Connect(function()
-        UI.FlingTarget(player, false)
-    end)
-    view.Activated:Connect(function()
-        local alive, _, humanoid = getAlive(player)
-        local camera = Workspace.CurrentCamera
-        if alive and camera then
-            if camera.CameraSubject == humanoid then
-                local _, localHumanoid = getCharacter(LocalPlayer)
-                if localHumanoid then camera.CameraSubject = localHumanoid end
-            else
-                camera.CameraSubject = humanoid
-            end
-            for rowPlayer, record in pairs(playerRows) do
-                local viewing = camera.CameraSubject == (rowPlayer.Character and rowPlayer.Character:FindFirstChildOfClass("Humanoid"))
-                record.View.Text = viewing and "■" or "◉"
-                if record.ViewIcon then
-                    local iconName = viewing and "PlayerStop" or "PlayerView"
-                    local url = UI.ActionIconUrls[iconName]
-                    record.ViewIcon.Image = UI.ActionIconAssets[iconName] or url
-                    record.ViewIcon.Visible = url ~= ""
-                    if url ~= "" then record.View.Text = "" end
-                end
-            end
-        end
-    end)
-    teleport.Activated:Connect(function()
-        local alive, _, _, targetRoot = getAlive(player)
-        local _, _, root = getCharacter(LocalPlayer)
-        if alive and root then root.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 4) end
-    end)
-    playerRows[player] = {Row = row, Name = name, Details = details, HealthFill = healthFill, HealthText = healthText, Fling = fling, View = view, ViewIcon = viewIcon}
-end
-
-local function refreshPlayerRows()
-    local query = string.lower(playerSearch.Text)
-    local _, _, localRoot = getCharacter(LocalPlayer)
-    local sortedPlayers = {}
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then table.insert(sortedPlayers, player) end
-    end
-    table.sort(sortedPlayers, function(first, second)
-        if State.Players.Sort == "Name A-Z" then
-            return string.lower(first.DisplayName) < string.lower(second.DisplayName)
-        end
-        local firstAlive, _, firstHumanoid, firstRoot = getAlive(first)
-        local secondAlive, _, secondHumanoid, secondRoot = getAlive(second)
-        if State.Players.Sort == "Health High-Low" or State.Players.Sort == "Health Low-High" then
-            local firstHealth = firstAlive and firstHumanoid.Health or 0
-            local secondHealth = secondAlive and secondHumanoid.Health or 0
-            if State.Players.Sort == "Health Low-High" then
-                return firstHealth < secondHealth
-            end
-            return firstHealth > secondHealth
-        end
-        local firstDistance = firstRoot and localRoot and (firstRoot.Position - localRoot.Position).Magnitude or math.huge
-        local secondDistance = secondRoot and localRoot and (secondRoot.Position - localRoot.Position).Magnitude or math.huge
-        return firstDistance < secondDistance
-    end)
-    for order, player in ipairs(sortedPlayers) do
-        if not playerRows[player] then createPlayerRow(player) end
-        local record = playerRows[player]
-        local matches = query == "" or string.find(string.lower(player.Name), query, 1, true) or string.find(string.lower(player.DisplayName), query, 1, true)
-        record.Row.LayoutOrder = order
-        record.Row.Visible = matches
-        if matches then
-            local alive, _, humanoid, root = getAlive(player)
-            local distance = root and localRoot and (root.Position - localRoot.Position).Magnitude or math.huge
-            local ratio = alive and math.clamp(humanoid.Health / math.max(1, humanoid.MaxHealth), 0, 1) or 0
-            record.Name.Text = player.DisplayName .. "  @" .. player.Name
-            record.Details.Text = string.format("%s  •  %.0f studs", areTeammates(player, LocalPlayer) and "Teammate" or "Other", distance)
-            record.HealthFill.Size = UDim2.fromScale(ratio, 1)
-            record.HealthText.Text = string.format("%.0f%%", ratio * 100)
-            local camera = Workspace.CurrentCamera
-            local viewing = camera and camera.CameraSubject == humanoid
-            local iconName = viewing and "PlayerStop" or "PlayerView"
-            local url = UI.ActionIconUrls[iconName]
-            record.ViewIcon.Image = UI.ActionIconAssets[iconName] or url
-            record.ViewIcon.Visible = url ~= ""
-            record.View.Text = url ~= "" and "" or (viewing and "■" or "◉")
-        end
-    end
-    for player, record in pairs(playerRows) do
-        if player.Parent ~= Players then
-            record.Row:Destroy()
-            playerRows[player] = nil
-        end
-    end
-end
-playerSearch.FocusLost:Connect(refreshPlayerRows)
-playerSearch:GetPropertyChangedSignal("Text"):Connect(refreshPlayerRows)
-local playerStatusClock = 0
-trackConnection(RunService.Heartbeat:Connect(function(deltaTime)
-    playerStatusClock = playerStatusClock + deltaTime
-    if playerStatusClock < 0.1 then return end
-    playerStatusClock = 0
-    refreshPlayerRows()
-end))
-end
-
-UI.ReportLoading(0.87, "Players · canlı oyuncu listeleme sistemi hazır")
+UI.ReportLoading(0.87, "Players · live player directory ready")
 
 local function sanitizeName(value)
     return string.gsub(tostring(value), "[^%w_%-]", "_")
@@ -6600,6 +6374,7 @@ end
 local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/mm2.lua"
 UI.GameCatalogModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/game_catalog.lua"
 UI.MainMenuModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/main_menu.lua"
+UI.PlayerServiceModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/player_service.lua"
 UI.CatalogExecutionLocks = {}
 
 UI.GetGameActionAnchorPoint = function(actionId)
@@ -6692,22 +6467,22 @@ end
 
 UI.ExecuteCatalogEntry = function(entry)
     if type(entry) ~= "table" then
-        return {Ok = false, Message = "Geçersiz katalog girdisi"}
+        return {Ok = false, Message = "Invalid catalog entry"}
     end
     local executionId = tostring(entry.BuiltInId or entry.Name or entry.PlaceId or "catalog-entry")
     if UI.CatalogExecutionLocks[executionId] then
-        return {Ok = false, Message = "Bu script zaten çalıştırılıyor"}
+        return {Ok = false, Message = "This script is already running"}
     end
     if entry.BuiltInId == "mm2" and game.PlaceId ~= entry.PlaceId then
-        return {Ok = false, Message = "Bu script yalnızca Murder Mystery 2 içinde çalışır"}
+        return {Ok = false, Message = "This script only runs in Murder Mystery 2"}
     end
     if not capabilities.LoadString then
-        return {Ok = false, Message = "Executor script derlemeyi desteklemiyor"}
+        return {Ok = false, Message = "Executor does not support script compilation"}
     end
     local source = entry.Source
     if not source or source == "" then
         if type(entry.Url) ~= "string" or not entry.Url:match("^https://") then
-            return {Ok = false, Message = "Geçerli bir HTTPS script kaynağı bulunamadı"}
+            return {Ok = false, Message = "No valid HTTPS script source was found"}
         end
         local remoteSource, requestError = httpGet(entry.Url)
         if type(remoteSource) ~= "string" or remoteSource == "" then
@@ -6719,12 +6494,12 @@ UI.ExecuteCatalogEntry = function(entry)
     local chunk, compileError = loadstring(source, "TasuCatalog:" .. tostring(entry.Name or executionId))
     if not chunk then
         UI.CatalogExecutionLocks[executionId] = nil
-        return {Ok = false, Message = "Derleme hatası: " .. tostring(compileError)}
+        return {Ok = false, Message = "Compile error: " .. tostring(compileError)}
     end
     local ok, runtimeResult = pcall(chunk)
     if not ok then
         UI.CatalogExecutionLocks[executionId] = nil
-        return {Ok = false, Message = "Çalışma hatası: " .. tostring(runtimeResult)}
+        return {Ok = false, Message = "Runtime error: " .. tostring(runtimeResult)}
     end
     local controller = type(runtimeResult) == "table" and runtimeResult or nil
     if not controller and entry.BuiltInId == "mm2" and type(env.TasuHubMM2) == "table" then
@@ -6737,13 +6512,13 @@ UI.ExecuteCatalogEntry = function(entry)
             UI.CatalogExecutionLocks[executionId] = nil
             local destroy = controller.Destroy or controller.Unload
             if type(destroy) == "function" then pcall(destroy) end
-            return {Ok = false, Message = registerError or "Oyun arayüzü kaydedilemedi"}
+            return {Ok = false, Message = registerError or "Game interface could not be registered"}
         end
         activate = registered
     end
     return {
         Ok = true,
-        Message = tostring(entry.Name or "Script") .. " çalıştırıldı",
+        Message = tostring(entry.Name or "Script") .. " launched",
         Activate = activate
     }
 end
@@ -7045,7 +6820,7 @@ updateCatalogStatus()
 end
 setupCatalog()
 
-UI.ReportLoading(0.9, "Catalog · script yükleme sistemi hazır")
+UI.ReportLoading(0.9, "Catalog · script loading system ready")
 
 local function configPayload()
     local payload = deepCopy(State)
@@ -7113,6 +6888,7 @@ local function loadConfig(name)
         )
     end
     merge(State, decoded)
+    State.World.FreecamSpeed = math.clamp(tonumber(State.World.FreecamSpeed) or Defaults.World.FreecamSpeed, 0.2, 50)
     State.Interface.RGBEnabled = nil
     State.Interface.RGBSpeed = nil
     State.Interface.RGBSaturation = nil
@@ -7139,7 +6915,7 @@ local function loadConfig(name)
     return true, path
 end
 
-UI.ReportLoading(0.92, "Configs · kayıt ve geri yükleme sistemi bağlanıyor")
+UI.ReportLoading(0.92, "Configs · connecting save and restore")
 
 local ConfigPage = pages.Configs
 do
@@ -7327,7 +7103,7 @@ end
 
 UI.RefreshConfigList()
 
-UI.ReportLoading(0.97, "Configs · dosya listesi ve modal hazır")
+UI.ReportLoading(0.97, "Configs · file list and modal ready")
 
 UI.SetUnloadIcon = function(url)
     UI.UnloadIconUrl = tostring(url or "")
@@ -7375,7 +7151,7 @@ do
         end
         local created, controller = pcall(module.Create, {
             Parent = InterfaceRoot,
-            Title = "Oyun Kataloğu",
+            Title = "Game Catalog",
             Theme = {
                 Base = UI.DesignTokens.Canvas,
                 Layer = UI.DesignTokens.Surface,
@@ -7447,8 +7223,76 @@ do
     UI.GameCatalogController, UI.GameCatalogError = loadGameCatalogController()
 end
 UI.ReportLoading(0.98, UI.GameCatalogController
-    and "Catalog · uzak oyun menüsü hazır"
-    or "Catalog · uzak oyun menüsü kullanılamıyor")
+    and "Catalog · remote game browser ready"
+    or "Catalog · remote game browser unavailable")
+
+UI.PlayerService, UI.PlayerServiceError = (function()
+    local function loadPlayerService()
+        if not capabilities.Http or not capabilities.LoadString then
+            return nil, "executor HTTP/loadstring capability is unavailable"
+        end
+        local source, requestError = httpGet(UI.PlayerServiceModuleUrl)
+        if type(source) ~= "string" or source == "" then
+            return nil, requestError or "player service module could not be downloaded"
+        end
+        local chunk, compileError = loadstring(source, "@TasuHub/player_service.lua")
+        if not chunk then return nil, "player service module compile error: " .. tostring(compileError) end
+        local loaded, module = pcall(chunk)
+        if not loaded then return nil, "player service module runtime error: " .. tostring(module) end
+        if type(module) ~= "table" or module.Version ~= 1 or type(module.Create) ~= "function" then
+            return nil, "player service module contract/version mismatch"
+        end
+        local created, controller = pcall(module.Create, {
+            Players = Players,
+            LocalPlayer = LocalPlayer,
+            Workspace = Workspace,
+            RunService = RunService,
+            PathfindingService = game:GetService("PathfindingService"),
+            RouteColor = UI.DesignTokens.TextPrimary,
+            TrackConnection = trackConnection,
+            ResolveGlobal = resolveGlobal,
+            GetFlingPower = function() return State.Movement.FlingPower end,
+            BeforeExclusiveAction = function()
+                local token = {
+                    Fly = State.Movement.Fly,
+                    Orbit = State.Movement.Orbit,
+                    Fling = State.Movement.Fling,
+                    AntiFling = State.Movement.AntiFling
+                }
+                State.Movement.Fly = false
+                State.Movement.Orbit = false
+                State.Movement.Fling = false
+                State.Movement.AntiFling = false
+                clearFlyController()
+                clearOrbitMotion()
+                clearFlingState()
+                UI.ClearAntiFlingState()
+                return token
+            end,
+            AfterExclusiveAction = function(_, token)
+                if unloaded or type(token) ~= "table" then return end
+                State.Movement.Fly = token.Fly == true
+                State.Movement.Orbit = token.Orbit == true
+                State.Movement.Fling = token.Fling == true
+                State.Movement.AntiFling = token.AntiFling == true
+                refreshControls()
+            end
+        })
+        if not created or type(controller) ~= "table" or type(controller.GetSnapshot) ~= "function" then
+            return nil, "player service controller creation failed: " .. tostring(controller)
+        end
+        return controller
+    end
+    return loadPlayerService()
+end)()
+if UI.PlayerService then
+    UI.FlingTarget = function(player)
+        return UI.PlayerService.Fling(player and player.UserId)
+    end
+end
+UI.ReportLoading(0.982, UI.PlayerService
+    and "Players · live actions and pathfinding ready"
+    or "Players · service unavailable")
 
 UI.MainMenuController, UI.MainMenuError = (function()
     local mainCategories = {
@@ -7458,6 +7302,7 @@ UI.MainMenuController, UI.MainMenuError = (function()
         Aim = true,
         Movement = true,
         World = true,
+        Lighting = true,
         Misc = true,
         Configs = true
     }
@@ -7481,17 +7326,23 @@ UI.MainMenuController, UI.MainMenuError = (function()
         local entries = {}
         for flag, control in pairs(UI.Controls) do
             local category, section, label = string.match(tostring(flag), "^([^/]+)/([^/]+)/(.+)$")
-            if category and section and label and mainCategories[category] and type(control.Kind) == "string" and control.Kind ~= "Color" then
+            local mainCategory = (category == "World" and (section == "Lighting" or section == "RGB Effects")) and "Lighting" or category
+            if category and section and label and mainCategories[mainCategory] and type(control.Kind) == "string" and control.Kind ~= "Color" then
                 table.insert(entries, {
                     Flag = tostring(flag),
-                    Category = category,
+                    Category = mainCategory,
                     Section = section,
                     Label = tostring(control.DisplayLabel or label),
                     Kind = control.Kind,
                     Minimum = control.Minimum,
                     Maximum = control.Maximum,
                     Decimals = control.Decimals,
-                    Multiple = control.Multiple == true
+                    Multiple = control.Multiple == true,
+                    RegistrationOrder = control.RegistrationOrder,
+                    Order = control.RegistrationOrder,
+                    SectionOrder = control.SectionOrder,
+                    MainCategory = mainCategory,
+                    VisibleWhen = control.VisibleWhen
                 })
             end
         end
@@ -7518,7 +7369,7 @@ UI.MainMenuController, UI.MainMenuError = (function()
         if not loaded then
             return nil, "main menu module runtime error: " .. tostring(module)
         end
-        if type(module) ~= "table" or module.Version ~= 1 or type(module.Create) ~= "function" then
+        if type(module) ~= "table" or module.Version ~= 2 or type(module.Create) ~= "function" then
             return nil, "main menu module contract/version mismatch"
         end
         local created, controller = pcall(module.Create, {
@@ -7567,7 +7418,24 @@ UI.MainMenuController, UI.MainMenuError = (function()
             InputService = UserInputService,
             GetAnchorPoint = getMainAnchorPoint,
             GetViewportSize = getCanvasSize,
+            GetCategoryIcon = UI.ResolveCategoryIconAsset,
             GetIndexEntries = getMainIndexEntries,
+            GetPlayerSnapshot = function(query, sortMode)
+                return UI.PlayerService and UI.PlayerService.GetSnapshot(query, sortMode) or {}
+            end,
+            GetPlayerSort = function() return State.Players.Sort end,
+            SetPlayerSort = function(value) State.Players.Sort = tostring(value or "Nearest") end,
+            SubscribePlayers = function(callback)
+                return UI.PlayerService and UI.PlayerService.Subscribe(callback) or nil
+            end,
+            PlayerAction = function(action, userId)
+                if not UI.PlayerService then return false, UI.PlayerServiceError or "Player service unavailable" end
+                local handler = UI.PlayerService[action]
+                if type(handler) ~= "function" then return false, "Unknown player action" end
+                return handler(userId)
+            end,
+            GetStatsSnapshot = function() return deepCopy(UI.StatsSnapshot) end,
+            SubscribeStats = UI.SubscribeStats,
             GetControlValue = function(flag)
                 local control = getMainControl(flag)
                 if not control or type(control.Get) ~= "function" then return nil end
@@ -7612,8 +7480,8 @@ UI.MainMenuController, UI.MainMenuError = (function()
     return loadMainMenuController()
 end)()
 UI.ReportLoading(0.985, UI.MainMenuController
-    and "Main UI · kategori ve arama menüsü hazır"
-    or "Main UI · genel menü kullanılamıyor")
+    and "Main UI · navigation and search ready"
+    or "Main UI · general menu unavailable")
 
 unload = function()
     if unloaded then return end
@@ -7627,6 +7495,11 @@ unload = function()
         pcall(UI.MainMenuController.Destroy)
         UI.MainMenuController = nil
     end
+    if UI.PlayerService and type(UI.PlayerService.Destroy) == "function" then
+        pcall(UI.PlayerService.Destroy)
+        UI.PlayerService = nil
+    end
+    table.clear(UI.StatsSubscribers)
     if UI.GameCatalogController and type(UI.GameCatalogController.Destroy) == "function" then
         pcall(UI.GameCatalogController.Destroy)
         UI.GameCatalogController = nil
@@ -7756,7 +7629,7 @@ env.TasuHub = {
     Unload = unload
 }
 
-UI.ReportLoading(0.99, "Runtime · executor API ve cleanup hazır")
+UI.ReportLoading(0.99, "Runtime · executor API and cleanup ready")
 
 UI.SetLoading(1)
 UI.WaitForLoadingCheckpoints(UI.DesignTokens.LoaderCheckpointCount)
@@ -7778,7 +7651,7 @@ local loaderBarCompleteTween = animate(UI.LoaderBarScale, {
 }, UI.DesignTokens.MotionLoaderComplete, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 loaderBarCompleteTween.Completed:Wait()
 UI.LoaderBar.Visible = false
-UI.LoaderStatus.Text = "Herşey Hazır!"
+UI.LoaderStatus.Text = "Everything Ready!"
 UI.LoaderStatus.FontFace = UI.Fonts.HeadingBlack
 UI.LoaderStatus.TextTransparency = 1
 UI.PlaySound("PopIn", {PlaybackSpeed = UI.DesignTokens.LoaderReadySoundPlaybackSpeed})
@@ -7807,7 +7680,6 @@ UI.Loader.Visible = false
 if UI.LoaderBlur then UI.LoaderBlur:Destroy() end
 TopBar.Visible = false
 ContentWindow.Visible = false
-StatsPanel.Visible = false
 Toast.Visible = false
 UI.Ready = true
 if UI.Loader then UI.Loader:Destroy() end

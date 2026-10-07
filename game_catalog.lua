@@ -210,7 +210,7 @@ function CatalogModule.Create(context)
     title.FontFace = fonts.HeadingBlack
     title.Position = UDim2.fromScale(0.5, 0.5)
     title.Size = UDim2.fromOffset(220, layout.HeaderHeight)
-    title.Text = context.Title or "Oyun Kataloğu"
+    title.Text = context.Title or "Game Catalog"
     title.TextColor3 = theme.Signal
     title.TextSize = 22
     title.TextXAlignment = Enum.TextXAlignment.Center
@@ -371,7 +371,7 @@ function CatalogModule.Create(context)
     emptyLabel.FontFace = fonts.HeadingHeavy
     emptyLabel.Position = UDim2.fromScale(0.1, 0.4)
     emptyLabel.Size = UDim2.fromScale(0.8, 0.14)
-    emptyLabel.Text = "Sonuç bulunamadı"
+    emptyLabel.Text = "No results found"
     emptyLabel.TextColor3 = theme.Signal
     emptyLabel.TextSize = 19
     emptyLabel.TextTransparency = 0.28
@@ -462,7 +462,7 @@ function CatalogModule.Create(context)
     drawerHeading.FontFace = fonts.HeadingBlack
     drawerHeading.Position = UDim2.fromOffset(16, 0)
     drawerHeading.Size = UDim2.new(1, -72, 1, 0)
-    drawerHeading.Text = "Filtreler"
+    drawerHeading.Text = "Filters"
     drawerHeading.TextColor3 = theme.Signal
     drawerHeading.TextSize = 18
     drawerHeading.TextXAlignment = Enum.TextXAlignment.Left
@@ -591,12 +591,12 @@ function CatalogModule.Create(context)
         render(true)
     end
 
-    createDrawerSwitch("ShowAllScripts", "Tümünü Göster", 10, function()
+    createDrawerSwitch("ShowAllScripts", "Show All", 10, function()
         return showAllScripts
     end, function(value)
         showAllScripts = value
     end, false)
-    createDrawerSwitch("FavoritesOnly", "Favoriler", 10 + drawerRowHeight + 8, function()
+    createDrawerSwitch("FavoritesOnly", "Favorites", 10 + drawerRowHeight + 8, function()
         return favoritesOnly
     end, function(value)
         favoritesOnly = value
@@ -608,7 +608,7 @@ function CatalogModule.Create(context)
     featureHeading.FontFace = fonts.HeadingBlack
     featureHeading.Position = UDim2.fromOffset(16, featureHeadingY)
     featureHeading.Size = UDim2.new(1, -32, 0, 28)
-    featureHeading.Text = "İçerik"
+    featureHeading.Text = "Features"
     featureHeading.TextColor3 = theme.Signal
     featureHeading.TextSize = 14
     featureHeading.TextTransparency = 0.18
@@ -895,7 +895,7 @@ function CatalogModule.Create(context)
         fallbackText.FontFace = fonts.HeadingHeavy
         fallbackText.Position = UDim2.fromScale(0.08, 0.1)
         fallbackText.Size = UDim2.fromScale(0.84, 0.72)
-        fallbackText.Text = tostring(entry.Name or "Oyun")
+        fallbackText.Text = tostring(entry.Name or "Game")
         fallbackText.TextColor3 = theme.Signal
         fallbackText.TextSize = 17
         fallbackText.TextTransparency = 0.24
@@ -1035,7 +1035,7 @@ function CatalogModule.Create(context)
         nameLabel.FontFace = fonts.HeadingBlack
         nameLabel.Position = UDim2.fromOffset(10, 8 + layout.CoverHeight + 10)
         nameLabel.Size = UDim2.new(1, -20, 0, 31)
-        nameLabel.Text = tostring(entry.Name or "Adsız Script")
+        nameLabel.Text = tostring(entry.Name or "Unnamed Script")
         nameLabel.TextColor3 = theme.Signal
         nameLabel.TextSize = 21
         nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -1096,7 +1096,7 @@ function CatalogModule.Create(context)
             if state ~= "Open" or filterOpen then return end
             if entry.Placeholder then
                 playSound("CatalogError")
-                local message = status == "Un-Supported" and (tostring(entry.Name) .. " henüz desteklenmiyor") or (tostring(entry.Name) .. " scripti henüz kataloğa eklenmedi")
+                local message = status == "Un-Supported" and (tostring(entry.Name) .. " is not supported yet") or (tostring(entry.Name) .. " has not been added to the catalog yet")
                 showOutcome(theme.Danger, true)
                 showToast(message, theme.Danger)
                 return
@@ -1104,7 +1104,7 @@ function CatalogModule.Create(context)
             if status == "Un-Supported" then
                 playSound("CatalogError")
                 showOutcome(theme.Danger, true)
-                showToast(tostring(entry.Name) .. " şu anda desteklenmiyor", theme.Danger)
+                showToast(tostring(entry.Name) .. " is currently unsupported", theme.Danger)
                 return
             end
             playSound("ButtonClick")
@@ -1113,7 +1113,7 @@ function CatalogModule.Create(context)
                 if destroyed or not card.Parent then return end
                 if result and result.Ok then
                     showOutcome(theme.Success, false)
-                    showToast(result.Message or (tostring(entry.Name) .. " çalıştırıldı"), theme.Success)
+                    showToast(result.Message or (tostring(entry.Name) .. " launched"), theme.Success)
                     local closing = close()
                     if type(result.Activate) == "function" then
                         task.delay(closing and motion.Close or 0, function()
@@ -1124,7 +1124,7 @@ function CatalogModule.Create(context)
                 else
                     playSound("CatalogError")
                     showOutcome(theme.Danger, true)
-                    showToast(result and result.Message or "Script çalıştırılamadı", theme.Danger)
+                    showToast(result and result.Message or "Script could not be launched", theme.Danger)
                 end
             end)
         end)

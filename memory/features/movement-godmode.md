@@ -8,4 +8,4 @@ Rework: document the exact executor/game limitations, isolate irreversible game-
 
 Executor checks: enable, damage, death, respawn, disable, game rejection, repeated execution, and unload.
 
-Main UI revision 1: the existing toggle is exposed through `Diğer`; the view makes no success claim and owns no humanoid mutation. Verify rejection and refresh remain truthful.
+Main UI revision 2: the existing toggle is exposed under `Misc`; the view makes no success claim and owns no humanoid mutation. Verify rejection and refresh remain truthful.

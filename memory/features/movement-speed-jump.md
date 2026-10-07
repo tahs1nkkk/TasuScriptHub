@@ -8,4 +8,4 @@ Rework: controller records original humanoid values, validates method/range, and
 
 Executor checks: every method, moving/stationary, slopes, seated state, respawn, conflicting game scripts, disable, and unload.
 
-Main UI revision 1: speed/jump controls are reconstructed in `Hareket`. Verify conditional rows, hotkey refresh, and restoration after closing/unloading the view.
+Main UI revision 2: speed/jump controls are reconstructed under `Movement`. Verify conditional rows, hotkey refresh, and restoration after closing/unloading the view.

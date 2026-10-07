@@ -1,14 +1,15 @@
-local MainMenuModule = {Version = 1}
+local MainMenuModule = {Version = 2}
 
 local CATEGORY_META = table.freeze({
-    table.freeze({Id = "Home", Label = "Ana Sayfa", Glyph = "⌂"}),
-    table.freeze({Id = "Players", Label = "Oyuncular", Glyph = "●●"}),
-    table.freeze({Id = "Visuals", Label = "Görseller", Glyph = "◉"}),
-    table.freeze({Id = "Aim", Label = "Nişan", Glyph = "⊕"}),
-    table.freeze({Id = "Movement", Label = "Hareket", Glyph = "➤"}),
-    table.freeze({Id = "World", Label = "Dünya", Glyph = "◇"}),
-    table.freeze({Id = "Misc", Label = "Diğer", Glyph = "✦"}),
-    table.freeze({Id = "Configs", Label = "Ayarlar", Glyph = "⚙"})
+    table.freeze({Id = "Home", Label = "Home", Glyph = "⌂"}),
+    table.freeze({Id = "Players", Label = "Players", Glyph = "●●"}),
+    table.freeze({Id = "Visuals", Label = "Visuals", Glyph = "◉"}),
+    table.freeze({Id = "Aim", Label = "Aim", Glyph = "⊕"}),
+    table.freeze({Id = "Movement", Label = "Movement", Glyph = "➤"}),
+    table.freeze({Id = "World", Label = "World", Glyph = "◇"}),
+    table.freeze({Id = "Lighting", Label = "Lighting", Glyph = "☼"}),
+    table.freeze({Id = "Misc", Label = "Misc", Glyph = "✦"}),
+    table.freeze({Id = "Configs", Label = "Configs", Glyph = "⚙"})
 })
 
 local CATEGORY_ORDER = {}
@@ -48,7 +49,7 @@ function MainMenuModule.Create(context)
     local trackConnection = context.TrackConnection or function(connection) return connection end
     local inputService = context.InputService
     local connections = {}
-    local pageConnections, searchConnections = {}, {}
+    local pageConnections, searchConnections, dropdownConnections = {}, {}, {}
     local destroyed, dragging = false, false
     local state, transitionRevision = "Closed", 0
     local pageRevision, searchShellRevision, searchResultsRevision = 0, 0, 0
@@ -56,9 +57,12 @@ function MainMenuModule.Create(context)
     local currentRenderers, currentRows = {}, {}
     local restingPosition, dragStart, dragWindowStart = nil, nil, nil
     local windowPixelSize = Vector2.new(layout.WindowWidth, layout.WindowHeight)
+    local responsiveScaleValue = 1
     local sidebarExpanded = true
     local searchOpen, searchPointerInside = false, false
     local activeSlider = nil
+    local sectionCollapsed, sectionRecords, categoryIconRecords = {}, {}, {}
+    local activeDropdown, playerSubscription, statsSubscription = nil, nil, nil
 
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
@@ -100,40 +104,43 @@ function MainMenuModule.Create(context)
     end
 
     local function displayValue(value)
-        if type(value) == "boolean" then return value and "Açık" or "Kapalı" end
+        if type(value) == "boolean" then return value and "On" or "Off" end
         if type(value) == "table" then
             local values = {}
             for _, item in ipairs(value) do table.insert(values, tostring(item)) end
-            return #values > 0 and table.concat(values, ", ") or "Yok"
+            return #values > 0 and table.concat(values, ", ") or "None"
         end
         if typeof(value) == "Color3" then
             return string.format("#%02X%02X%02X", math.round(value.R * 255), math.round(value.G * 255), math.round(value.B * 255))
         end
-        return tostring(value == nil and "Yok" or value)
+        return tostring(value == nil and "None" or value)
     end
 
     local function windowSize()
         local viewport = context.GetViewportSize()
-        return viewport, Vector2.new(
-            math.min(layout.WindowWidth, math.max(420, viewport.X - layout.ViewportInset * 2)),
-            math.min(layout.WindowHeight, math.max(360, viewport.Y - layout.ViewportInset * 2))
+        local scale = math.min(1,
+            math.max(0.1, (viewport.X - layout.ViewportInset * 2) / layout.WindowWidth),
+            math.max(0.1, (viewport.Y - layout.ViewportInset * 2) / layout.WindowHeight)
         )
+        return viewport, Vector2.new(layout.WindowWidth, layout.WindowHeight), scale
     end
 
-    local function clampCenter(point, size, viewport)
-        local margin, halfX, halfY = layout.ViewportInset, size.X * 0.5, size.Y * 0.5
-        local minX, maxX = halfX + margin, viewport.X - halfX - margin
-        local minY, maxY = halfY + margin, viewport.Y - halfY - margin
-        if minX > maxX then minX, maxX = viewport.X * 0.5, viewport.X * 0.5 end
-        if minY > maxY then minY, maxY = viewport.Y * 0.5, viewport.Y * 0.5 end
-        return Vector2.new(math.clamp(point.X, minX, maxX), math.clamp(point.Y, minY, maxY))
+    local function visibleRatio(point, size, viewport)
+        local left, right = point.X - size.X * 0.5, point.X + size.X * 0.5
+        local top, bottom = point.Y - size.Y * 0.5, point.Y + size.Y * 0.5
+        local visibleWidth = math.max(0, math.min(right, viewport.X) - math.max(left, 0))
+        local visibleHeight = math.max(0, math.min(bottom, viewport.Y) - math.max(top, 0))
+        return (visibleWidth * visibleHeight) / math.max(1, size.X * size.Y)
     end
 
     local function targetGeometry()
-        local viewport, size = windowSize()
-        windowPixelSize = size
-        restingPosition = clampCenter(restingPosition or viewport * 0.5, size, viewport)
-        return viewport, size, restingPosition
+        local viewport, size, scale = windowSize()
+        responsiveScaleValue = scale
+        windowPixelSize = size * scale
+        local center = restingPosition or viewport * 0.5
+        if visibleRatio(center, windowPixelSize, viewport) < 0.5 then center = viewport * 0.5 end
+        restingPosition = center
+        return viewport, size, center, scale
     end
 
     local root = Instance.new("Frame")
@@ -277,7 +284,7 @@ function MainMenuModule.Create(context)
     searchBox.ClearTextOnFocus = false
     searchBox.FontFace = fonts.Body
     searchBox.PlaceholderColor3 = theme.Signal
-    searchBox.PlaceholderText = "Ara..."
+    searchBox.PlaceholderText = "Search..."
     searchBox.Size = UDim2.new(1, -48, 1, 0)
     searchBox.Text = ""
     searchBox.TextColor3 = theme.Signal
@@ -364,6 +371,13 @@ function MainMenuModule.Create(context)
     sidebarEdge.ZIndex = 4005
     sidebarEdge.Parent = sidebar
 
+    hamburger.Parent = sidebar
+    hamburger.Position = UDim2.fromOffset(16, 10)
+    hamburger.ZIndex = 4010
+    for _, child in ipairs(hamburger:GetChildren()) do
+        if child:IsA("GuiObject") then child.ZIndex = 4011 end
+    end
+
     local navScroll = Instance.new("ScrollingFrame")
     navScroll.Name = "Categories"
     navScroll.Active = true
@@ -371,11 +385,11 @@ function MainMenuModule.Create(context)
     navScroll.BackgroundTransparency = 1
     navScroll.BorderSizePixel = 0
     navScroll.CanvasSize = UDim2.new()
-    navScroll.Position = UDim2.fromOffset(0, 10)
+    navScroll.Position = UDim2.fromOffset(0, 62)
     navScroll.ScrollBarImageColor3 = theme.Signal
     navScroll.ScrollBarImageTransparency = 0.55
     navScroll.ScrollBarThickness = 2
-    navScroll.Size = UDim2.new(1, 0, 1, -20)
+    navScroll.Size = UDim2.new(1, 0, 1, -72)
     navScroll.ZIndex = 4005
     navScroll.Parent = sidebar
     local navLayout = Instance.new("UIListLayout")
@@ -432,6 +446,114 @@ function MainMenuModule.Create(context)
     searchListPadding.PaddingBottom = UDim.new(0, 7)
     searchListPadding.Parent = searchList
 
+    local dropdownDismiss = Instance.new("TextButton")
+    dropdownDismiss.Name = "DropdownDismiss"
+    dropdownDismiss.AutoButtonColor = false
+    dropdownDismiss.BackgroundTransparency = 1
+    dropdownDismiss.BorderSizePixel = 0
+    dropdownDismiss.Size = UDim2.fromScale(1, 1)
+    dropdownDismiss.Text = ""
+    dropdownDismiss.Visible = false
+    dropdownDismiss.ZIndex = 4040
+    dropdownDismiss.Parent = body
+
+    local dropdownPanel = Instance.new("CanvasGroup")
+    dropdownPanel.Name = "DropdownList"
+    dropdownPanel.BackgroundColor3 = theme.Base
+    dropdownPanel.BackgroundTransparency = 0.03
+    dropdownPanel.BorderSizePixel = 0
+    dropdownPanel.ClipsDescendants = true
+    dropdownPanel.GroupTransparency = 1
+    dropdownPanel.Size = UDim2.fromOffset(220, 0)
+    dropdownPanel.Visible = false
+    dropdownPanel.ZIndex = 4041
+    dropdownPanel.Parent = body
+    round(dropdownPanel, 10)
+    outline(dropdownPanel, 2, 0.08)
+
+    local dropdownList = Instance.new("ScrollingFrame")
+    dropdownList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    dropdownList.BackgroundTransparency = 1
+    dropdownList.BorderSizePixel = 0
+    dropdownList.CanvasSize = UDim2.new()
+    dropdownList.ScrollBarImageColor3 = theme.Signal
+    dropdownList.ScrollBarImageTransparency = 0.42
+    dropdownList.ScrollBarThickness = 3
+    dropdownList.Size = UDim2.fromScale(1, 1)
+    dropdownList.ZIndex = 4042
+    dropdownList.Parent = dropdownPanel
+    local dropdownLayout = Instance.new("UIListLayout")
+    dropdownLayout.Padding = UDim.new(0, 4)
+    dropdownLayout.Parent = dropdownList
+    local dropdownPadding = Instance.new("UIPadding")
+    dropdownPadding.PaddingLeft = UDim.new(0, 6)
+    dropdownPadding.PaddingRight = UDim.new(0, 8)
+    dropdownPadding.PaddingTop = UDim.new(0, 6)
+    dropdownPadding.PaddingBottom = UDim.new(0, 6)
+    dropdownPadding.Parent = dropdownList
+
+    local function closeDropdown(instant)
+        activeDropdown = nil
+        clearScopedConnections(dropdownConnections)
+        dropdownDismiss.Visible = false
+        if instant then
+            dropdownPanel.Visible = false
+            dropdownPanel.GroupTransparency = 1
+            dropdownPanel.Size = UDim2.new(0, dropdownPanel.Size.X.Offset, 0, 0)
+        else
+            local width = dropdownPanel.Size.X.Offset
+            animate(dropdownPanel, {Size = UDim2.fromOffset(width, 0), GroupTransparency = 1}, motion.Control, Enum.EasingStyle.Quint)
+            task.delay(motion.Control, function()
+                if not destroyed and not activeDropdown then dropdownPanel.Visible = false end
+            end)
+        end
+    end
+
+    connect(dropdownDismiss.Activated, function() closeDropdown(false) end)
+
+    local function openDropdown(anchor, options, current, selectCallback)
+        closeDropdown(true)
+        if #options == 0 or not anchor or not anchor.Parent then return end
+        activeDropdown = anchor
+        for _, child in ipairs(dropdownList:GetChildren()) do
+            if child:IsA("TextButton") then child:Destroy() end
+        end
+        local scale = math.max(0.1, responsiveScaleValue)
+        local relative = (anchor.AbsolutePosition - body.AbsolutePosition) / scale
+        local width = math.max(180, anchor.AbsoluteSize.X / scale)
+        local height = math.min(238, #options * 38 + math.max(0, #options - 1) * 4 + 12)
+        local x = math.clamp(relative.X, 8, layout.WindowWidth - width - 8)
+        local preferredY = relative.Y + anchor.AbsoluteSize.Y / scale + 6
+        local y = preferredY + height <= layout.WindowHeight - layout.HeaderHeight - 8 and preferredY or math.max(8, relative.Y - height - 6)
+        dropdownPanel.Position = UDim2.fromOffset(x, y)
+        dropdownPanel.Size = UDim2.fromOffset(width, 0)
+        dropdownPanel.GroupTransparency = 1
+        dropdownPanel.Visible = true
+        dropdownDismiss.Visible = true
+        for index, option in ipairs(options) do
+            local button = Instance.new("TextButton")
+            button.AutoButtonColor = false
+            button.BackgroundColor3 = tostring(option.Value) == tostring(current) and theme.Signal or theme.Layer
+            button.BackgroundTransparency = tostring(option.Value) == tostring(current) and 0 or 0.12
+            button.BorderSizePixel = 0
+            button.FontFace = fonts.HeadingHeavy
+            button.LayoutOrder = index
+            button.Size = UDim2.new(1, -2, 0, 38)
+            button.Text = option.Label
+            button.TextColor3 = tostring(option.Value) == tostring(current) and theme.Base or theme.Signal
+            button.TextSize = 13
+            button.ZIndex = 4043
+            button.Parent = dropdownList
+            round(button, 8)
+            scopedConnect(dropdownConnections, button.Activated, function()
+                playSound("ButtonClick")
+                selectCallback(option.Value)
+                closeDropdown(false)
+            end)
+        end
+        animate(dropdownPanel, {Size = UDim2.fromOffset(width, height), GroupTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
+    end
+
     local indexEntries = copyArray(context.GetIndexEntries())
     table.sort(indexEntries, function(first, second)
         local leftOrder = CATEGORY_ORDER[first.Category] or 99
@@ -441,11 +563,12 @@ function MainMenuModule.Create(context)
         return tostring(first.Label) < tostring(second.Label)
     end)
 
-    local entriesByCategory = {}
+    local entriesByCategory, entryByFlag = {}, {}
     for _, entry in ipairs(indexEntries) do
         if CATEGORY_BY_ID[entry.Category] then
             entriesByCategory[entry.Category] = entriesByCategory[entry.Category] or {}
             table.insert(entriesByCategory[entry.Category], entry)
+            entryByFlag[entry.Flag] = entry
         end
     end
 
@@ -467,7 +590,32 @@ function MainMenuModule.Create(context)
         glyph.ZIndex = 4007
         glyph.Parent = parent
         round(glyph, 9)
-        return glyph
+        local image = Instance.new("ImageLabel")
+        image.Name = "CategoryImage"
+        image.BackgroundTransparency = 1
+        image.BorderSizePixel = 0
+        image.Position = UDim2.fromOffset(4, 4)
+        image.Size = UDim2.new(1, -8, 1, -8)
+        image.ScaleType = Enum.ScaleType.Fit
+        image.Visible = false
+        image.ZIndex = 4008
+        image.Parent = glyph
+        local iconOk, iconValue = false, ""
+        if type(context.GetCategoryIcon) == "function" then iconOk, iconValue = pcall(context.GetCategoryIcon, meta.Id) end
+        local resolved = iconOk and iconValue or ""
+        if type(resolved) == "string" and resolved ~= "" then
+            image.Image = resolved
+            image.Visible = true
+            glyph.TextTransparency = 1
+            task.delay(3, function()
+                if not destroyed and image.Parent and image.Image == resolved and not image.IsLoaded then
+                    image.Visible = false
+                    glyph.TextTransparency = 0
+                end
+            end)
+        end
+        categoryIconRecords[meta.Id] = {Glyph = glyph, Image = image}
+        return glyph, image
     end
 
     for index, meta in ipairs(CATEGORY_META) do
@@ -484,7 +632,7 @@ function MainMenuModule.Create(context)
         button.Parent = navScroll
         round(button, 12)
         local stroke = outline(button, 2, 1, theme.Signal)
-        local glyph = createGlyph(button, meta)
+        local glyph, image = createGlyph(button, meta)
         local label = Instance.new("TextLabel")
         label.BackgroundTransparency = 1
         label.FontFace = fonts.HeadingHeavy
@@ -496,7 +644,7 @@ function MainMenuModule.Create(context)
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.ZIndex = 4007
         label.Parent = button
-        navButtons[meta.Id] = {Button = button, Glyph = glyph, Label = label, Stroke = stroke}
+        navButtons[meta.Id] = {Button = button, Glyph = glyph, Image = image, Label = label, Stroke = stroke}
     end
 
     local function isControlVisible(flag)
@@ -525,11 +673,125 @@ function MainMenuModule.Create(context)
         return ok and type(values) == "table" and values or {}
     end
 
+    local statsOverlay = Instance.new("CanvasGroup")
+    statsOverlay.Name = "StatsOverlay"
+    statsOverlay.BackgroundColor3 = theme.Layer
+    statsOverlay.BackgroundTransparency = 0.06
+    statsOverlay.BorderSizePixel = 0
+    statsOverlay.GroupTransparency = 1
+    statsOverlay.Position = UDim2.fromOffset(24, 104)
+    statsOverlay.Size = UDim2.fromOffset(224, 128)
+    statsOverlay.Visible = false
+    statsOverlay.ZIndex = 4060
+    statsOverlay.Parent = root
+    round(statsOverlay, 14)
+    outline(statsOverlay, 2, 0.1)
+    local statsHeader = Instance.new("Frame")
+    statsHeader.Active = true
+    statsHeader.BackgroundColor3 = theme.Base
+    statsHeader.BorderSizePixel = 0
+    statsHeader.Size = UDim2.new(1, 0, 0, 38)
+    statsHeader.ZIndex = 4061
+    statsHeader.Parent = statsOverlay
+    round(statsHeader, 14)
+    local statsHeaderMask = Instance.new("Frame")
+    statsHeaderMask.BackgroundColor3 = theme.Base
+    statsHeaderMask.BorderSizePixel = 0
+    statsHeaderMask.Position = UDim2.new(0, 0, 1, -14)
+    statsHeaderMask.Size = UDim2.new(1, 0, 0, 14)
+    statsHeaderMask.ZIndex = 4061
+    statsHeaderMask.Parent = statsHeader
+    local statsTitle = Instance.new("TextLabel")
+    statsTitle.BackgroundTransparency = 1
+    statsTitle.FontFace = fonts.HeadingBlack
+    statsTitle.Position = UDim2.fromOffset(12, 0)
+    statsTitle.Size = UDim2.new(1, -50, 1, 0)
+    statsTitle.Text = "Live Stats"
+    statsTitle.TextColor3 = theme.Signal
+    statsTitle.TextSize = 16
+    statsTitle.TextXAlignment = Enum.TextXAlignment.Left
+    statsTitle.ZIndex = 4062
+    statsTitle.Parent = statsHeader
+    local statsClose = Instance.new("TextButton")
+    statsClose.AnchorPoint = Vector2.new(1, 0.5)
+    statsClose.AutoButtonColor = false
+    statsClose.BackgroundTransparency = 1
+    statsClose.BorderSizePixel = 0
+    statsClose.FontFace = fonts.HeadingBlack
+    statsClose.Position = UDim2.new(1, -6, 0.5, 0)
+    statsClose.Size = UDim2.fromOffset(32, 32)
+    statsClose.Text = "×"
+    statsClose.TextColor3 = theme.Signal
+    statsClose.TextSize = 22
+    statsClose.ZIndex = 4063
+    statsClose.Parent = statsHeader
+    local statsBody = Instance.new("TextLabel")
+    statsBody.BackgroundTransparency = 1
+    statsBody.FontFace = fonts.Body
+    statsBody.Position = UDim2.fromOffset(14, 46)
+    statsBody.Size = UDim2.new(1, -28, 1, -54)
+    statsBody.Text = ""
+    statsBody.TextColor3 = theme.Signal
+    statsBody.TextSize = 14
+    statsBody.TextXAlignment = Enum.TextXAlignment.Left
+    statsBody.TextYAlignment = Enum.TextYAlignment.Top
+    statsBody.ZIndex = 4061
+    statsBody.Parent = statsOverlay
+    local statsLatest = type(context.GetStatsSnapshot) == "function" and context.GetStatsSnapshot() or {}
+    local statsVisibleRevision = 0
+    local function renderStatsOverlay(snapshot)
+        if type(snapshot) == "table" then statsLatest = snapshot end
+        local visible = getControlValue("Home/Stats Overlay/Show Stats") == true
+        if not visible and not statsOverlay.Visible then
+            statsOverlay.GroupTransparency = 1
+            return
+        end
+        statsVisibleRevision = statsVisibleRevision + 1
+        local revision = statsVisibleRevision
+        if not visible then
+            animate(statsOverlay, {GroupTransparency = 1}, motion.Control, Enum.EasingStyle.Quint)
+            task.delay(motion.Control, function()
+                if not destroyed and revision == statsVisibleRevision and getControlValue("Home/Stats Overlay/Show Stats") ~= true then statsOverlay.Visible = false end
+            end)
+            return
+        end
+        local lines = {}
+        if statsLatest.ShowFPS ~= false then table.insert(lines, "FPS               " .. tostring(statsLatest.FPS or "--")) end
+        if statsLatest.ShowPing ~= false then table.insert(lines, "Ping              " .. (statsLatest.Ping and string.format("%.0f ms", statsLatest.Ping) or "--")) end
+        if statsLatest.ShowPlayerCount ~= false then table.insert(lines, "Players           " .. tostring(statsLatest.PlayerCount or "--")) end
+        if statsLatest.ShowMemory ~= false then table.insert(lines, "Memory            " .. (statsLatest.Memory and string.format("%.0f MB", statsLatest.Memory) or "--")) end
+        statsBody.Text = table.concat(lines, "\n")
+        statsOverlay.Size = UDim2.fromOffset(224, 54 + math.max(1, #lines) * 18)
+        statsOverlay.Visible = true
+        animate(statsOverlay, {GroupTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
+    end
+    connect(statsClose.Activated, function()
+        playSound("ButtonClick")
+        setControlValue("Home/Stats Overlay/Show Stats", false)
+        renderStatsOverlay()
+    end)
+    local statsDragging, statsDragStart, statsPositionStart = false, nil, nil
+    connect(statsHeader.InputBegan, function(input)
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+        statsDragging = true
+        statsDragStart = input.Position
+        statsPositionStart = Vector2.new(statsOverlay.Position.X.Offset, statsOverlay.Position.Y.Offset)
+    end)
+    connect(inputService.InputChanged, function(input)
+        if not statsDragging or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+        local delta = input.Position - statsDragStart
+        statsOverlay.Position = UDim2.fromOffset(statsPositionStart.X + delta.X, statsPositionStart.Y + delta.Y)
+    end)
+    connect(inputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then statsDragging = false end
+    end)
+    if type(context.SubscribeStats) == "function" then statsSubscription = context.SubscribeStats(renderStatsOverlay) end
+
     local function normalizeOptions(values)
         local options = {}
         for _, option in ipairs(values) do
             if type(option) == "table" then
-                table.insert(options, {Label = tostring(option.Label or option.Value or "Seçenek"), Value = option.Value})
+                table.insert(options, {Label = tostring(option.Label or option.Value or "Option"), Value = option.Value})
             else
                 table.insert(options, {Label = tostring(option), Value = option})
             end
@@ -688,20 +950,16 @@ function MainMenuModule.Create(context)
                         break
                     end
                 end
-                selector.Text = display .. "   ›"
+                selector.Text = display .. "   ▾"
             end
             scopedConnect(pageConnections, selector.Activated, function()
                 local options = normalizeOptions(getOptions(entry.Flag))
                 if #options == 0 then return end
-                local current = getControlValue(entry.Flag)
-                local selectedIndex = 0
-                for index, option in ipairs(options) do
-                    if tostring(option.Value) == tostring(current) then selectedIndex = index break end
-                end
-                local nextOption = options[selectedIndex % #options + 1]
                 playSound("ButtonClick")
-                setControlValue(entry.Flag, nextOption.Value)
-                render()
+                openDropdown(selector, options, getControlValue(entry.Flag), function(value)
+                    setControlValue(entry.Flag, value)
+                    render()
+                end)
             end)
             table.insert(currentRenderers, render)
             render()
@@ -714,7 +972,7 @@ function MainMenuModule.Create(context)
             inputBox.ClearTextOnFocus = false
             inputBox.FontFace = fonts.Body
             inputBox.PlaceholderColor3 = theme.Signal
-            inputBox.PlaceholderText = tostring(entry.Label or "Değer")
+            inputBox.PlaceholderText = tostring(entry.Label or "Value")
             inputBox.Position = UDim2.fromOffset(8, 6)
             inputBox.Size = UDim2.new(1, -16, 1, -12)
             inputBox.TextColor3 = theme.Signal
@@ -747,7 +1005,7 @@ function MainMenuModule.Create(context)
             action.FontFace = fonts.HeadingHeavy
             action.Position = UDim2.fromOffset(8, 6)
             action.Size = UDim2.new(1, -16, 1, -12)
-            action.Text = tostring(entry.Label or "Çalıştır")
+            action.Text = tostring(entry.Label or "Run")
             action.TextColor3 = theme.Base
             action.TextSize = 14
             action.ZIndex = 4012
@@ -775,47 +1033,340 @@ function MainMenuModule.Create(context)
     end
 
     local function createSection(parent, name, entries)
+        local sectionKey = tostring(entries[1] and entries[1].Category or currentCategory) .. "/" .. tostring(name)
         local section = Instance.new("Frame")
         section.Name = tostring(name):gsub("[^%w_]", "_")
-        section.AutomaticSize = Enum.AutomaticSize.Y
         section.BackgroundColor3 = theme.Layer
         section.BackgroundTransparency = 0.06
         section.BorderSizePixel = 0
-        section.Size = UDim2.new(1, -6, 0, 0)
+        section.Size = UDim2.new(1, 0, 0, 44)
         section.ZIndex = 4008
         section.Parent = parent
         round(section, 14)
         outline(section, 2, 0.16)
-        local sectionLayout = Instance.new("UIListLayout")
-        sectionLayout.Padding = UDim.new(0, 7)
-        sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        sectionLayout.Parent = section
-        local sectionPadding = Instance.new("UIPadding")
-        sectionPadding.PaddingLeft = UDim.new(0, 10)
-        sectionPadding.PaddingRight = UDim.new(0, 10)
-        sectionPadding.PaddingTop = UDim.new(0, 8)
-        sectionPadding.PaddingBottom = UDim.new(0, 10)
-        sectionPadding.Parent = section
         local heading = Instance.new("TextLabel")
         heading.BackgroundTransparency = 1
         heading.FontFace = fonts.HeadingBlack
-        heading.LayoutOrder = 0
-        heading.Size = UDim2.new(1, 0, 0, 32)
+        heading.Position = UDim2.fromOffset(12, 6)
+        heading.Size = UDim2.new(1, -58, 0, 32)
         heading.Text = tostring(name)
         heading.TextColor3 = theme.Signal
         heading.TextSize = 18
         heading.TextXAlignment = Enum.TextXAlignment.Left
         heading.ZIndex = 4009
         heading.Parent = section
+
+        local arrow = Instance.new("TextButton")
+        arrow.AnchorPoint = Vector2.new(1, 0)
+        arrow.AutoButtonColor = false
+        arrow.BackgroundColor3 = theme.Base
+        arrow.BackgroundTransparency = 0.18
+        arrow.BorderSizePixel = 0
+        arrow.FontFace = fonts.HeadingBlack
+        arrow.Position = UDim2.new(1, -8, 0, 7)
+        arrow.Size = UDim2.fromOffset(30, 30)
+        arrow.Text = "⌃"
+        arrow.TextColor3 = theme.Signal
+        arrow.TextSize = 17
+        arrow.ZIndex = 4011
+        arrow.Parent = section
+        round(arrow, 8)
+
+        local content = Instance.new("CanvasGroup")
+        content.BackgroundTransparency = 1
+        content.BorderSizePixel = 0
+        content.ClipsDescendants = true
+        content.Position = UDim2.fromOffset(10, 44)
+        content.Size = UDim2.new(1, -20, 0, 0)
+        content.ZIndex = 4009
+        content.Parent = section
+        local sectionLayout = Instance.new("UIListLayout")
+        sectionLayout.Padding = UDim.new(0, 7)
+        sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        sectionLayout.Parent = content
         for index, entry in ipairs(entries) do
-            local row = makeControlRow(section, entry)
+            local row = makeControlRow(content, entry)
             if row then row.LayoutOrder = index end
         end
+
+        local function targetHeight()
+            return sectionCollapsed[sectionKey] and 0 or sectionLayout.AbsoluteContentSize.Y + 10
+        end
+        local function renderCollapse(instant)
+            local collapsed = sectionCollapsed[sectionKey] == true
+            local height = targetHeight()
+            if instant then
+                content.Size = UDim2.new(1, -20, 0, height)
+                content.GroupTransparency = collapsed and 1 or 0
+                section.Size = UDim2.new(1, 0, 0, 44 + height)
+                arrow.Rotation = collapsed and 180 or 0
+            else
+                animate(content, {Size = UDim2.new(1, -20, 0, height), GroupTransparency = collapsed and 1 or 0}, motion.Sidebar, Enum.EasingStyle.Quint)
+                animate(section, {Size = UDim2.new(1, 0, 0, 44 + height)}, motion.Sidebar, Enum.EasingStyle.Quint)
+                animate(arrow, {Rotation = collapsed and 180 or 0}, motion.Control, Enum.EasingStyle.Quint)
+            end
+        end
+        scopedConnect(pageConnections, arrow.Activated, function()
+            playSound("ButtonClick")
+            sectionCollapsed[sectionKey] = not (sectionCollapsed[sectionKey] == true)
+            renderCollapse(false)
+        end)
+        scopedConnect(pageConnections, sectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+            if not sectionCollapsed[sectionKey] then renderCollapse(false) end
+        end)
+        sectionRecords[sectionKey] = {Section = section, Render = renderCollapse}
+        task.defer(function() if section.Parent then renderCollapse(true) end end)
         return section
     end
 
+    local function createPlayerDirectory(parent)
+        local card = Instance.new("Frame")
+        card.Name = "PlayerDirectory"
+        card.BackgroundColor3 = theme.Layer
+        card.BackgroundTransparency = 0.06
+        card.BorderSizePixel = 0
+        card.LayoutOrder = 2
+        card.Size = UDim2.new(1, -6, 0, 356)
+        card.ZIndex = 4008
+        card.Parent = parent
+        round(card, 14)
+        outline(card, 2, 0.16)
+
+        local heading = Instance.new("TextLabel")
+        heading.BackgroundTransparency = 1
+        heading.FontFace = fonts.HeadingBlack
+        heading.Position = UDim2.fromOffset(12, 8)
+        heading.Size = UDim2.new(1, -24, 0, 30)
+        heading.Text = "Live Players"
+        heading.TextColor3 = theme.Signal
+        heading.TextSize = 18
+        heading.TextXAlignment = Enum.TextXAlignment.Left
+        heading.ZIndex = 4009
+        heading.Parent = card
+
+        local search = Instance.new("TextBox")
+        search.BackgroundColor3 = theme.Base
+        search.BackgroundTransparency = 0.16
+        search.BorderSizePixel = 0
+        search.ClearTextOnFocus = false
+        search.FontFace = fonts.Body
+        search.PlaceholderColor3 = theme.Signal
+        search.PlaceholderText = "Search username or display name"
+        search.Position = UDim2.fromOffset(12, 44)
+        search.Size = UDim2.new(0.62, -18, 0, 34)
+        search.Text = ""
+        search.TextColor3 = theme.Signal
+        search.TextSize = 13
+        search.TextXAlignment = Enum.TextXAlignment.Left
+        search.ZIndex = 4010
+        search.Parent = card
+        round(search, 8)
+        local searchPadding = Instance.new("UIPadding")
+        searchPadding.PaddingLeft = UDim.new(0, 10)
+        searchPadding.PaddingRight = UDim.new(0, 10)
+        searchPadding.Parent = search
+
+        local playerSortOptions = {"Nearest", "Name A-Z", "Health High-Low", "Health Low-High"}
+        local sortMode = type(context.GetPlayerSort) == "function" and tostring(context.GetPlayerSort() or "Nearest") or "Nearest"
+        if not table.find(playerSortOptions, sortMode) then sortMode = "Nearest" end
+        local sortButton = Instance.new("TextButton")
+        sortButton.AnchorPoint = Vector2.new(1, 0)
+        sortButton.AutoButtonColor = false
+        sortButton.BackgroundColor3 = theme.Base
+        sortButton.BackgroundTransparency = 0.16
+        sortButton.BorderSizePixel = 0
+        sortButton.FontFace = fonts.HeadingHeavy
+        sortButton.Position = UDim2.new(1, -12, 0, 44)
+        sortButton.Size = UDim2.new(0.38, -6, 0, 34)
+        sortButton.Text = sortMode .. "   ▾"
+        sortButton.TextColor3 = theme.Signal
+        sortButton.TextSize = 13
+        sortButton.ZIndex = 4010
+        sortButton.Parent = card
+        round(sortButton, 8)
+
+        local status = Instance.new("TextLabel")
+        status.BackgroundTransparency = 1
+        status.FontFace = fonts.Body
+        status.Position = UDim2.fromOffset(12, 82)
+        status.Size = UDim2.new(1, -24, 0, 20)
+        status.Text = "Ready"
+        status.TextColor3 = theme.Signal
+        status.TextSize = 12
+        status.TextTransparency = 0.28
+        status.TextXAlignment = Enum.TextXAlignment.Left
+        status.ZIndex = 4009
+        status.Parent = card
+
+        local playerList = Instance.new("ScrollingFrame")
+        playerList.Active = true
+        playerList.BackgroundColor3 = theme.Base
+        playerList.BackgroundTransparency = 0.18
+        playerList.BorderSizePixel = 0
+        playerList.CanvasSize = UDim2.new()
+        playerList.Position = UDim2.fromOffset(12, 104)
+        playerList.ScrollBarImageColor3 = theme.Signal
+        playerList.ScrollBarImageTransparency = 0.42
+        playerList.ScrollBarThickness = 3
+        playerList.Size = UDim2.new(1, -24, 1, -116)
+        playerList.ZIndex = 4009
+        playerList.Parent = card
+        round(playerList, 10)
+
+        local snapshots, rowPool = {}, {}
+        local rowHeight, bufferRows = 62, 3
+
+        local function actionButton(parentRow, text, xOffset, width)
+            local button = Instance.new("TextButton")
+            button.AnchorPoint = Vector2.new(1, 0.5)
+            button.AutoButtonColor = false
+            button.BackgroundColor3 = theme.Layer
+            button.BackgroundTransparency = 0.08
+            button.BorderSizePixel = 0
+            button.FontFace = fonts.HeadingHeavy
+            button.Position = UDim2.new(1, xOffset, 0.5, 0)
+            button.Size = UDim2.fromOffset(width, 30)
+            button.Text = text
+            button.TextColor3 = theme.Signal
+            button.TextSize = 11
+            button.ZIndex = 4013
+            button.Parent = parentRow
+            round(button, 8)
+            return button
+        end
+
+        local renderPlayers
+        local function buildRow()
+            local record = {}
+            local row = Instance.new("Frame")
+            row.BackgroundColor3 = theme.Layer
+            row.BackgroundTransparency = 0.12
+            row.BorderSizePixel = 0
+            row.Size = UDim2.new(1, -8, 0, rowHeight - 5)
+            row.Visible = false
+            row.ZIndex = 4010
+            row.Parent = playerList
+            round(row, 9)
+            local avatar = Instance.new("ImageLabel")
+            avatar.BackgroundColor3 = theme.Base
+            avatar.BorderSizePixel = 0
+            avatar.Position = UDim2.fromOffset(6, 6)
+            avatar.Size = UDim2.fromOffset(44, 44)
+            avatar.ZIndex = 4011
+            avatar.Parent = row
+            round(avatar, 12)
+            local name = Instance.new("TextLabel")
+            name.BackgroundTransparency = 1
+            name.FontFace = fonts.HeadingHeavy
+            name.Position = UDim2.fromOffset(58, 4)
+            name.Size = UDim2.new(1, -286, 0, 22)
+            name.TextColor3 = theme.Signal
+            name.TextSize = 13
+            name.TextTruncate = Enum.TextTruncate.AtEnd
+            name.TextXAlignment = Enum.TextXAlignment.Left
+            name.ZIndex = 4011
+            name.Parent = row
+            local details = Instance.new("TextLabel")
+            details.BackgroundTransparency = 1
+            details.FontFace = fonts.Body
+            details.Position = UDim2.fromOffset(58, 25)
+            details.Size = UDim2.new(1, -286, 0, 18)
+            details.TextColor3 = theme.Signal
+            details.TextSize = 11
+            details.TextTransparency = 0.28
+            details.TextTruncate = Enum.TextTruncate.AtEnd
+            details.TextXAlignment = Enum.TextXAlignment.Left
+            details.ZIndex = 4011
+            details.Parent = row
+            local healthTrack = Instance.new("Frame")
+            healthTrack.BackgroundColor3 = theme.Base
+            healthTrack.BorderSizePixel = 0
+            healthTrack.Position = UDim2.fromOffset(58, 46)
+            healthTrack.Size = UDim2.new(1, -286, 0, 5)
+            healthTrack.ZIndex = 4011
+            healthTrack.Parent = row
+            round(healthTrack, 999)
+            local healthFill = Instance.new("Frame")
+            healthFill.BackgroundColor3 = theme.Success
+            healthFill.BorderSizePixel = 0
+            healthFill.Size = UDim2.fromScale(1, 1)
+            healthFill.ZIndex = 4012
+            healthFill.Parent = healthTrack
+            round(healthFill, 999)
+            local walk = actionButton(row, "Walk", -188, 50)
+            local fling = actionButton(row, "Fling", -134, 50)
+            local view = actionButton(row, "View", -80, 50)
+            local teleport = actionButton(row, "TP", -26, 42)
+            record.Row, record.Avatar, record.Name, record.Details, record.Health = row, avatar, name, details, healthFill
+            record.Walk, record.Fling, record.View, record.Teleport = walk, fling, view, teleport
+            local function invoke(action)
+                if not record.UserId or type(context.PlayerAction) ~= "function" then return end
+                playSound("ButtonClick")
+                local ok, message = context.PlayerAction(action, record.UserId)
+                status.Text = tostring(message or (ok and "Action started" or "Action failed"))
+                status.TextColor3 = ok and theme.Success or theme.Danger
+                task.defer(function() if renderPlayers then renderPlayers() end end)
+            end
+            scopedConnect(pageConnections, walk.Activated, function() invoke("Walk") end)
+            scopedConnect(pageConnections, fling.Activated, function() invoke("Fling") end)
+            scopedConnect(pageConnections, view.Activated, function() invoke("View") end)
+            scopedConnect(pageConnections, teleport.Activated, function() invoke("Teleport") end)
+            return record
+        end
+
+        for _ = 1, 12 do table.insert(rowPool, buildRow()) end
+        renderPlayers = function()
+            if not card.Parent then return end
+            snapshots = type(context.GetPlayerSnapshot) == "function" and context.GetPlayerSnapshot(search.Text, sortMode) or {}
+            playerList.CanvasSize = UDim2.fromOffset(0, #snapshots * rowHeight + 8)
+            local first = math.max(1, math.floor(playerList.CanvasPosition.Y / rowHeight) + 1 - bufferRows)
+            for poolIndex, record in ipairs(rowPool) do
+                local dataIndex = first + poolIndex - 1
+                local data = snapshots[dataIndex]
+                if data then
+                    record.UserId = data.UserId
+                    record.Row.Visible = true
+                    record.Row.Position = UDim2.fromOffset(4, (dataIndex - 1) * rowHeight + 4)
+                    record.Avatar.Image = data.Avatar
+                    record.Name.Text = data.DisplayName .. "  @" .. data.Username
+                    local distance = data.Distance == math.huge and "--" or string.format("%.0f", data.Distance)
+                    record.Details.Text = data.Relation .. "  •  " .. distance .. " studs  •  " .. string.format("%.0f%%", data.HealthRatio * 100)
+                    record.Health.Size = UDim2.fromScale(data.HealthRatio, 1)
+                    record.Walk.Text = data.Walking and "Stop" or "Walk"
+                    record.View.Text = data.Viewing and "Stop" or "View"
+                    local actionable = data.Alive and not data.Busy
+                    local actionTransparency = actionable and 0 or 0.55
+                    record.Walk.Active, record.Fling.Active = actionable, actionable
+                    record.View.Active, record.Teleport.Active = actionable, actionable
+                    record.Walk.TextTransparency, record.Fling.TextTransparency = actionTransparency, actionTransparency
+                    record.View.TextTransparency, record.Teleport.TextTransparency = actionTransparency, actionTransparency
+                else
+                    record.UserId = nil
+                    record.Row.Visible = false
+                end
+            end
+        end
+
+        scopedConnect(pageConnections, search:GetPropertyChangedSignal("Text"), renderPlayers)
+        scopedConnect(pageConnections, sortButton.Activated, function()
+            openDropdown(sortButton, normalizeOptions(playerSortOptions), sortMode, function(value)
+                sortMode = value
+                if type(context.SetPlayerSort) == "function" then context.SetPlayerSort(value) end
+                sortButton.Text = value .. "   ▾"
+                renderPlayers()
+            end)
+        end)
+        scopedConnect(pageConnections, playerList:GetPropertyChangedSignal("CanvasPosition"), renderPlayers)
+        if type(context.SubscribePlayers) == "function" then
+            playerSubscription = context.SubscribePlayers(renderPlayers)
+            if playerSubscription then table.insert(pageConnections, playerSubscription) end
+        end
+        renderPlayers()
+        return card
+    end
+
     local function createPage(category)
-        currentRenderers, currentRows = {}, {}
+        currentRenderers, currentRows, sectionRecords = {}, {}, {}
         local page = Instance.new("CanvasGroup")
         page.Name = category .. "Page"
         page.BackgroundTransparency = 1
@@ -898,7 +1449,7 @@ function MainMenuModule.Create(context)
             description.BackgroundTransparency = 1
             description.FontFace = fonts.Body
             description.Size = UDim2.new(1, 0, 0, 0)
-            description.Text = string.format("%d indekslenmiş kontrol · %d kategori\nSoldaki sekmeler veya üstteki arama ile tüm özelliklere ulaşabilirsin.", total, #CATEGORY_META)
+            description.Text = string.format("%d indexed controls · %d categories\nUse the navigation rail or search to reach every feature.", total, #CATEGORY_META)
             description.TextColor3 = theme.Signal
             description.TextSize = 14
             description.TextTransparency = 0.22
@@ -908,20 +1459,66 @@ function MainMenuModule.Create(context)
             description.Parent = summary
         end
 
-        local grouped, sectionNames = {}, {}
+        if category == "Players" then
+            createPlayerDirectory(scroll)
+            return page, scroll
+        end
+
+        local grouped, sectionNames, sectionOrder = {}, {}, {}
         for _, entry in ipairs(entriesByCategory[category] or {}) do
-            local sectionName = tostring(entry.Section or "Genel")
+            local sectionName = tostring(entry.Section or "General")
             if not grouped[sectionName] then
                 grouped[sectionName] = {}
                 table.insert(sectionNames, sectionName)
+                sectionOrder[sectionName] = tonumber(entry.SectionOrder) or 9999
             end
             table.insert(grouped[sectionName], entry)
         end
-        table.sort(sectionNames)
-        for index, sectionName in ipairs(sectionNames) do
-            local section = createSection(scroll, sectionName, grouped[sectionName])
-            section.LayoutOrder = index + 2
+        table.sort(sectionNames, function(first, second)
+            if sectionOrder[first] ~= sectionOrder[second] then return sectionOrder[first] < sectionOrder[second] end
+            return first < second
+        end)
+        for _, sectionName in ipairs(sectionNames) do
+            table.sort(grouped[sectionName], function(first, second)
+                return (tonumber(first.Order) or 99999) < (tonumber(second.Order) or 99999)
+            end)
         end
+
+        local columnsRoot = Instance.new("Frame")
+        columnsRoot.BackgroundTransparency = 1
+        columnsRoot.BorderSizePixel = 0
+        columnsRoot.LayoutOrder = 2
+        columnsRoot.Size = UDim2.new(1, -6, 0, 0)
+        columnsRoot.ZIndex = 4007
+        columnsRoot.Parent = scroll
+        local columnGap = layout.SectionGap
+        local leftColumn = Instance.new("Frame")
+        leftColumn.AutomaticSize = Enum.AutomaticSize.Y
+        leftColumn.BackgroundTransparency = 1
+        leftColumn.BorderSizePixel = 0
+        leftColumn.Size = UDim2.new(0.5, -columnGap * 0.5, 0, 0)
+        leftColumn.ZIndex = 4007
+        leftColumn.Parent = columnsRoot
+        local rightColumn = leftColumn:Clone()
+        rightColumn.AutomaticSize = Enum.AutomaticSize.Y
+        rightColumn.Position = UDim2.new(0.5, columnGap * 0.5, 0, 0)
+        rightColumn.Parent = columnsRoot
+        local leftLayout = Instance.new("UIListLayout")
+        leftLayout.Padding = UDim.new(0, layout.SectionGap)
+        leftLayout.Parent = leftColumn
+        local rightLayout = leftLayout:Clone()
+        rightLayout.Parent = rightColumn
+        local function syncColumnsHeight()
+            columnsRoot.Size = UDim2.new(1, -6, 0, math.max(leftLayout.AbsoluteContentSize.Y, rightLayout.AbsoluteContentSize.Y))
+        end
+        scopedConnect(pageConnections, leftLayout:GetPropertyChangedSignal("AbsoluteContentSize"), syncColumnsHeight)
+        scopedConnect(pageConnections, rightLayout:GetPropertyChangedSignal("AbsoluteContentSize"), syncColumnsHeight)
+        for index, sectionName in ipairs(sectionNames) do
+            local targetColumn = index % 2 == 1 and leftColumn or rightColumn
+            local section = createSection(targetColumn, sectionName, grouped[sectionName])
+            section.LayoutOrder = math.ceil(index / 2)
+        end
+        task.defer(syncColumnsHeight)
 
         if #sectionNames == 0 and category ~= "Home" then
             local empty = Instance.new("TextLabel")
@@ -929,13 +1526,13 @@ function MainMenuModule.Create(context)
             empty.FontFace = fonts.HeadingHeavy
             empty.LayoutOrder = 2
             empty.Size = UDim2.new(1, -6, 0, 80)
-            empty.Text = "Bu kategori bir sonraki özellik geçişinde doldurulacak."
+            empty.Text = "This category has no registered controls yet."
             empty.TextColor3 = theme.Signal
             empty.TextSize = 16
             empty.TextTransparency = 0.3
             empty.TextWrapped = true
             empty.ZIndex = 4008
-            empty.Parent = scroll
+            empty.Parent = columnsRoot
         end
         return page, scroll
     end
@@ -959,6 +1556,14 @@ function MainMenuModule.Create(context)
     local function focusRow(flag, scroll)
         task.defer(function()
             if destroyed or not scroll or not scroll.Parent then return end
+            local entry = entryByFlag[flag]
+            local sectionKey = entry and (tostring(entry.Category) .. "/" .. tostring(entry.Section)) or nil
+            local sectionRecord = sectionKey and sectionRecords[sectionKey]
+            if sectionRecord and sectionCollapsed[sectionKey] then
+                sectionCollapsed[sectionKey] = false
+                sectionRecord.Render(false)
+                task.wait(motion.Sidebar)
+            end
             local row = currentRows[flag]
             if not row or not row.Parent then return end
             scroll.CanvasPosition = Vector2.new(0, math.max(0, row.AbsolutePosition.Y - scroll.AbsolutePosition.Y + scroll.CanvasPosition.Y - 18))
@@ -973,31 +1578,38 @@ function MainMenuModule.Create(context)
         pageRevision = pageRevision + 1
         local revision, previous = pageRevision, currentPage
         currentCategory = category
+        closeDropdown(true)
         clearScopedConnections(pageConnections)
-        local nextPage, nextScroll = createPage(category)
-        currentPage = nextPage
         refreshNavigation()
         if instant then
             if previous and previous.Parent then previous:Destroy() end
+            local nextPage, nextScroll = createPage(category)
+            currentPage = nextPage
             nextPage.Position = UDim2.fromOffset(0, 0)
             nextPage.GroupTransparency = 0
             if focusFlag then focusRow(focusFlag, nextScroll) end
             return true
         end
+        currentPage = nil
         if previous and previous.Parent then
             animate(previous, {Position = UDim2.fromOffset(0, -28), GroupTransparency = 1}, motion.PageOut, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         end
-        nextPage.Position = UDim2.fromOffset(0, -28)
-        nextPage.GroupTransparency = 1
-        animate(nextPage, {Position = UDim2.fromOffset(0, 0), GroupTransparency = 0}, motion.PageIn, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-        task.delay(motion.PageOut, function()
-            if previous and previous ~= currentPage and previous.Parent then previous:Destroy() end
+        task.spawn(function()
+            if previous and previous.Parent then task.wait(motion.PageOut) end
+            if previous and previous.Parent then previous:Destroy() end
+            task.wait(0.3)
+            if destroyed or revision ~= pageRevision then return end
+            local nextPage, nextScroll = createPage(category)
+            currentPage = nextPage
+            nextPage.Position = UDim2.fromOffset(0, -28)
+            nextPage.GroupTransparency = 1
+            animate(nextPage, {Position = UDim2.fromOffset(0, 0), GroupTransparency = 0}, motion.PageIn, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+            if focusFlag then
+                task.delay(motion.PageIn, function()
+                    if not destroyed and revision == pageRevision then focusRow(focusFlag, nextScroll) end
+                end)
+            end
         end)
-        if focusFlag then
-            task.delay(motion.PageIn, function()
-                if not destroyed and revision == pageRevision then focusRow(focusFlag, nextScroll) end
-            end)
-        end
         return true
     end
 
@@ -1042,16 +1654,18 @@ function MainMenuModule.Create(context)
             animate(contentHost, {Position = contentPosition, Size = contentSize}, duration, Enum.EasingStyle.Quint)
         end
         for _, record in pairs(navButtons) do
-            local targetSize = expanded and UDim2.new(1, -20, 0, layout.NavigationHeight) or UDim2.fromOffset(48, layout.NavigationHeight)
             local glyphPosition = expanded and UDim2.fromOffset(27, layout.NavigationHeight * 0.5) or UDim2.fromOffset(24, layout.NavigationHeight * 0.5)
             if instant then
-                record.Button.Size = targetSize
+                record.Button.Size = UDim2.new(1, -20, 0, layout.NavigationHeight)
                 record.Glyph.Position = glyphPosition
+                record.Label.Position = expanded and UDim2.fromOffset(54, 0) or UDim2.fromOffset(62, 0)
                 record.Label.TextTransparency = expanded and 0 or 1
             else
-                animate(record.Button, {Size = targetSize}, duration, Enum.EasingStyle.Quint)
                 animate(record.Glyph, {Position = glyphPosition}, duration, Enum.EasingStyle.Quint)
-                animate(record.Label, {TextTransparency = expanded and 0 or 1}, duration * 0.72, Enum.EasingStyle.Quint)
+                animate(record.Label, {
+                    Position = expanded and UDim2.fromOffset(54, 0) or UDim2.fromOffset(62, 0),
+                    TextTransparency = expanded and 0 or 1
+                }, duration * 0.72, Enum.EasingStyle.Quint)
             end
         end
     end
@@ -1110,75 +1724,92 @@ function MainMenuModule.Create(context)
             hideSearchResults()
             return
         end
-        local matches = {}
+        local matches, seenSections = {}, {}
         for _, meta in ipairs(CATEGORY_META) do
             if string.find(normalizedText(meta.Id .. " " .. meta.Label), query, 1, true) then
-                table.insert(matches, {Category = meta.Id, Label = meta.Label, Section = "Kategori", Priority = 1})
+                table.insert(matches, {Kind = "Category", Category = meta.Id, Label = meta.Label, Priority = 1})
             end
         end
         for _, entry in ipairs(indexEntries) do
-            local searchable = normalizedText(entry.Category .. " " .. entry.Section .. " " .. entry.Label .. " " .. entry.Kind)
-            if string.find(searchable, query, 1, true) then
+            local sectionKey = tostring(entry.Category) .. "/" .. tostring(entry.Section)
+            if not seenSections[sectionKey] and string.find(normalizedText(entry.Category .. " " .. entry.Section), query, 1, true) then
+                seenSections[sectionKey] = true
                 table.insert(matches, {
-                    Category = entry.Category,
-                    Label = entry.Label,
-                    Section = entry.Section,
-                    Flag = entry.Flag,
-                    Priority = 2
+                    Kind = "Section", Category = entry.Category, Section = entry.Section,
+                    Label = entry.Section, Flag = entry.Flag, Priority = 2,
+                    SectionOrder = entry.SectionOrder
+                })
+            end
+            if string.find(normalizedText(entry.Category .. " " .. entry.Section .. " " .. entry.Label .. " " .. entry.Kind), query, 1, true) then
+                table.insert(matches, {
+                    Kind = "Control", Category = entry.Category, Section = entry.Section,
+                    Label = entry.Label, Flag = entry.Flag, Priority = 3,
+                    SectionOrder = entry.SectionOrder, Order = entry.Order
                 })
             end
         end
         table.sort(matches, function(first, second)
             if first.Priority ~= second.Priority then return first.Priority < second.Priority end
-            if first.Category ~= second.Category then return (CATEGORY_ORDER[first.Category] or 99) < (CATEGORY_ORDER[second.Category] or 99) end
+            local firstCategory, secondCategory = CATEGORY_ORDER[first.Category] or 99, CATEGORY_ORDER[second.Category] or 99
+            if firstCategory ~= secondCategory then return firstCategory < secondCategory end
+            if (tonumber(first.SectionOrder) or 9999) ~= (tonumber(second.SectionOrder) or 9999) then
+                return (tonumber(first.SectionOrder) or 9999) < (tonumber(second.SectionOrder) or 9999)
+            end
+            if (tonumber(first.Order) or 99999) ~= (tonumber(second.Order) or 99999) then
+                return (tonumber(first.Order) or 99999) < (tonumber(second.Order) or 99999)
+            end
             return tostring(first.Label) < tostring(second.Label)
         end)
         searchCount.Text = tostring(#matches)
-        local visible = math.min(7, #matches)
-        if visible == 0 then
-            searchResults.Visible = false
-            return
-        end
-        for index = 1, #matches do
-            local match = matches[index]
+        if #matches == 0 then searchResults.Visible = false return end
+        local targetHeight, visibleCount = 14, math.min(9, #matches)
+        for index, match in ipairs(matches) do
+            local height = match.Kind == "Category" and 44 or (match.Kind == "Section" and 40 or 36)
             local button = Instance.new("TextButton")
             button.AutoButtonColor = false
-            button.BackgroundColor3 = theme.Layer
-            button.BackgroundTransparency = 0.16
+            button.BackgroundColor3 = match.Kind == "Section" and theme.Signal or theme.Layer
+            button.BackgroundTransparency = match.Kind == "Category" and 0.04 or (match.Kind == "Section" and 0 or 0.2)
             button.BorderSizePixel = 0
-            button.FontFace = fonts.Body
+            button.FontFace = match.Kind == "Category" and fonts.HeadingBlack or (match.Kind == "Section" and fonts.HeadingHeavy or fonts.Body)
             button.LayoutOrder = index
-            button.Size = UDim2.new(1, -2, 0, 50)
-            button.Text = tostring(match.Label) .. "\n" .. tostring(CATEGORY_BY_ID[match.Category] and CATEGORY_BY_ID[match.Category].Label or match.Category) .. "  ›  " .. tostring(match.Section)
-            button.TextColor3 = theme.Signal
-            button.TextSize = 13
-            button.TextWrapped = true
+            button.Size = UDim2.new(1, -2, 0, height)
+            button.Text = match.Kind == "Control"
+                and (tostring(match.Label) .. "   ·   " .. tostring(match.Section))
+                or tostring(match.Label)
+            button.TextColor3 = match.Kind == "Section" and theme.Base or theme.Signal
+            button.TextSize = match.Kind == "Category" and 17 or (match.Kind == "Section" and 15 or 12)
+            button.TextTransparency = match.Kind == "Control" and 0.24 or 0
+            button.TextTruncate = Enum.TextTruncate.AtEnd
             button.TextXAlignment = Enum.TextXAlignment.Left
             button.ZIndex = 4032
             button.Parent = searchList
             round(button, 9)
             local padding = Instance.new("UIPadding")
-            padding.PaddingLeft = UDim.new(0, 11)
+            padding.PaddingLeft = UDim.new(0, match.Kind == "Control" and 20 or 11)
             padding.PaddingRight = UDim.new(0, 11)
             padding.Parent = button
             scopedConnect(searchConnections, button.MouseEnter, function()
-                animate(button, {BackgroundTransparency = 0.04}, motion.Control, Enum.EasingStyle.Quint)
+                animate(button, {BackgroundTransparency = match.Kind == "Section" and 0.08 or 0.06}, motion.Control, Enum.EasingStyle.Quint)
             end)
             scopedConnect(searchConnections, button.MouseLeave, function()
-                animate(button, {BackgroundTransparency = 0.16}, motion.Control, Enum.EasingStyle.Quint)
+                animate(button, {BackgroundTransparency = match.Kind == "Category" and 0.04 or (match.Kind == "Section" and 0 or 0.2)}, motion.Control, Enum.EasingStyle.Quint)
             end)
             scopedConnect(searchConnections, button.Activated, function()
                 playSound("ButtonClick")
-                searchResults.Visible = false
-                selectCategory(match.Category, match.Flag, false)
+                local flag = match.Kind == "Category" and nil or match.Flag
+                selectCategory(match.Category, flag, false)
+                searchBox.Text = ""
+                searchBox:ReleaseFocus()
                 clearSearchResults()
+                searchResults.Visible = false
+                setSearchOpen(false, false)
             end)
+            if index <= visibleCount then targetHeight = targetHeight + height + (index > 1 and 5 or 0) end
         end
         searchResultsRevision = searchResultsRevision + 1
         searchResults.Visible = true
         searchResults.GroupTransparency = 1
         searchResults.Size = UDim2.fromOffset(390, 0)
-        local targetHeight = visible * 50 + math.max(0, visible - 1) * 5 + 14
         animate(searchResults, {Size = UDim2.fromOffset(390, targetHeight), GroupTransparency = 0}, motion.SearchOpen, Enum.EasingStyle.Quint)
     end
 
@@ -1216,9 +1847,8 @@ function MainMenuModule.Create(context)
             if activeSlider.Row and activeSlider.Row.Parent then activeSlider.Update(input) else activeSlider = nil end
         end
         if not dragging or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-        local viewport = context.GetViewportSize()
         local delta = input.Position - dragStart
-        restingPosition = clampCenter(dragWindowStart + Vector2.new(delta.X, delta.Y), windowPixelSize, viewport)
+        restingPosition = dragWindowStart + Vector2.new(delta.X, delta.Y)
         window.Position = UDim2.fromOffset(restingPosition.X, restingPosition.Y)
     end)
     connect(inputService.InputEnded, function(input)
@@ -1228,18 +1858,12 @@ function MainMenuModule.Create(context)
         end
     end)
 
-    local function setWindowToTarget()
-        local _, size, center = targetGeometry()
-        window.Size = UDim2.fromOffset(size.X, size.Y)
-        window.Position = UDim2.fromOffset(center.X, center.Y)
-    end
-
     local close = function() return false end
     local function open()
         if destroyed or state == "Open" or state == "Opening" then return false end
         transitionRevision, state = transitionRevision + 1, "Opening"
         local revision = transitionRevision
-        local _, size, center = targetGeometry()
+        local _, size, center, scale = targetGeometry()
         local source = context.GetAnchorPoint()
         window.Size = UDim2.fromOffset(size.X, size.Y)
         window.Position = UDim2.fromOffset(source.X, source.Y)
@@ -1248,7 +1872,7 @@ function MainMenuModule.Create(context)
         window.Visible = true
         if not currentPage or not currentPage.Parent then selectCategory(currentCategory, nil, true) end
         local move = animate(window, {Position = UDim2.fromOffset(center.X, center.Y), GroupTransparency = 0}, motion.Open, Enum.EasingStyle.Quint)
-        animate(windowScale, {Scale = 1}, motion.Open, Enum.EasingStyle.Back)
+        animate(windowScale, {Scale = scale}, motion.Open, Enum.EasingStyle.Back)
         task.spawn(function()
             move.Completed:Wait()
             if not destroyed and revision == transitionRevision then state = "Open" end
@@ -1287,7 +1911,12 @@ function MainMenuModule.Create(context)
         end
     end)
     connect(context.Parent:GetPropertyChangedSignal("AbsoluteSize"), function()
-        if not destroyed and (state == "Open" or state == "Opening") then setWindowToTarget() end
+        if destroyed or (state ~= "Open" and state ~= "Opening") then return end
+        local _, size, scale = windowSize()
+        responsiveScaleValue = scale
+        windowPixelSize = size * scale
+        window.Size = UDim2.fromOffset(size.X, size.Y)
+        animate(windowScale, {Scale = scale}, motion.Control, Enum.EasingStyle.Quint)
     end)
 
     setSidebarExpanded(true, true)
@@ -1303,13 +1932,34 @@ function MainMenuModule.Create(context)
     end
     controller.Refresh = function()
         for _, render in ipairs(currentRenderers) do pcall(render) end
+        renderStatsOverlay()
+    end
+    controller.SetCategoryIcon = function(category, asset)
+        local record = categoryIconRecords[category]
+        if not record then return false end
+        local resolved = tostring(asset or "")
+        record.Image.Image = resolved
+        record.Image.Visible = resolved ~= ""
+        record.Glyph.TextTransparency = resolved ~= "" and 1 or 0
+        if resolved ~= "" then
+            task.delay(3, function()
+                if not destroyed and record.Image.Parent and record.Image.Image == resolved and not record.Image.IsLoaded then
+                    record.Image.Visible = false
+                    record.Glyph.TextTransparency = 0
+                end
+            end)
+        end
+        return true
     end
     controller.Destroy = function()
         if destroyed then return end
         destroyed, transitionRevision, pageRevision, searchShellRevision, searchResultsRevision = true, transitionRevision + 1, pageRevision + 1, searchShellRevision + 1, searchResultsRevision + 1
         activeSlider = nil
+        closeDropdown(true)
+        if statsSubscription then pcall(function() statsSubscription:Disconnect() end) end
         clearScopedConnections(pageConnections)
         clearScopedConnections(searchConnections)
+        clearScopedConnections(dropdownConnections)
         for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
         root:Destroy()
     end

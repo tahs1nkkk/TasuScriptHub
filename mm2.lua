@@ -312,7 +312,7 @@ statusLabel.BackgroundTransparency = 1
 statusLabel.FontFace = fonts.Body
 statusLabel.Position = UDim2.fromOffset(16, 0)
 statusLabel.Size = UDim2.new(1, -32, 1, 0)
-statusLabel.Text = "Hazır"
+statusLabel.Text = "Ready"
 statusLabel.TextColor3 = theme.Signal
 statusLabel.TextSize = 13
 statusLabel.TextTransparency = 0.28
@@ -321,7 +321,7 @@ statusLabel.ZIndex = 4003
 statusLabel.Parent = footer
 
 local function setStatus(message, color)
-    statusLabel.Text = tostring(message or "Hazır")
+    statusLabel.Text = tostring(message or "Ready")
     statusLabel.TextColor3 = color or theme.Signal
     statusLabel.TextTransparency = color and 0 or 0.28
 end
@@ -421,7 +421,7 @@ local function addToggle(labelText, key, column, row)
         State[key] = not State[key]
         playSound("ButtonClick")
         render(false)
-        setStatus(labelText .. (State[key] and " açıldı" or " kapatıldı"), State[key] and theme.Success or nil)
+        setStatus(labelText .. (State[key] and " enabled" or " disabled"), State[key] and theme.Success or nil)
     end)
     controls[key] = {Render = render}
     render(true)
@@ -455,17 +455,17 @@ local function addAction(labelText, callback, column, row)
     connect(button.Activated, function()
         playSound("ButtonClick")
         local ok = callback()
-        setStatus(ok and (labelText .. " başarılı") or (labelText .. " kullanılamıyor"), ok and theme.Success or theme.Danger)
+        setStatus(ok and (labelText .. " succeeded") or (labelText .. " unavailable"), ok and theme.Success or theme.Danger)
     end)
 end
 
-addToggle("Ana Sistem", "Enabled", 1, 1)
-addToggle("Rol ESP", "PlayerESP", 2, 1)
+addToggle("Main System", "Enabled", 1, 1)
+addToggle("Role ESP", "PlayerESP", 2, 1)
 addToggle("GunDrop ESP", "GunDropESP", 1, 2)
-addToggle("Otomatik Alma", "AutoPickup", 2, 2)
-addToggle("Otomatik Ateş", "AutoFire", 1, 3)
-addAction("Silahı Şimdi Al", requestPickup, 1, 4)
-addAction("Şimdi Ateş Et", requestShot, 2, 4)
+addToggle("Auto Pickup", "AutoPickup", 2, 2)
+addToggle("Auto Fire", "AutoFire", 1, 3)
+addAction("Pick Up Gun Now", requestPickup, 1, 4)
+addAction("Shoot Now", requestShot, 2, 4)
 
 local uiState = "Closed"
 local transitionRevision = 0

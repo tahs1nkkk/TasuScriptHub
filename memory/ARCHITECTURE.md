@@ -9,7 +9,7 @@
 5. UI shell — navigation, panels, overlays, component library, shared theme, and animation coordinator.
 6. Feature views — declarative control registration only; no gameplay loops or private styling.
 
-`game_catalog.lua` owns catalog presentation, immutable metadata filtering/sorting, session-only favorite/filter state, internal drawer/card interaction, nine-card virtualization, active-page cover caching, and popup transition state only. `main_menu.lua` owns the general window shell, category/search presentation, one selected descriptor page, and view-scoped control input only; it consumes loader callbacks and cannot own gameplay state or loops. `loader.lua` retains catalog/control data, stable descriptor production, shared geometry tokens, HTTP/custom-asset resolution, validated script execution, game-controller registration, dynamic rail actions, shared contexts, and global lifecycle handoff. `mm2.lua` is the first migrated game feature controller/view: it retains its engine and cleanup, consumes only the shared context, mounts below `InterfaceRoot`, and returns its controller rather than creating a separate `ScreenGui`.
+`game_catalog.lua` owns catalog presentation and virtualized metadata interaction. `main_menu.lua` owns the general window, navigation/search/dropdown/card/player-row/stats-overlay presentation, and view-scoped inputs only. `player_service.lua` owns player metadata sampling, pathfinding/route ownership, camera view, TP, and targeted fling actions without constructing UI. `loader.lua` retains state/descriptors, stats sampling, icon/HTTP resolution, validated module/script execution, game-controller registration, shared contexts, and global lifecycle. `mm2.lua` remains the first migrated game controller/view.
 
 ## Contracts
 
@@ -17,6 +17,7 @@
 - All connections, instances, actions, and render-step names are registered with lifecycle ownership.
 - Search indexes feature metadata and control commands, not raw Roblox instances.
 - Player listing consumes a player data service; rows do not poll or own gameplay logic.
+- Main descriptors include deterministic registration/section order and presentation category without changing compatibility flags.
 - Catalog loading returns structured success/error results and never owns its own visual theme.
 - A loaded game script returns a controller; the loader registers its rail action and lifecycle, while the catalog only consumes the returned activation callback.
 - UI and feature state communicate through stable IDs, not display labels.

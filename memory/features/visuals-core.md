@@ -8,4 +8,4 @@ Rework: one record lifecycle per player/character, bounded update frequency for 
 
 Executor checks: enable/disable, join/leave, respawn, distance boundary, camera replacement, repeated execution, and unload.
 
-Main UI revision 1: core controls use stable `Görseller` descriptors. The page owns no player records or render loop; verify state refresh and unload during animation.
+Main UI revision 2: core controls use stable `Visuals` descriptors. The page owns no player records or render loop; verify state refresh and unload during animation.

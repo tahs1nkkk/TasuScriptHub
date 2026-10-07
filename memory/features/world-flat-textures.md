@@ -8,4 +8,4 @@ Rework: track descendants incrementally, use weak ownership, skip unsupported in
 
 Executor checks: existing/new descendants, meshes, decals/textures, terrain exclusions, large maps, toggle cycles, and unload.
 
-Main UI revision 1: the toggle is exposed through `Dünya`; the page owns no descendant cache. Category/search transitions must not rescan the world.
+Main UI revision 2: the stable flag is displayed under `Lighting`; the page owns no descendant cache. Category/search transitions must not rescan the world.
