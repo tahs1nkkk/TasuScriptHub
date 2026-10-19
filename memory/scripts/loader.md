@@ -21,3 +21,17 @@ Loader runtime reports still represent actual completed or starting construction
 At checkpoint 30, its 0.14-second fill tween completes before the bar silently collapses into its center over 0.7 seconds; only then does the sole final pop play at speed 0.60 while the upward/growing green `Everything Ready!` switches to Nunito Black (`Heavy`) at 2.10 scale. The completed state holds for 1.8 seconds. Exit behavior is otherwise unchanged.
 
 Runtime validation follows `../EXECUTOR_TESTING.md`. Visual code follows `../THEME_RULES.md`.
+
+## Main UI improvement-pass responsibilities
+
+- Measures boot duration from the first loader statement and exposes the completed value to the Home view before `main_menu.lua` creates its initial page.
+- Owns the central `MainIconUrls`/`MainIconAssets` registry and `SetMainIcon` API for player action artwork. The resolver accepts numeric Roblox decal IDs, `rbxassetid://` strings, and HTTPS sources through the existing executor cache.
+- Makes every registered toggle bindable through the one existing input router and exposes `GetKeybind`/`BeginKeybind` to the main view. Sliders, dropdown values, and text inputs are not toggle binds.
+- Presents ten main categories, with `Waypoints` separate from `Misc`, and adapts waypoint actions as executable descriptors. Saved waypoints are namespaced by experience ID with migration from the old flat array.
+- The visible Home unload descriptor is owned by `main_menu.lua`; the legacy Unload descriptor stays registered for compatibility but has `MainHidden = true`.
+- Unload disables feature state before destroying views: Aim/ESP, movement/fling/orbit/anti-fling, gravity, camera/freecam, world modifiers, stats, and RGB scopes are turned off, then flat textures, Atmosphere, local transparency, movement, and camera ownership are restored synchronously.
+- ESP destruction now destroys only TasuHub-owned instances. It must never iterate arbitrary record values because `WorldCharacter` references a live player Character.
+- `NoFog` owns exact Atmosphere snapshots in addition to Lighting fog distances. Flat-texture snapshots use strong ownership until restoration so changed instances cannot disappear from the restore table.
+- Godmode and user-adjustable fling-power state are removed. Old config keys are accepted only long enough to clear them during migration.
+
+Executor verification for this pass is pending; compilation alone is not runtime acceptance.

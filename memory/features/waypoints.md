@@ -1,6 +1,6 @@
 # Feature memory: waypoints
 
-State: `Waypoints`; transient selected waypoint index.
+State: `Waypoints[experienceId]`; transient selected waypoint index. `experienceId` is `game.GameId`, falling back to `game.PlaceId`.
 
 Behavior: save current CFrame, select, teleport, delete, and bind actions.
 
@@ -8,4 +8,4 @@ Rework: stable waypoint IDs, validated names/transforms, config serialization, s
 
 Executor checks: empty list, add/select/teleport/delete, duplicate names, malformed config data, respawn, binds, and unload.
 
-Main UI revision 2: the registered selector is exposed under `Misc` through the shared dropdown; save/teleport/delete action migration remains pending because those compatibility records do not expose callbacks. Engine/config state is unchanged.
+Main UI revision 2: Waypoints is a dedicated main category. The shared dropdown and executable Save/Teleport/Delete action descriptors all operate only on the current experience list. Config loading migrates a legacy flat waypoint array into the current experience key; different games no longer share one list.

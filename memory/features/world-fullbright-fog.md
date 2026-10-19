@@ -2,7 +2,7 @@
 
 State: `Fullbright`, `NoFog`.
 
-Behavior: overrides lighting brightness/ambient/shadows and fog distances.
+Behavior: overrides lighting brightness/ambient/shadows and fog distances. No Fog additionally snapshots and suppresses `Atmosphere` density/haze/glare/offset, applies the rule to newly added Atmosphere descendants, enforces while active, and restores exact values on disable/unload.
 
 Rework: preserve exact original properties, compose with lighting modes predictably, and avoid recreating effects every frame.
 

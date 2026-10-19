@@ -121,11 +121,11 @@ function PlayerServiceModule.Create(context)
         end)
         local started = os.clock()
         while not completed and not destroyed and revision == walkRevision do
-            if not targetRoot.Parent or (targetRoot.Position - targetOrigin).Magnitude >= 6 or os.clock() - started >= 4.5 then break end
+            if not targetRoot.Parent or (targetRoot.Position - targetOrigin).Magnitude >= 3 or os.clock() - started >= 3.5 then break end
             RunService.Heartbeat:Wait()
         end
         connection:Disconnect()
-        return reached, targetRoot.Parent and (targetRoot.Position - targetOrigin).Magnitude >= 6
+        return reached, targetRoot.Parent and (targetRoot.Position - targetOrigin).Magnitude >= 3
     end
 
     local function startWalk(userId)
@@ -212,6 +212,13 @@ function PlayerServiceModule.Create(context)
         root.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 4)
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
+        local _, humanoid = getCharacter(LocalPlayer)
+        if humanoid then
+            humanoid.PlatformStand = false
+            humanoid.Sit = false
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            humanoid:MoveTo(root.Position)
+        end
         notify("Teleport")
         return true, "Teleported"
     end
@@ -255,10 +262,12 @@ function PlayerServiceModule.Create(context)
             local safeVelocity = localRoot.AssemblyLinearVelocity
             local safeAngular = localRoot.AssemblyAngularVelocity
             local safeAutoRotate = localHumanoid.AutoRotate
+            local safePlatformStand = localHumanoid.PlatformStand
             local cameraType = camera and camera.CameraType
             local cameraSubject = camera and camera.CameraSubject
             local cameraCFrame = camera and camera.CFrame
             local cameraLock
+            local localTransparency = {}
             local function restore()
                 if cameraLock then cameraLock:Disconnect() end
                 if localRoot and localRoot.Parent then
@@ -268,7 +277,11 @@ function PlayerServiceModule.Create(context)
                 end
                 if localHumanoid and localHumanoid.Parent then
                     localHumanoid.AutoRotate = safeAutoRotate
+                    localHumanoid.PlatformStand = safePlatformStand
                     localHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end
+                for part, value in pairs(localTransparency) do
+                    if part and part.Parent then pcall(function() part.LocalTransparencyModifier = value end) end
                 end
                 if camera and camera.Parent then
                     camera.CameraType = cameraType or Enum.CameraType.Custom
@@ -292,20 +305,32 @@ function PlayerServiceModule.Create(context)
                     local setHiddenProperty = context.ResolveGlobal("sethiddenproperty")
                     if type(setHiddenProperty) == "function" then pcall(setHiddenProperty, LocalPlayer, "SimulationRadius", math.huge) end
                 end
-                local power = math.clamp(tonumber(context.GetFlingPower and context.GetFlingPower()) or 50000, 1000, 100000)
+                local power = 10000000
                 localHumanoid.AutoRotate = false
-                for index = 1, 20 do
+                localHumanoid.PlatformStand = false
+                for _, descendant in ipairs(localRoot.Parent:GetDescendants()) do
+                    if descendant:IsA("BasePart") then
+                        localTransparency[descendant] = descendant.LocalTransparencyModifier
+                        descendant.LocalTransparencyModifier = 1
+                    end
+                end
+                for index = 1, 36 do
                     if destroyed or revision ~= actionRevision or not localRoot.Parent or not targetCharacter.Parent or not targetRoot.Parent or targetHumanoid.Health <= 0 then break end
-                    local phase = (index % 4) * math.pi * 0.5
-                    local offset = Vector3.new(math.cos(phase) * 0.75, (index % 2 == 0) and 0.35 or -0.15, math.sin(phase) * 0.75)
-                    localRoot.CFrame = CFrame.new(targetRoot.Position + offset, targetRoot.Position)
-                    localRoot.AssemblyAngularVelocity = Vector3.new(power, power, power)
-                    localRoot.AssemblyLinearVelocity = Vector3.new(-offset.X, 0.22, -offset.Z).Unit * power
+                    local phase = index * math.pi * 0.5
+                    local offset = Vector3.new(math.cos(phase) * 0.82, (index % 3 - 1) * 0.28, math.sin(phase) * 0.82)
+                    local predicted = targetRoot.Position + targetRoot.AssemblyLinearVelocity * 0.035
+                    localRoot.CFrame = CFrame.new(predicted + offset, predicted)
+                    local sign = index % 2 == 0 and 1 or -1
+                    localRoot.AssemblyAngularVelocity = Vector3.new(power * sign, power, -power * sign)
+                    localRoot.AssemblyLinearVelocity = targetRoot.AssemblyLinearVelocity + Vector3.new(-offset.X * power, power, -offset.Z * power)
+                    RunService.Stepped:Wait()
                     RunService.Heartbeat:Wait()
-                    localRoot.CFrame = safeCFrame
-                    localRoot.AssemblyLinearVelocity = safeVelocity
-                    localRoot.AssemblyAngularVelocity = Vector3.zero
-                    RunService.RenderStepped:Wait()
+                    if index % 4 == 0 then
+                        localRoot.CFrame = safeCFrame
+                        localRoot.AssemblyLinearVelocity = safeVelocity
+                        localRoot.AssemblyAngularVelocity = Vector3.zero
+                        RunService.RenderStepped:Wait()
+                    end
                 end
             end)
             restore()

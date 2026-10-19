@@ -1,8 +1,8 @@
 # Feature memory: Aim core
 
-State: `Aim.Enabled`, `Aim.Activation`, `Aim.Method`, `Aim.Rage`, `Aim.Smoothing`.
+State: `Aim.Enabled`, `Aim.Activation`, `Aim.Method`, `Aim.Rage`, `Aim.Smoothing`. Activation supports only `Right Mouse` and `Left Mouse`; old `Always` values migrate to `Right Mouse`.
 
-Behavior: selects a valid target during render updates and applies camera or mouse movement according to activation and rage rules.
+Behavior: selects a valid target during render updates and applies camera or mouse movement according to activation and rage rules. Mouse movement compares `WorldToScreenPoint` against `GetMouseLocation`, keeping both coordinates in the same inset-aware space.
 
 Rework: controller owns targeting cadence and input state; UI only edits validated state. `HoldRightMouse` is migration-only.
 

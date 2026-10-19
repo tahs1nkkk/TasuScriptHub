@@ -2,9 +2,9 @@
 
 State: `Boxes`, `BoxFilled`, `Thickness`.
 
-Behavior: current verified build uses native 3D bounds through a proxy and selection box.
+Behavior: the current branch uses four screen-space box lines plus a clipped fill computed from visible body-part bounds. The renderer stays visible through walls because it is application overlay geometry, not a world `SelectionBox`.
 
-Rework: keep renderer interchangeable, avoid physical/collision impact, update bounds after avatar scale changes, and destroy proxies on character swap.
+Rework: keep renderer interchangeable, avoid physical/collision impact, update bounds after avatar scale changes, exclude `Accessory` and `Tool` descendants from hitbox width, use 0.62 fill transparency when filled, and destroy only owned proxies on character swap.
 
 Executor checks: R6/R15, scaled avatars, accessories, seated/dead players, fill on/off, thickness limits, respawn, and unload.
 

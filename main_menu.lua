@@ -8,6 +8,7 @@ local CATEGORY_META = table.freeze({
     table.freeze({Id = "Movement", Label = "Movement", Glyph = "➤"}),
     table.freeze({Id = "World", Label = "World", Glyph = "◇"}),
     table.freeze({Id = "Lighting", Label = "Lighting", Glyph = "☼"}),
+    table.freeze({Id = "Waypoints", Label = "Waypoints", Glyph = "⌖"}),
     table.freeze({Id = "Misc", Label = "Misc", Glyph = "✦"}),
     table.freeze({Id = "Configs", Label = "Configs", Glyph = "⚙"})
 })
@@ -62,6 +63,8 @@ function MainMenuModule.Create(context)
     local searchOpen, searchPointerInside = false, false
     local activeSlider = nil
     local sectionCollapsed, sectionRecords, categoryIconRecords = {}, {}, {}
+    local interfaceIconAssets, interfaceIconRecords = {}, {}
+    local holdUnloadRevision = 0
     local activeDropdown, playerSubscription, statsSubscription = nil, nil, nil
 
     local function connect(signal, callback)
@@ -828,7 +831,8 @@ function MainMenuModule.Create(context)
         end
 
         if entry.Kind == "Toggle" then
-            label.Size = UDim2.new(1, -78, 1, 0)
+            local hasBind = entry.BindId ~= nil and type(context.GetKeybind) == "function" and type(context.BeginKeybind) == "function"
+            label.Size = UDim2.new(1, hasBind and -126 or -78, 1, 0)
             local toggle = Instance.new("TextButton")
             toggle.AnchorPoint = Vector2.new(1, 0.5)
             toggle.AutoButtonColor = false
@@ -841,6 +845,24 @@ function MainMenuModule.Create(context)
             toggle.Parent = row
             round(toggle, 999)
             outline(toggle, 1, 0.22, theme.Signal)
+            local bindButton
+            if hasBind then
+                bindButton = Instance.new("TextButton")
+                bindButton.AnchorPoint = Vector2.new(1, 0.5)
+                bindButton.AutoButtonColor = false
+                bindButton.BackgroundColor3 = theme.Layer
+                bindButton.BackgroundTransparency = 0.08
+                bindButton.BorderSizePixel = 0
+                bindButton.FontFace = fonts.HeadingHeavy
+                bindButton.Position = UDim2.new(1, -61, 0.5, 0)
+                bindButton.Size = UDim2.fromOffset(42, 24)
+                bindButton.TextColor3 = theme.Signal
+                bindButton.TextSize = 10
+                bindButton.TextTruncate = Enum.TextTruncate.AtEnd
+                bindButton.ZIndex = 4012
+                bindButton.Parent = row
+                round(bindButton, 7)
+            end
             local knob = Instance.new("Frame")
             knob.AnchorPoint = Vector2.new(0.5, 0.5)
             knob.BackgroundColor3 = theme.Signal
@@ -860,12 +882,24 @@ function MainMenuModule.Create(context)
                     BackgroundColor3 = enabled and theme.Base or theme.Signal,
                     Position = enabled and UDim2.new(1, -9, 0.5, 0) or UDim2.new(0, 9, 0.5, 0)
                 }, motion.Control, Enum.EasingStyle.Quint)
+                if bindButton then
+                    bindButton.Text = tostring(context.GetKeybind(entry.BindId) or "Bind")
+                end
             end
             scopedConnect(pageConnections, toggle.Activated, function()
                 playSound("ButtonClick")
                 setControlValue(entry.Flag, not (getControlValue(entry.Flag) == true))
                 render()
             end)
+            if bindButton then
+                scopedConnect(pageConnections, bindButton.Activated, function()
+                    playSound("ButtonClick")
+                    bindButton.Text = "..."
+                    context.BeginKeybind(entry.BindId, function()
+                        if bindButton.Parent then render() end
+                    end)
+                end)
+            end
             table.insert(currentRenderers, render)
             render()
         elseif entry.Kind == "Slider" then
@@ -1032,7 +1066,7 @@ function MainMenuModule.Create(context)
         return row
     end
 
-    local function createSection(parent, name, entries)
+    local function createSection(parent, name, entries, wideControls)
         local sectionKey = tostring(entries[1] and entries[1].Category or currentCategory) .. "/" .. tostring(name)
         local section = Instance.new("Frame")
         section.Name = tostring(name):gsub("[^%w_]", "_")
@@ -1065,7 +1099,7 @@ function MainMenuModule.Create(context)
         arrow.FontFace = fonts.HeadingBlack
         arrow.Position = UDim2.new(1, -8, 0, 7)
         arrow.Size = UDim2.fromOffset(30, 30)
-        arrow.Text = "⌃"
+        arrow.Text = "<"
         arrow.TextColor3 = theme.Signal
         arrow.TextSize = 17
         arrow.ZIndex = 4011
@@ -1080,17 +1114,47 @@ function MainMenuModule.Create(context)
         content.Size = UDim2.new(1, -20, 0, 0)
         content.ZIndex = 4009
         content.Parent = section
-        local sectionLayout = Instance.new("UIListLayout")
-        sectionLayout.Padding = UDim.new(0, 7)
-        sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        sectionLayout.Parent = content
-        for index, entry in ipairs(entries) do
-            local row = makeControlRow(content, entry)
-            if row then row.LayoutOrder = index end
+        local sectionLayouts = {}
+        if wideControls then
+            for columnIndex = 1, 2 do
+                local column = Instance.new("Frame")
+                column.AutomaticSize = Enum.AutomaticSize.Y
+                column.BackgroundTransparency = 1
+                column.BorderSizePixel = 0
+                column.Position = UDim2.new((columnIndex - 1) * 0.5, columnIndex == 2 and 4 or 0, 0, 0)
+                column.Size = UDim2.new(0.5, -4, 0, 0)
+                column.ZIndex = 4009
+                column.Parent = content
+                local columnLayout = Instance.new("UIListLayout")
+                columnLayout.Padding = UDim.new(0, 7)
+                columnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                columnLayout.Parent = column
+                sectionLayouts[columnIndex] = columnLayout
+            end
+            for index, entry in ipairs(entries) do
+                local column = sectionLayouts[index % 2 == 1 and 1 or 2].Parent
+                local row = makeControlRow(column, entry)
+                if row then row.LayoutOrder = math.ceil(index / 2) end
+            end
+        else
+            local sectionLayout = Instance.new("UIListLayout")
+            sectionLayout.Padding = UDim.new(0, 7)
+            sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            sectionLayout.Parent = content
+            sectionLayouts[1] = sectionLayout
+            for index, entry in ipairs(entries) do
+                local row = makeControlRow(content, entry)
+                if row then row.LayoutOrder = index end
+            end
         end
 
         local function targetHeight()
-            return sectionCollapsed[sectionKey] and 0 or sectionLayout.AbsoluteContentSize.Y + 10
+            if sectionCollapsed[sectionKey] then return 0 end
+            local height = 0
+            for _, sectionLayout in ipairs(sectionLayouts) do
+                height = math.max(height, sectionLayout.AbsoluteContentSize.Y)
+            end
+            return height + 10
         end
         local function renderCollapse(instant)
             local collapsed = sectionCollapsed[sectionKey] == true
@@ -1099,11 +1163,11 @@ function MainMenuModule.Create(context)
                 content.Size = UDim2.new(1, -20, 0, height)
                 content.GroupTransparency = collapsed and 1 or 0
                 section.Size = UDim2.new(1, 0, 0, 44 + height)
-                arrow.Rotation = collapsed and 180 or 0
+                arrow.Rotation = collapsed and -90 or 90
             else
                 animate(content, {Size = UDim2.new(1, -20, 0, height), GroupTransparency = collapsed and 1 or 0}, motion.Sidebar, Enum.EasingStyle.Quint)
                 animate(section, {Size = UDim2.new(1, 0, 0, 44 + height)}, motion.Sidebar, Enum.EasingStyle.Quint)
-                animate(arrow, {Rotation = collapsed and 180 or 0}, motion.Control, Enum.EasingStyle.Quint)
+                animate(arrow, {Rotation = collapsed and -90 or 90}, motion.Control, Enum.EasingStyle.Quint)
             end
         end
         scopedConnect(pageConnections, arrow.Activated, function()
@@ -1111,9 +1175,11 @@ function MainMenuModule.Create(context)
             sectionCollapsed[sectionKey] = not (sectionCollapsed[sectionKey] == true)
             renderCollapse(false)
         end)
-        scopedConnect(pageConnections, sectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-            if not sectionCollapsed[sectionKey] then renderCollapse(false) end
-        end)
+        for _, sectionLayout in ipairs(sectionLayouts) do
+            scopedConnect(pageConnections, sectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+                if not sectionCollapsed[sectionKey] then renderCollapse(false) end
+            end)
+        end
         sectionRecords[sectionKey] = {Section = section, Render = renderCollapse}
         task.defer(function() if section.Parent then renderCollapse(true) end end)
         return section
@@ -1216,7 +1282,7 @@ function MainMenuModule.Create(context)
         local snapshots, rowPool = {}, {}
         local rowHeight, bufferRows = 62, 3
 
-        local function actionButton(parentRow, text, xOffset, width)
+        local function actionButton(parentRow, iconName, fallbackGlyph, xOffset, width)
             local button = Instance.new("TextButton")
             button.AnchorPoint = Vector2.new(1, 0.5)
             button.AutoButtonColor = false
@@ -1226,13 +1292,92 @@ function MainMenuModule.Create(context)
             button.FontFace = fonts.HeadingHeavy
             button.Position = UDim2.new(1, xOffset, 0.5, 0)
             button.Size = UDim2.fromOffset(width, 30)
-            button.Text = text
+            button.Text = ""
             button.TextColor3 = theme.Signal
             button.TextSize = 11
             button.ZIndex = 4013
             button.Parent = parentRow
             round(button, 8)
-            return button
+            local glyph = Instance.new("TextLabel")
+            glyph.BackgroundTransparency = 1
+            glyph.FontFace = fonts.HeadingBlack
+            glyph.Size = UDim2.fromScale(1, 1)
+            glyph.Text = fallbackGlyph
+            glyph.TextColor3 = theme.Signal
+            glyph.TextSize = 16
+            glyph.ZIndex = 4014
+            glyph.Parent = button
+            local image = Instance.new("ImageLabel")
+            image.AnchorPoint = Vector2.new(0.5, 0.5)
+            image.BackgroundTransparency = 1
+            image.BorderSizePixel = 0
+            image.Position = UDim2.fromScale(0.5, 0.5)
+            image.Size = UDim2.fromOffset(19, 19)
+            image.ScaleType = Enum.ScaleType.Fit
+            image.Visible = false
+            image.ZIndex = 4015
+            image.Parent = button
+            interfaceIconRecords[iconName] = interfaceIconRecords[iconName] or {}
+            table.insert(interfaceIconRecords[iconName], {Image = image, Glyph = glyph})
+            local cached = interfaceIconAssets[iconName]
+            if type(cached) == "string" and cached ~= "" then
+                image.Image = cached
+                image.Visible = true
+                glyph.Visible = false
+            elseif cached == nil and type(context.GetInterfaceIcon) == "function" then
+                interfaceIconAssets[iconName] = false
+                task.spawn(function()
+                    local ok, resolved = pcall(context.GetInterfaceIcon, iconName)
+                    resolved = ok and type(resolved) == "string" and resolved or ""
+                    interfaceIconAssets[iconName] = resolved
+                    if resolved ~= "" then
+                        for _, record in ipairs(interfaceIconRecords[iconName] or {}) do
+                            if record.Image.Parent then
+                                record.Image.Image = resolved
+                                record.Image.Visible = true
+                                record.Glyph.Visible = false
+                            end
+                        end
+                    end
+                end)
+            end
+            return {Button = button, Glyph = glyph, Image = image, IconName = iconName, RegisteredIcons = {[iconName] = true}}
+        end
+
+        local function setActionIcon(record, iconName, fallbackGlyph)
+            record.Glyph.Text = fallbackGlyph
+            if not record.RegisteredIcons[iconName] then
+                record.RegisteredIcons[iconName] = true
+                interfaceIconRecords[iconName] = interfaceIconRecords[iconName] or {}
+                table.insert(interfaceIconRecords[iconName], {Image = record.Image, Glyph = record.Glyph})
+            end
+            record.IconName = iconName
+            local cached = interfaceIconAssets[iconName]
+            if type(cached) == "string" and cached ~= "" then
+                record.Image.Image = cached
+                record.Image.Visible = true
+                record.Glyph.Visible = false
+            else
+                record.Image.Visible = false
+                record.Glyph.Visible = true
+                if cached == nil and type(context.GetInterfaceIcon) == "function" then
+                    interfaceIconAssets[iconName] = false
+                    task.spawn(function()
+                        local ok, resolved = pcall(context.GetInterfaceIcon, iconName)
+                        resolved = ok and type(resolved) == "string" and resolved or ""
+                        interfaceIconAssets[iconName] = resolved
+                        if resolved ~= "" then
+                            for _, iconRecord in ipairs(interfaceIconRecords[iconName] or {}) do
+                                if iconRecord.Image.Parent then
+                                    iconRecord.Image.Image = resolved
+                                    iconRecord.Image.Visible = true
+                                    iconRecord.Glyph.Visible = false
+                                end
+                            end
+                        end
+                    end)
+                end
+            end
         end
 
         local renderPlayers
@@ -1293,10 +1438,10 @@ function MainMenuModule.Create(context)
             healthFill.ZIndex = 4012
             healthFill.Parent = healthTrack
             round(healthFill, 999)
-            local walk = actionButton(row, "Walk", -188, 50)
-            local fling = actionButton(row, "Fling", -134, 50)
-            local view = actionButton(row, "View", -80, 50)
-            local teleport = actionButton(row, "TP", -26, 42)
+            local walk = actionButton(row, "PlayerWalk", "➤", -188, 50)
+            local fling = actionButton(row, "PlayerFling", "✦", -134, 50)
+            local view = actionButton(row, "PlayerView", "◉", -80, 50)
+            local teleport = actionButton(row, "PlayerTeleport", "⌖", -26, 42)
             record.Row, record.Avatar, record.Name, record.Details, record.Health = row, avatar, name, details, healthFill
             record.Walk, record.Fling, record.View, record.Teleport = walk, fling, view, teleport
             local function invoke(action)
@@ -1307,10 +1452,10 @@ function MainMenuModule.Create(context)
                 status.TextColor3 = ok and theme.Success or theme.Danger
                 task.defer(function() if renderPlayers then renderPlayers() end end)
             end
-            scopedConnect(pageConnections, walk.Activated, function() invoke("Walk") end)
-            scopedConnect(pageConnections, fling.Activated, function() invoke("Fling") end)
-            scopedConnect(pageConnections, view.Activated, function() invoke("View") end)
-            scopedConnect(pageConnections, teleport.Activated, function() invoke("Teleport") end)
+            scopedConnect(pageConnections, walk.Button.Activated, function() invoke("Walk") end)
+            scopedConnect(pageConnections, fling.Button.Activated, function() invoke("Fling") end)
+            scopedConnect(pageConnections, view.Button.Activated, function() invoke("View") end)
+            scopedConnect(pageConnections, teleport.Button.Activated, function() invoke("Teleport") end)
             return record
         end
 
@@ -1332,14 +1477,16 @@ function MainMenuModule.Create(context)
                     local distance = data.Distance == math.huge and "--" or string.format("%.0f", data.Distance)
                     record.Details.Text = data.Relation .. "  •  " .. distance .. " studs  •  " .. string.format("%.0f%%", data.HealthRatio * 100)
                     record.Health.Size = UDim2.fromScale(data.HealthRatio, 1)
-                    record.Walk.Text = data.Walking and "Stop" or "Walk"
-                    record.View.Text = data.Viewing and "Stop" or "View"
+                    setActionIcon(record.Walk, data.Walking and "PlayerStop" or "PlayerWalk", data.Walking and "■" or "➤")
+                    setActionIcon(record.View, data.Viewing and "PlayerUnview" or "PlayerView", data.Viewing and "×" or "◉")
                     local actionable = data.Alive and not data.Busy
                     local actionTransparency = actionable and 0 or 0.55
-                    record.Walk.Active, record.Fling.Active = actionable, actionable
-                    record.View.Active, record.Teleport.Active = actionable, actionable
-                    record.Walk.TextTransparency, record.Fling.TextTransparency = actionTransparency, actionTransparency
-                    record.View.TextTransparency, record.Teleport.TextTransparency = actionTransparency, actionTransparency
+                    record.Walk.Button.Active, record.Fling.Button.Active = actionable, actionable
+                    record.View.Button.Active, record.Teleport.Button.Active = actionable, actionable
+                    for _, actionRecord in ipairs({record.Walk, record.Fling, record.View, record.Teleport}) do
+                        actionRecord.Glyph.TextTransparency = actionTransparency
+                        actionRecord.Image.ImageTransparency = actionTransparency
+                    end
                 else
                     record.UserId = nil
                     record.Row.Visible = false
@@ -1365,8 +1512,126 @@ function MainMenuModule.Create(context)
         return card
     end
 
+    local function createHoldUnload(parent)
+        local shell = Instance.new("Frame")
+        shell.BackgroundColor3 = theme.Base
+        shell.BackgroundTransparency = 0.08
+        shell.BorderSizePixel = 0
+        shell.ClipsDescendants = true
+        shell.LayoutOrder = 99
+        shell.Size = UDim2.new(1, -6, 0, 54)
+        shell.ZIndex = 4008
+        shell.Parent = parent
+        round(shell, 14)
+        local shellStroke = outline(shell, 2, 0.12)
+
+        local fillClip = Instance.new("Frame")
+        fillClip.BackgroundColor3 = theme.Danger
+        fillClip.BackgroundTransparency = 0.06
+        fillClip.BorderSizePixel = 0
+        fillClip.ClipsDescendants = true
+        fillClip.Size = UDim2.fromScale(0, 1)
+        fillClip.Visible = false
+        fillClip.ZIndex = 4009
+        fillClip.Parent = shell
+        for index = 0, 56 do
+            local line = Instance.new("Frame")
+            line.BackgroundColor3 = theme.Signal
+            line.BackgroundTransparency = 0.78
+            line.BorderSizePixel = 0
+            line.Position = UDim2.fromOffset(index * 14, 0)
+            line.Size = UDim2.fromOffset(1, 54)
+            line.ZIndex = 4010
+            line.Parent = fillClip
+        end
+        for index = 1, 3 do
+            local line = Instance.new("Frame")
+            line.BackgroundColor3 = theme.Signal
+            line.BackgroundTransparency = 0.82
+            line.BorderSizePixel = 0
+            line.Position = UDim2.fromOffset(0, index * 14)
+            line.Size = UDim2.fromOffset(layout.WindowWidth, 1)
+            line.ZIndex = 4010
+            line.Parent = fillClip
+        end
+
+        local button = Instance.new("TextButton")
+        button.AutoButtonColor = false
+        button.BackgroundTransparency = 1
+        button.BorderSizePixel = 0
+        button.FontFace = fonts.HeadingBlack
+        button.Size = UDim2.fromScale(1, 1)
+        button.Text = "Hold 2 seconds to unload TasuHub"
+        button.TextColor3 = theme.Signal
+        button.TextSize = 15
+        button.ZIndex = 4011
+        button.Parent = shell
+
+        local holding = false
+        local fillTween
+        local function cancelHold(completed)
+            holding = false
+            holdUnloadRevision = holdUnloadRevision + 1
+            if fillTween then pcall(function() fillTween:Cancel() end) end
+            if completed then return end
+            button.Text = "Hold 2 seconds to unload TasuHub"
+            fillTween = animate(fillClip, {Size = UDim2.fromScale(0, 1), BackgroundTransparency = 1}, motion.Control, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+            task.delay(motion.Control, function()
+                if not holding and fillClip.Parent and fillClip.Size.X.Scale <= 0.001 then
+                    fillClip.Visible = false
+                    fillClip.BackgroundTransparency = 0.06
+                end
+            end)
+        end
+        local function beginHold(input)
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+            if holding or destroyed or state ~= "Open" then return end
+            holding = true
+            holdUnloadRevision = holdUnloadRevision + 1
+            local revision = holdUnloadRevision
+            if fillTween then pcall(function() fillTween:Cancel() end) end
+            fillClip.Visible = true
+            fillClip.BackgroundTransparency = 0.06
+            fillClip.Size = UDim2.fromScale(0, 1)
+            button.Text = "Keep holding to unload..."
+            shellStroke.Color = theme.Danger
+            fillTween = animate(fillClip, {Size = UDim2.fromScale(1, 1)}, 2, Enum.EasingStyle.Linear)
+            task.spawn(function()
+                for checkpoint = 1, 20 do
+                    task.wait(0.1)
+                    if destroyed or not holding or revision ~= holdUnloadRevision then return end
+                    playSound("UnloadCheckpoint", {
+                        PlaybackSpeed = 0.64 + (checkpoint - 1) / 19 * 0.82,
+                        Volume = 0.065,
+                        CleanupDelay = 0.7
+                    })
+                end
+                if destroyed or not holding or revision ~= holdUnloadRevision then return end
+                cancelHold(true)
+                button.Text = "Unloading..."
+                if type(context.RequestUnload) == "function" then context.RequestUnload() end
+            end)
+        end
+        scopedConnect(pageConnections, button.InputBegan, beginHold)
+        scopedConnect(pageConnections, button.InputEnded, function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                shellStroke.Color = theme.Base
+                if holding then cancelHold(false) end
+            end
+        end)
+        scopedConnect(pageConnections, button.MouseEnter, function()
+            if not holding then animate(shell, {BackgroundTransparency = 0.02}, motion.Control, Enum.EasingStyle.Quint) end
+        end)
+        scopedConnect(pageConnections, button.MouseLeave, function()
+            animate(shell, {BackgroundTransparency = 0.08}, motion.Control, Enum.EasingStyle.Quint)
+            shellStroke.Color = theme.Base
+            if holding then cancelHold(false) end
+        end)
+        return shell
+    end
+
     local function createPage(category)
-        currentRenderers, currentRows, sectionRecords = {}, {}, {}
+        currentRenderers, currentRows, sectionRecords, interfaceIconRecords = {}, {}, {}, {}
         local page = Instance.new("CanvasGroup")
         page.Name = category .. "Page"
         page.BackgroundTransparency = 1
@@ -1413,7 +1678,6 @@ function MainMenuModule.Create(context)
         pageHeading.Parent = scroll
 
         if category == "Home" then
-            local total = #indexEntries
             local summary = Instance.new("Frame")
             summary.AutomaticSize = Enum.AutomaticSize.Y
             summary.BackgroundColor3 = theme.Base
@@ -1449,10 +1713,12 @@ function MainMenuModule.Create(context)
             description.BackgroundTransparency = 1
             description.FontFace = fonts.Body
             description.Size = UDim2.new(1, 0, 0, 0)
-            description.Text = string.format("%d indexed controls · %d categories\nUse the navigation rail or search to reach every feature.", total, #CATEGORY_META)
-            description.TextColor3 = theme.Signal
-            description.TextSize = 14
-            description.TextTransparency = 0.22
+            local loadDuration = type(context.GetLoadDuration) == "function" and tonumber(context.GetLoadDuration()) or nil
+            description.Text = loadDuration and string.format("Loader completed in %.2f seconds", loadDuration) or "Loader duration unavailable"
+            description.TextColor3 = not loadDuration and theme.Signal
+                or (loadDuration <= 12 and theme.Success or (loadDuration <= 25 and theme.Warning or theme.Danger))
+            description.TextSize = 15
+            description.TextTransparency = 0
             description.TextWrapped = true
             description.TextXAlignment = Enum.TextXAlignment.Left
             description.ZIndex = 4009
@@ -1514,11 +1780,18 @@ function MainMenuModule.Create(context)
         scopedConnect(pageConnections, leftLayout:GetPropertyChangedSignal("AbsoluteContentSize"), syncColumnsHeight)
         scopedConnect(pageConnections, rightLayout:GetPropertyChangedSignal("AbsoluteContentSize"), syncColumnsHeight)
         for index, sectionName in ipairs(sectionNames) do
-            local targetColumn = index % 2 == 1 and leftColumn or rightColumn
-            local section = createSection(targetColumn, sectionName, grouped[sectionName])
+            local singleSection = #sectionNames == 1
+            local targetColumn = singleSection and leftColumn or (index % 2 == 1 and leftColumn or rightColumn)
+            if singleSection then
+                leftColumn.Size = UDim2.new(1, 0, 0, 0)
+                rightColumn.Visible = false
+            end
+            local section = createSection(targetColumn, sectionName, grouped[sectionName], singleSection)
             section.LayoutOrder = math.ceil(index / 2)
         end
         task.defer(syncColumnsHeight)
+
+        if category == "Home" then createHoldUnload(scroll) end
 
         if #sectionNames == 0 and category ~= "Home" then
             local empty = Instance.new("TextLabel")
@@ -1567,9 +1840,17 @@ function MainMenuModule.Create(context)
             local row = currentRows[flag]
             if not row or not row.Parent then return end
             scroll.CanvasPosition = Vector2.new(0, math.max(0, row.AbsolutePosition.Y - scroll.AbsolutePosition.Y + scroll.CanvasPosition.Y - 18))
-            local original = row.BackgroundTransparency
-            row.BackgroundTransparency = 0.02
-            animate(row, {BackgroundTransparency = original}, 0.8, Enum.EasingStyle.Quint)
+            local originalColor = row.BackgroundColor3
+            local originalTransparency = row.BackgroundTransparency
+            local pulseStroke = outline(row, 2, 1, theme.Signal)
+            for _ = 1, 3 do
+                if destroyed or not row.Parent then break end
+                animate(row, {BackgroundColor3 = theme.Signal, BackgroundTransparency = 0.08}, 0.13, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                animate(pulseStroke, {Transparency = 0.02}, 0.13, Enum.EasingStyle.Sine, Enum.EasingDirection.Out).Completed:Wait()
+                animate(row, {BackgroundColor3 = originalColor, BackgroundTransparency = originalTransparency}, 0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+                animate(pulseStroke, {Transparency = 1}, 0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.In).Completed:Wait()
+            end
+            if pulseStroke.Parent then pulseStroke:Destroy() end
         end)
     end
 
@@ -1597,7 +1878,7 @@ function MainMenuModule.Create(context)
         task.spawn(function()
             if previous and previous.Parent then task.wait(motion.PageOut) end
             if previous and previous.Parent then previous:Destroy() end
-            task.wait(0.3)
+            task.wait(0.22)
             if destroyed or revision ~= pageRevision then return end
             local nextPage, nextScroll = createPage(category)
             currentPage = nextPage
@@ -1948,6 +2229,20 @@ function MainMenuModule.Create(context)
                     record.Glyph.TextTransparency = 0
                 end
             end)
+        end
+        return true
+    end
+    controller.SetInterfaceIcon = function(name, asset)
+        name = tostring(name or "")
+        if name == "" then return false end
+        local resolved = tostring(asset or "")
+        interfaceIconAssets[name] = resolved
+        for _, record in ipairs(interfaceIconRecords[name] or {}) do
+            if record.Image.Parent then
+                record.Image.Image = resolved
+                record.Image.Visible = resolved ~= ""
+                record.Glyph.Visible = resolved == ""
+            end
         end
         return true
     end

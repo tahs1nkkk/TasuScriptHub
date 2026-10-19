@@ -25,9 +25,9 @@ This map prevents state or behavior from being lost during the rebuild.
 | Infinite jump and bunny hop | `features/movement-mobility.md` |
 | Flight, flight method/speed, noclip | `features/movement-flight-noclip.md` |
 | Click teleport | `features/movement-click-teleport.md` |
-| Anti-fling | `features/movement-protection.md` |
-| Godmode | `features/movement-godmode.md` |
-| Fling modes and values | `features/movement-fling.md` |
+| Static/moving anti-fling | `features/movement-protection.md` |
+| Removed Godmode config migration | `features/movement-godmode.md` |
+| Fixed-profile fling modes | `features/movement-fling.md` |
 | Orbit modes and values | `features/movement-orbit.md` |
 | Gravity override | `features/movement-gravity.md` |
 | Lighting modes and manual controls | `features/world-lighting.md` |
@@ -40,7 +40,7 @@ This map prevents state or behavior from being lost during the rebuild.
 | `Stats.*` | `features/stats-overlay.md` |
 | `Keybinds` and bind capture | `systems/keybinds.md` |
 | `Catalog`, source/URL execution, controller registration, dynamic game actions, built-in MM2 entry | `systems/script-loading.md`, `systems/corner-action-buttons.md` |
-| `Waypoints` | `features/waypoints.md` |
+| Per-experience `Waypoints` category and config state | `features/waypoints.md` |
 | Search registration/ranking/navigation | `systems/search-index.md` |
 | Config serialization, files, migrations | `systems/config-storage.md` |
 | MM2 shared-theme game window and script lifecycle | `scripts/mm2.md` |

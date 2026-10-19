@@ -1,11 +1,7 @@
 # Feature memory: godmode
 
-State: `Godmode`.
+Status: removed in the current improvement pass because the local implementation did not provide truthful working behavior.
 
-Behavior: current controller performs local humanoid reset/rebinding behavior and tracks replacement state.
+Removed ownership: default state, runtime controller/reset callback override, UI descriptor, unload/reset logic, and service dependency. Old config payloads may contain `Movement.Godmode`; load migration clears that key and never exposes it.
 
-Rework: document the exact executor/game limitations, isolate irreversible game-specific behavior, and guarantee UI does not claim success when the game rejects it.
-
-Executor checks: enable, damage, death, respawn, disable, game rejection, repeated execution, and unload.
-
-Main UI revision 2: the existing toggle is exposed under `Misc`; the view makes no success claim and owns no humanoid mutation. Verify rejection and refresh remain truthful.
+Executor checks: old configs containing the key load without error, no Godmode row appears, Reset remains game-owned, repeated execution leaves no reset callback override, and unload has no Godmode cleanup branch.

@@ -2,7 +2,7 @@
 
 State: `Tracers`, `Skeleton`, `Thickness`.
 
-Behavior: screen-space lines connect the viewport to player roots and render R6/R15 motor chains.
+Behavior: screen-space lines connect the viewport to player roots and render R15 motor chains plus a dedicated fixed R6 body-part map. All ESP projection uses `WorldToViewportPoint` consistently, preventing the GUI-inset vertical drift that grew with distance.
 
 Rework: cache rig mapping per character, hide invalid projections, and centralize line pooling so toggles do not allocate every frame.
 

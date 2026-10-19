@@ -2,7 +2,7 @@
 
 State: `Offscreen`, `TeamColors`.
 
-Behavior: computes edge arrows for non-visible targets and optionally derives ESP colors from team identity.
+Behavior: computes edge arrows for non-visible targets and optionally derives ESP colors from team identity. Arrow size is inverse to target distance and clamped to 18–42 px (text 16–36 px), so nearby off-screen players are larger without unbounded scaling.
 
 Rework: use safe viewport bounds and inset handling, stable arrow rotation, and a single color-resolution service.
 

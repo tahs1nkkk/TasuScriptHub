@@ -6,5 +6,7 @@ Rework requirements: stable action IDs, one input router, conflict detection, pr
 
 The keybind editor uses shared modal/control/theme components. A feature never creates its own input listener merely to support a bind.
 
+Main UI improvement pass: every toggle registration receives a stable `BindId`, and the main view renders one compact bind control for it through loader-owned `GetKeybind`/`BeginKeybind`. Capture still uses the single loader router; the view creates no key listener. Sliders, dropdowns, text values, and action buttons are not described as toggle binds.
+
 Executor checks: assign, replace, conflict, unbind, save/load, typing/chat focus, feature removal, respawn, double load, and unload.
 

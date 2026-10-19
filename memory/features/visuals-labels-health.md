@@ -2,7 +2,7 @@
 
 State: `Names`, `Distance`, `Health`, `MaxDistance`.
 
-Behavior: billboard labels show selected identity/distance data and a health bar.
+Behavior: billboard labels show selected identity/distance data. Health uses a screen-space track fixed to the current body box edge and exact projected box height, so size follows player distance instead of viewport size.
 
 Rework: throttle text updates, clamp health safely, support missing humanoids, and keep label contrast independent from the application theme palette.
 

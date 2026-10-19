@@ -4,7 +4,7 @@ State: `FlatTextures`.
 
 Behavior: removes texture/material maps client-side while preserving object colors and restores cached properties.
 
-Rework: track descendants incrementally, use weak ownership, skip unsupported instances safely, and restore only properties actually changed.
+Rework: track descendants incrementally, retain a strong owned snapshot until disable/unload, skip unsupported instances safely, restore only properties actually changed, then clear the snapshot. A weak-key table is forbidden here because it can lose changed instances before restoration.
 
 Executor checks: existing/new descendants, meshes, decals/textures, terrain exclusions, large maps, toggle cycles, and unload.
 

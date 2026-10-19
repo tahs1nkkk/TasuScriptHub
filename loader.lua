@@ -1,3 +1,5 @@
+local bootStartedAt = os.clock()
+
 local Defaults = {
     Interface = {
         Title = "TasuHub",
@@ -61,7 +63,7 @@ local Defaults = {
         Noclip = false,
         ClickTP = false,
         AntiFling = false,
-        Godmode = false,
+        AntiFlingMoving = false,
         Gravity = false,
         GravityValue = 196.2,
         Orbit = false,
@@ -71,9 +73,7 @@ local Defaults = {
         OrbitHeight = 5,
         OrbitOffset = 2,
         Fling = false,
-        FlingMode = "Walk Fling",
-        FlingPower = 50000,
-        FlingFlySpeed = 90
+        FlingMode = "Walk Fling"
     },
     World = {
         Fullbright = false,
@@ -125,7 +125,6 @@ local SoundService = game:GetService("SoundService")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
-local StarterGui = game:GetService("StarterGui")
 local StatsService = game:GetService("Stats")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
@@ -167,7 +166,8 @@ local originalLighting = {
     Ambient = Lighting.Ambient,
     OutdoorAmbient = Lighting.OutdoorAmbient
 }
-local flatObjectDefaults = setmetatable({}, {__mode = "k"})
+local flatObjectDefaults = {}
+local atmosphereDefaults = {}
 local originalGravity = Workspace.Gravity
 local originalCameraFOV = Workspace.CurrentCamera and Workspace.CurrentCamera.FieldOfView or 70
 local originalCameraMinZoom = LocalPlayer.CameraMinZoomDistance
@@ -391,6 +391,7 @@ local ReworkPalette = {
 }
 local UI = {
     Version = "0.1",
+    LoadDuration = 0,
     Ready = false,
     LegacyUIEnabled = false,
     -- 9 category buttons: 148 brand + 495 categories + 6 gap + 48 search + 6 gap + 70 version + 12 padding.
@@ -430,6 +431,15 @@ local UI = {
     },
     ActionIconBindings = {},
     ActionIconAssets = {},
+    MainIconUrls = {
+        PlayerWalk = "",
+        PlayerStop = "",
+        PlayerFling = "",
+        PlayerView = "",
+        PlayerUnview = "",
+        PlayerTeleport = ""
+    },
+    MainIconAssets = {},
     CornerButtons = {},
     CornerButtonActions = {},
     GameActionButtons = {},
@@ -535,8 +545,8 @@ local UI = {
         MainContentPadding = 18,
         MainSectionGap = 12,
         MotionMainSidebar = 0.38,
-        MotionMainPageOut = 0.24,
-        MotionMainPageIn = 0.34,
+        MotionMainPageOut = 0.2,
+        MotionMainPageIn = 0.28,
         MotionCatalogOpen = 0.52,
         MotionCatalogClose = 0.44,
         MotionCatalogContentReveal = 0.36,
@@ -560,6 +570,7 @@ local UI = {
         FadeOut = {Id = "rbxassetid://90657541635248", Volume = 0.09, PlaybackSpeed = 2 / 3, PitchCompensation = 1.5, TargetDuration = 3},
         PopIn = {Id = "rbxassetid://140323850218372", Volume = 0.18, PlaybackSpeed = 1.1},
         LoaderCheckpoint = {Id = "rbxassetid://10066936758", Volume = 0.09, PlaybackSpeed = 1, CleanupDelay = 0.8},
+        UnloadCheckpoint = {Id = "rbxassetid://113397864512278", Volume = 0.065, PlaybackSpeed = 1, CleanupDelay = 0.7},
         ButtonClick = {Id = "rbxassetid://113397864512278", Volume = 0.08, PlaybackSpeed = 1},
         ButtonHover = {Id = "rbxassetid://10066936758", Volume = 0.045, PlaybackSpeed = 1.08},
         CatalogError = {Id = "rbxassetid://122330788129561", Volume = 0.16, PlaybackSpeed = 1}
@@ -576,11 +587,11 @@ local UI = {
     GradientBindings = {},
     CategoryIconUrls = {
         Home = "", Catalog = "", Players = "", Visuals = "", Aim = "",
-        Movement = "", World = "", Lighting = "", Misc = "", Configs = ""
+        Movement = "", World = "", Lighting = "", Waypoints = "", Misc = "", Configs = ""
     },
     CategoryIconBackgrounds = {
         Home = "AccentSoft", Catalog = "AccentSoft", Players = "AccentSoft", Visuals = "AccentSoft", Aim = "AccentSoft",
-        Movement = "AccentSoft", World = "AccentSoft", Lighting = "AccentSoft", Misc = "AccentSoft", Configs = "AccentSoft"
+        Movement = "AccentSoft", World = "AccentSoft", Lighting = "AccentSoft", Waypoints = "AccentSoft", Misc = "AccentSoft", Configs = "AccentSoft"
     },
     Fonts = {
         Option = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
@@ -656,6 +667,26 @@ UI.ResolveCategoryIconAsset = function(category)
         resolved = loadRemoteAsset(raw, cachePath) or ""
     end
     if resolved ~= "" then UI.MainCategoryIconAssets[cacheKey] = resolved end
+    return resolved
+end
+
+UI.ResolveMainIconAsset = function(name)
+    local raw = tostring(UI.MainIconUrls[name] or "")
+    if raw == "" then return "" end
+    local cacheKey = tostring(name) .. "|" .. raw
+    if UI.MainIconAssets[cacheKey] ~= nil then return UI.MainIconAssets[cacheKey] end
+    local resolved = ""
+    local hash = 5381
+    for index = 1, #raw do hash = (hash * 33 + string.byte(raw, index)) % 2147483647 end
+    local cachePath = "TasuHub/Icons/Main_" .. tostring(name) .. "_" .. tostring(hash) .. ".png"
+    if string.match(raw, "^%d+$") then
+        resolved = UI.LoadRobloxThumbnailAsset(tonumber(raw), cachePath) or ""
+    elseif string.match(raw, "^rbxassetid://%d+$") then
+        resolved = raw
+    elseif string.match(raw, "^https?://") then
+        resolved = loadRemoteAsset(raw, cachePath) or ""
+    end
+    if resolved ~= "" then UI.MainIconAssets[cacheKey] = resolved end
     return resolved
 end
 
@@ -2717,6 +2748,7 @@ local pendingKeybind
 local keybindActions = {}
 
 local function addToggle(card, text, getter, setter, bindable)
+    bindable = true
     local row = Instance.new("Frame")
     row.BackgroundTransparency = 1
     row.Size = UDim2.new(0.5, -4, 0, 32)
@@ -2785,6 +2817,17 @@ local function addToggle(card, text, getter, setter, bindable)
             render()
         end
     })
+end
+
+UI.GetKeybind = function(bindId)
+    return State.Keybinds[tostring(bindId or "")]
+end
+
+UI.BeginKeybind = function(bindId, callback)
+    bindId = tostring(bindId or "")
+    if bindId == "" or type(keybindActions[bindId]) ~= "function" then return false end
+    pendingKeybind = {Id = bindId, OnComplete = callback}
+    return true
 end
 
 local function addSlider(card, text, minimum, maximum, getter, setter, decimals, visibleGetter)
@@ -3664,6 +3707,16 @@ UI.SetCategoryIcon = function(category, url, background)
     return true
 end
 
+UI.SetMainIcon = function(name, url)
+    if UI.MainIconUrls[name] == nil then return false end
+    UI.MainIconUrls[name] = tostring(url or "")
+    table.clear(UI.MainIconAssets)
+    if UI.MainMenuController and type(UI.MainMenuController.SetInterfaceIcon) == "function" then
+        UI.MainMenuController.SetInterfaceIcon(name, UI.ResolveMainIconAsset(name))
+    end
+    return true
+end
+
 UI.SetCategoryIconBackground = function(category, background)
     if UI.CategoryIconBackgrounds[category] == nil then return false end
     if typeof(background) ~= "Color3" and (type(background) ~= "string" or Theme[background] == nil) then
@@ -4138,7 +4191,6 @@ end
 local currentTarget
 local mousemoverel = resolveGlobal("mousemoverel")
 trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
-    local mousePosition = getMousePosition()
     local cursorPosition = UserInputService:GetMouseLocation()
     FOVStroke.Color = State.World.RGB.Aim.Enabled and getRGBColor("Aim", 0) or Theme.Accent
     local diameter = State.Aim.FOV * 2
@@ -4149,9 +4201,8 @@ trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
         currentTarget = nil
         return
     end
-    local activation = State.Aim.Activation or (State.Aim.HoldRightMouse and "Right Mouse" or "Always")
-    local held = activation == "Always"
-        or activation == "Right Mouse" and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    local activation = State.Aim.Activation == "Left Mouse" and "Left Mouse" or "Right Mouse"
+    local held = activation == "Right Mouse" and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
         or activation == "Left Mouse" and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
     if not held then
         currentTarget = nil
@@ -4189,8 +4240,9 @@ trackFeature("Aim", RunService.RenderStepped:Connect(function(deltaTime)
         aimPosition = aimPosition + currentTarget.Root.AssemblyLinearVelocity * (State.Aim.Rage and 0.15 or State.Aim.PredictionTime)
     end
     if State.Aim.Method == "Mouse" and type(mousemoverel) == "function" then
-        local screen = camera:WorldToViewportPoint(aimPosition)
-        local delta = Vector2.new(screen.X, screen.Y) - mousePosition
+        local screen = camera:WorldToScreenPoint(aimPosition)
+        local cursor = UserInputService:GetMouseLocation()
+        local delta = Vector2.new(screen.X, screen.Y) - cursor
         local factor = State.Aim.Rage and 1 or math.clamp(1 - State.Aim.Smoothing, 0.02, 1)
         pcall(mousemoverel, delta.X * factor, delta.Y * factor)
     else
@@ -4238,11 +4290,7 @@ local function getBoundingScreenBox(character, camera, viewportOverride, partOve
                     for z = -1, 1, 2 do
                         local point = part.CFrame:PointToWorldSpace(Vector3.new(half.X * x, half.Y * y, half.Z * z))
                         local screen
-                        if camera == Workspace.CurrentCamera then
-                            screen = camera:WorldToScreenPoint(point)
-                        else
-                            screen = camera:WorldToViewportPoint(point)
-                        end
+                        screen = camera:WorldToViewportPoint(point)
                         if screen.Z > 0 then
                             visibleCorners = visibleCorners + 1
                             minimumX = math.min(minimumX, screen.X)
@@ -4271,22 +4319,54 @@ local function destroyESP(player)
     if not record then
         return
     end
-    for _, object in pairs(record) do
+    for _, key in ipairs({
+        "Tracer", "SkeletonLayer", "Arrow", "Highlight", "BoxProxy",
+        "NameBillboard", "HeadAdornment", "BoxFill", "HealthTrack"
+    }) do
+        local object = record[key]
         if typeof(object) == "Instance" then
             pcall(function()
                 object:Destroy()
             end)
         end
     end
+    for _, line in ipairs(record.BoxLines or {}) do
+        if line and line.Parent then line:Destroy() end
+    end
     espRecords[player] = nil
 end
 
 local function createESP(player)
     destroyESP(player)
+    local boxFill = Instance.new("Frame")
+    boxFill.BackgroundColor3 = Theme.Accent
+    boxFill.BackgroundTransparency = 1
+    boxFill.BorderSizePixel = 0
+    boxFill.Visible = false
+    boxFill.ZIndex = 1
+    boxFill.Parent = ScreenGui
+    local healthTrack = Instance.new("Frame")
+    healthTrack.BackgroundColor3 = Color3.fromRGB(22, 24, 29)
+    healthTrack.BorderSizePixel = 0
+    healthTrack.Visible = false
+    healthTrack.ZIndex = 3
+    healthTrack.Parent = ScreenGui
+    local healthFill = Instance.new("Frame")
+    healthFill.AnchorPoint = Vector2.new(0, 1)
+    healthFill.BackgroundColor3 = Color3.fromRGB(80, 235, 120)
+    healthFill.BorderSizePixel = 0
+    healthFill.Position = UDim2.fromScale(0, 1)
+    healthFill.Size = UDim2.fromScale(1, 1)
+    healthFill.ZIndex = 4
+    healthFill.Parent = healthTrack
     local record = {
         Tracer = newLine(ScreenGui),
         SkeletonLayer = Instance.new("Frame"),
         SkeletonLines = {},
+        BoxLines = {},
+        BoxFill = boxFill,
+        HealthTrack = healthTrack,
+        HealthBar = healthFill,
         Arrow = textLabel(ScreenGui, "▲", UDim2.fromOffset(32, 32), nil, 28, Theme.Accent, Enum.TextXAlignment.Center),
         Highlight = Instance.new("Highlight")
     }
@@ -4297,6 +4377,9 @@ local function createESP(player)
     record.SkeletonLayer.Parent = ScreenGui
     for _ = 1, 15 do
         table.insert(record.SkeletonLines, newLine(record.SkeletonLayer))
+    end
+    for _ = 1, 4 do
+        table.insert(record.BoxLines, newLine(ScreenGui))
     end
     record.Arrow.AnchorPoint = Vector2.new(0.5, 0.5)
     record.Arrow.TextStrokeColor3 = Color3.fromRGB(8, 12, 18)
@@ -4316,7 +4399,7 @@ end
 
 local function ensureWorldESP(record, character, root)
     if record.WorldCharacter == character and record.BoxProxy and record.BoxProxy.Parent then return end
-    for _, key in ipairs({"BoxProxy", "NameBillboard", "HealthBillboard", "HeadAdornment"}) do
+    for _, key in ipairs({"BoxProxy", "NameBillboard", "HeadAdornment"}) do
         local object = record[key]
         if object then pcall(function() object:Destroy() end) end
         record[key] = nil
@@ -4337,16 +4420,6 @@ local function ensureWorldESP(record, character, root)
     weld.Part0 = root
     weld.Part1 = proxy
     weld.Parent = proxy
-
-    local box = Instance.new("SelectionBox")
-    box.Name = "TasuESP3DBox"
-    box.Adornee = proxy
-    box.Color3 = Theme.Accent
-    box.SurfaceColor3 = Theme.Accent
-    box.SurfaceTransparency = 1
-    box.LineThickness = 0.025
-    box.Visible = false
-    box.Parent = proxy
 
     local nameBillboard = Instance.new("BillboardGui")
     nameBillboard.Name = "TasuESPName"
@@ -4370,29 +4443,6 @@ local function ensureWorldESP(record, character, root)
     label.TextWrapped = true
     label.Parent = nameBillboard
 
-    local healthBillboard = Instance.new("BillboardGui")
-    healthBillboard.Name = "TasuESPHealth"
-    healthBillboard.Adornee = proxy
-    healthBillboard.AlwaysOnTop = true
-    healthBillboard.Enabled = false
-    healthBillboard.LightInfluence = 0
-    healthBillboard.MaxDistance = State.Visuals.MaxDistance
-    healthBillboard.Size = UDim2.fromOffset(8, math.clamp(math.floor(boundsSize.Y * 14), 54, 104))
-    healthBillboard.StudsOffset = Vector3.new(boundsSize.X * 0.5 + 0.4, 0, 0)
-    healthBillboard.Parent = ScreenGui
-    local healthBackground = Instance.new("Frame")
-    healthBackground.BackgroundColor3 = Color3.fromRGB(22, 24, 29)
-    healthBackground.BorderSizePixel = 0
-    healthBackground.Size = UDim2.fromScale(1, 1)
-    healthBackground.Parent = healthBillboard
-    local healthFill = Instance.new("Frame")
-    healthFill.AnchorPoint = Vector2.new(0, 1)
-    healthFill.BackgroundColor3 = Color3.fromRGB(80, 235, 120)
-    healthFill.BorderSizePixel = 0
-    healthFill.Position = UDim2.fromScale(0, 1)
-    healthFill.Size = UDim2.fromScale(1, 1)
-    healthFill.Parent = healthBackground
-
     local headAdornment = Instance.new("SphereHandleAdornment")
     headAdornment.Name = "TasuESPHeadDot"
     headAdornment.Adornee = character:FindFirstChild("Head")
@@ -4406,11 +4456,8 @@ local function ensureWorldESP(record, character, root)
 
     record.WorldCharacter = character
     record.BoxProxy = proxy
-    record.Box3D = box
     record.NameBillboard = nameBillboard
     record.Label = label
-    record.HealthBillboard = healthBillboard
-    record.HealthBar = healthFill
     record.HeadAdornment = headAdornment
     record.LastInfoUpdate = 0
 end
@@ -4452,16 +4499,25 @@ local function updateSkeleton(record, character, camera, color)
             {waist, rh}, {rh, rk}, {rk, ra}
         }
     else
-        local neck = joint("Neck")
-        local leftShoulder, rightShoulder = joint("Left Shoulder"), joint("Right Shoulder")
-        local leftHip, rightHip = joint("Left Hip"), joint("Right Hip")
-        points = {
-            {head and head.Position, neck},
-            {neck, leftShoulder}, {leftShoulder, endOf("Left Arm", Vector3.new(0, -1, 0))},
-            {neck, rightShoulder}, {rightShoulder, endOf("Right Arm", Vector3.new(0, -1, 0))},
-            {neck, leftHip}, {leftHip, endOf("Left Leg", Vector3.new(0, -1, 0))},
-            {neck, rightHip}, {rightHip, endOf("Right Leg", Vector3.new(0, -1, 0))}
-        }
+        local torso = character:FindFirstChild("Torso")
+        local leftArm, rightArm = character:FindFirstChild("Left Arm"), character:FindFirstChild("Right Arm")
+        local leftLeg, rightLeg = character:FindFirstChild("Left Leg"), character:FindFirstChild("Right Leg")
+        if torso then
+            local torsoTop = torso.CFrame:PointToWorldSpace(Vector3.new(0, torso.Size.Y * 0.45, 0))
+            local torsoBottom = torso.CFrame:PointToWorldSpace(Vector3.new(0, -torso.Size.Y * 0.45, 0))
+            local leftShoulder = torso.CFrame:PointToWorldSpace(Vector3.new(-torso.Size.X * 0.5, torso.Size.Y * 0.32, 0))
+            local rightShoulder = torso.CFrame:PointToWorldSpace(Vector3.new(torso.Size.X * 0.5, torso.Size.Y * 0.32, 0))
+            local leftHip = torso.CFrame:PointToWorldSpace(Vector3.new(-torso.Size.X * 0.28, -torso.Size.Y * 0.5, 0))
+            local rightHip = torso.CFrame:PointToWorldSpace(Vector3.new(torso.Size.X * 0.28, -torso.Size.Y * 0.5, 0))
+            points = {
+                {head and head.CFrame:PointToWorldSpace(Vector3.new(0, -head.Size.Y * 0.5, 0)), torsoTop},
+                {torsoTop, torsoBottom},
+                {torsoTop, leftShoulder}, {leftShoulder, leftArm and leftArm.Position}, {leftArm and leftArm.Position, endOf("Left Arm", Vector3.new(0, -1, 0))},
+                {torsoTop, rightShoulder}, {rightShoulder, rightArm and rightArm.Position}, {rightArm and rightArm.Position, endOf("Right Arm", Vector3.new(0, -1, 0))},
+                {torsoBottom, leftHip}, {leftHip, leftLeg and leftLeg.Position}, {leftLeg and leftLeg.Position, endOf("Left Leg", Vector3.new(0, -1, 0))},
+                {torsoBottom, rightHip}, {rightHip, rightLeg and rightLeg.Position}, {rightLeg and rightLeg.Position, endOf("Right Leg", Vector3.new(0, -1, 0))}
+            }
+        end
     end
     local lines = record.SkeletonLines
     local used = 0
@@ -4469,13 +4525,8 @@ local function updateSkeleton(record, character, camera, color)
         if pair[1] and pair[2] then
             local a, visibleA
             local b, visibleB
-            if camera == Workspace.CurrentCamera then
-                a, visibleA = camera:WorldToScreenPoint(pair[1])
-                b, visibleB = camera:WorldToScreenPoint(pair[2])
-            else
-                a, visibleA = camera:WorldToViewportPoint(pair[1])
-                b, visibleB = camera:WorldToViewportPoint(pair[2])
-            end
+            a, visibleA = camera:WorldToViewportPoint(pair[1])
+            b, visibleB = camera:WorldToViewportPoint(pair[2])
             if visibleA and visibleB and a.Z > 0 and b.Z > 0 then
                 used = used + 1
                 local line = lines[used]
@@ -4493,19 +4544,17 @@ local function updateSkeleton(record, character, camera, color)
 end
 
 local function hideRecord(record)
-    for key, object in pairs(record) do
-        if key == "Highlight" then
-            object.Enabled = false
-            object.Adornee = nil
-        elseif typeof(object) == "Instance" and object:IsA("SelectionBox") then
-            object.Visible = false
-        elseif typeof(object) == "Instance" and object:IsA("BillboardGui") then
-            object.Enabled = false
-        elseif typeof(object) == "Instance" and object:IsA("HandleAdornment") then
-            object.Visible = false
-        elseif typeof(object) == "Instance" and object:IsA("GuiObject") then
-            object.Visible = false
-        end
+    for _, line in ipairs(record.BoxLines or {}) do line.Visible = false end
+    if record.Tracer then record.Tracer.Visible = false end
+    if record.SkeletonLayer then record.SkeletonLayer.Visible = false end
+    if record.Arrow then record.Arrow.Visible = false end
+    if record.BoxFill then record.BoxFill.Visible = false end
+    if record.HealthTrack then record.HealthTrack.Visible = false end
+    if record.NameBillboard then record.NameBillboard.Enabled = false end
+    if record.HeadAdornment then record.HeadAdornment.Visible = false end
+    if record.Highlight then
+        record.Highlight.Enabled = false
+        record.Highlight.Adornee = nil
     end
 end
 
@@ -4534,21 +4583,42 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Camera.Value + 50,
                 local rootScreen = nil
                 local visibleOnScreen = false
                 if State.Visuals.Tracers or State.Visuals.Skeleton or State.Visuals.Offscreen then
-                    local projectedRoot, onScreen = camera:WorldToScreenPoint(root.Position)
+                    local projectedRoot, onScreen = camera:WorldToViewportPoint(root.Position)
                     rootScreen = projectedRoot
                     visibleOnScreen = onScreen and projectedRoot.Z > 0
                 end
 
-                record.Box3D.Color3 = color
-                record.Box3D.SurfaceColor3 = color
-                record.Box3D.LineThickness = math.clamp(State.Visuals.Thickness * 0.0125, 0.0125, 0.06)
-                record.Box3D.SurfaceTransparency = State.Visuals.BoxFilled and 0.82 or 1
-                record.Box3D.Visible = State.Visuals.Boxes
+                local left, right, top, bottom = getBoundingScreenBox(character, camera)
+                local boxVisible = State.Visuals.Boxes and left ~= nil
+                if boxVisible then
+                    local thickness = math.clamp(State.Visuals.Thickness, 1, 4)
+                    local topLeft, topRight = Vector2.new(left, top), Vector2.new(right, top)
+                    local bottomLeft, bottomRight = Vector2.new(left, bottom), Vector2.new(right, bottom)
+                    for _, line in ipairs(record.BoxLines) do line.BackgroundColor3 = color end
+                    setLine(record.BoxLines[1], topLeft, topRight, thickness)
+                    setLine(record.BoxLines[2], topRight, bottomRight, thickness)
+                    setLine(record.BoxLines[3], bottomRight, bottomLeft, thickness)
+                    setLine(record.BoxLines[4], bottomLeft, topLeft, thickness)
+                    record.BoxFill.Position = UDim2.fromOffset(left, top)
+                    record.BoxFill.Size = UDim2.fromOffset(math.max(1, right - left), math.max(1, bottom - top))
+                    record.BoxFill.BackgroundColor3 = color
+                    record.BoxFill.BackgroundTransparency = State.Visuals.BoxFilled and 0.62 or 1
+                    record.BoxFill.Visible = State.Visuals.BoxFilled
+                else
+                    for _, line in ipairs(record.BoxLines) do line.Visible = false end
+                    record.BoxFill.Visible = false
+                end
 
                 record.NameBillboard.MaxDistance = State.Visuals.MaxDistance
                 record.NameBillboard.Enabled = State.Visuals.Names or State.Visuals.Distance
-                record.HealthBillboard.MaxDistance = State.Visuals.MaxDistance
-                record.HealthBillboard.Enabled = State.Visuals.Health
+                if State.Visuals.Health and left then
+                    local boxHeight = math.max(4, bottom - top)
+                    record.HealthTrack.Position = UDim2.fromOffset(right + 5, top)
+                    record.HealthTrack.Size = UDim2.fromOffset(math.clamp(State.Visuals.Thickness + 3, 4, 7), boxHeight)
+                    record.HealthTrack.Visible = true
+                else
+                    record.HealthTrack.Visible = false
+                end
                 record.HeadAdornment.Color3 = color
                 record.HeadAdornment.Adornee = character:FindFirstChild("Head")
                 record.HeadAdornment.Visible = State.Visuals.HeadDot and record.HeadAdornment.Adornee ~= nil
@@ -4587,9 +4657,10 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Camera.Value + 50,
                     if direction.Magnitude > 0 then
                         local edge = center + direction.Unit * math.min(center.X, center.Y) * 0.82
                         local distanceRatio = math.clamp(distance / math.max(25, State.Visuals.MaxDistance), 0, 1)
-                        local arrowSize = math.floor(18 + distanceRatio * 30)
+                        local closeness = 1 - distanceRatio
+                        local arrowSize = math.floor(18 + closeness * 24)
                         record.Arrow.Size = UDim2.fromOffset(arrowSize, arrowSize)
-                        record.Arrow.TextSize = math.floor(16 + distanceRatio * 24)
+                        record.Arrow.TextSize = math.floor(16 + closeness * 20)
                         record.Arrow.Position = UDim2.fromOffset(edge.X, edge.Y)
                         record.Arrow.Rotation = math.deg(math.atan2(direction.Y, direction.X)) + 90
                         record.Arrow.TextColor3 = color
@@ -4615,6 +4686,7 @@ local FREECAM_SINK_ACTION = "TasuHubFreecamMovementSink"
 local colorCorrection
 local bloom
 local applyFlatTextures
+local suppressAtmosphere
 local flyApplied = false
 local flyVelocity
 local flyGyro
@@ -4627,7 +4699,9 @@ local antiFlingState = {
     AutoRotate = true,
     PlatformStand = false,
     FallingDownEnabled = true,
-    RagdollEnabled = true
+    RagdollEnabled = true,
+    MovingSafeCFrame = nil,
+    LastSafeAt = 0
 }
 local flingState = {Humanoid = nil, Root = nil, AutoRotate = true, Running = false, MoveLift = 0.1}
 local orbitState = {Root = nil, Active = false}
@@ -4662,6 +4736,8 @@ UI.ClearAntiFlingState = function()
     antiFlingState.Root = nil
     antiFlingState.Humanoid = nil
     antiFlingState.SafeCFrame = nil
+    antiFlingState.MovingSafeCFrame = nil
+    antiFlingState.LastSafeAt = 0
 end
 
 UI.FlingTarget = function(player, protectLocal)
@@ -4690,7 +4766,7 @@ UI.FlingTarget = function(player, protectLocal)
         local safeCFrame = localRoot.CFrame
         local safeVelocity = localRoot.AssemblyLinearVelocity
         local safeAutoRotate = localHumanoid.AutoRotate
-        local pulse = math.clamp(State.Movement.FlingPower, 1000, 100000)
+        local pulse = 10000000
         local offsetSign = 1
         local moveLift = 0.1
         local savedFlyForce = flyVelocity and flyVelocity.Parent and flyVelocity.MaxForce or nil
@@ -4747,7 +4823,7 @@ UI.StartFlingLoop = function()
                     if savedFlyForce then flyVelocity.MaxForce = Vector3.zero end
                     humanoid.AutoRotate = false
                     root.AssemblyAngularVelocity = Vector3.zero
-                    root.Velocity = safeVelocity * 10000 + Vector3.new(0, math.clamp(State.Movement.FlingPower, 1000, 100000), 0)
+                    root.Velocity = safeVelocity * 10000 + Vector3.new(0, 10000000, 0)
                     RunService.RenderStepped:Wait()
                     if root.Parent then
                         root.CFrame = safeCFrame
@@ -4801,62 +4877,6 @@ local function clearOrbitMotion()
     orbitState.Root = nil
     orbitState.Active = false
 end
-
-local godmodeState = {Humanoid = nil, Resetting = false}
-local function clearGodmodeState()
-    local humanoid = godmodeState.Humanoid
-    local defaults = humanoid and humanoidDefaults[humanoid]
-    if humanoid and humanoid.Parent and defaults then
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, defaults.DeadEnabled)
-        humanoid.BreakJointsOnDeath = defaults.BreakJointsOnDeath
-        humanoid.MaxHealth = defaults.MaxHealth
-        humanoid.Health = math.min(humanoid.Health, defaults.MaxHealth)
-    end
-    godmodeState.Humanoid = nil
-end
-
-local godmodeResetEvent = trackInstance(Instance.new("BindableEvent"))
-trackConnection(godmodeResetEvent.Event:Connect(function()
-    godmodeState.Resetting = true
-    clearGodmodeState()
-    local character, humanoid = getCharacter(LocalPlayer)
-    if humanoid then
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-        humanoid.BreakJointsOnDeath = true
-        humanoid.Health = 0
-    elseif character then
-        character:BreakJoints()
-    end
-    task.delay(1.5, function()
-        godmodeState.Resetting = false
-    end)
-end))
-task.spawn(function()
-    for _ = 1, 12 do
-        if unloaded then return end
-        local ok = pcall(function()
-            StarterGui:SetCore("ResetButtonCallback", godmodeResetEvent)
-        end)
-        if ok then return end
-        task.wait(0.5)
-    end
-end)
-
-trackFeature("Godmode", RunService.Heartbeat:Connect(function()
-    local _, humanoid = getCharacter(LocalPlayer)
-    if State.Movement.Godmode and not godmodeState.Resetting and humanoid then
-        if godmodeState.Humanoid ~= humanoid then
-            clearGodmodeState()
-            godmodeState.Humanoid = humanoid
-        end
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-        humanoid.BreakJointsOnDeath = false
-        humanoid.MaxHealth = 1000000000
-        humanoid.Health = humanoid.MaxHealth
-    elseif godmodeState.Humanoid then
-        clearGodmodeState()
-    end
-end))
 
 local function freezeFreecamCharacter()
     if not freecamState then return end
@@ -4989,8 +5009,36 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
             end
         end
         return
-    elseif antiFlingState.Root then
+    elseif antiFlingState.Root and not State.Movement.AntiFlingMoving then
         UI.ClearAntiFlingState()
+    end
+    if State.Movement.AntiFlingMoving and not State.Movement.Fling then
+        if antiFlingState.Root ~= root then
+            UI.ClearAntiFlingState()
+            antiFlingState.Root = root
+            antiFlingState.Humanoid = humanoid
+            antiFlingState.AutoRotate = humanoid.AutoRotate
+            antiFlingState.PlatformStand = humanoid.PlatformStand
+            antiFlingState.FallingDownEnabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
+            antiFlingState.RagdollEnabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.Ragdoll)
+            antiFlingState.MovingSafeCFrame = root.CFrame
+            antiFlingState.LastSafeAt = movementClock
+        end
+        local linearSpeed = root.AssemblyLinearVelocity.Magnitude
+        local angularSpeed = root.AssemblyAngularVelocity.Magnitude
+        local hostileMotion = linearSpeed > 115 or angularSpeed > 85 or humanoid.PlatformStand
+        if hostileMotion and antiFlingState.MovingSafeCFrame then
+            root.CFrame = antiFlingState.MovingSafeCFrame
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+            humanoid.PlatformStand = false
+            humanoid.AutoRotate = antiFlingState.AutoRotate
+            humanoid.Sit = false
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        elseif linearSpeed < 80 and angularSpeed < 35 and movementClock - antiFlingState.LastSafeAt >= 0.08 then
+            antiFlingState.MovingSafeCFrame = root.CFrame
+            antiFlingState.LastSafeAt = movementClock
+        end
     end
     if State.Movement.Speed then
         if State.Movement.SpeedMethod == "WalkSpeed" then
@@ -5037,7 +5085,7 @@ trackFeature("Movement", RunService.Heartbeat:Connect(function(deltaTime)
             local facing = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
             if facing.Magnitude < 0.01 then facing = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z) end
             flyGyro.CFrame = CFrame.lookAt(root.Position, root.Position + facing.Unit)
-            local flySpeed = flingFly and State.Movement.FlingFlySpeed or State.Movement.FlySpeed
+            local flySpeed = flingFly and 300 or State.Movement.FlySpeed
             if not flingFly and State.Movement.FlyMethod == "CFrame" then
                 flyVelocity.Velocity = Vector3.zero
                 root.AssemblyLinearVelocity = Vector3.zero
@@ -5147,12 +5195,24 @@ trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
         return
     end
     camera.FieldOfView = State.World.CameraFOV
+    if State.World.NoFog then
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 1000000
+        if os.clock() - (UI.LastFogEnforceAt or 0) >= 0.4 then
+            UI.LastFogEnforceAt = os.clock()
+            for _, object in ipairs(Lighting:GetDescendants()) do suppressAtmosphere(object) end
+        end
+    end
     if State.World.RGB.World.Enabled then
         colorCorrection.TintColor = getRGBColor("World", 0)
     end
     if State.World.Freecam then
         if not freecamState then
             local pitch, yaw = camera.CFrame:ToOrientation()
+            local mouseSensitivity = 1
+            pcall(function()
+                mouseSensitivity = UserSettings():GetService("UserGameSettings").MouseSensitivity
+            end)
             freecamState = {
                 Position = camera.CFrame.Position,
                 Pitch = pitch,
@@ -5160,7 +5220,8 @@ trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
                 Type = camera.CameraType,
                 Subject = camera.CameraSubject,
                 MouseBehavior = UserInputService.MouseBehavior,
-                MouseIconEnabled = UserInputService.MouseIconEnabled
+                MouseIconEnabled = UserInputService.MouseIconEnabled,
+                MouseSensitivity = math.max(0.05, tonumber(mouseSensitivity) or 1)
             }
             camera.CameraType = Enum.CameraType.Scriptable
             ContextActionService:BindActionAtPriority(
@@ -5184,8 +5245,9 @@ trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
             UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
             UserInputService.MouseIconEnabled = true
             local mouseDelta = UserInputService:GetMouseDelta()
-            freecamState.Yaw = freecamState.Yaw - mouseDelta.X * 0.0025
-            freecamState.Pitch = math.clamp(freecamState.Pitch - mouseDelta.Y * 0.0025, -1.5, 1.5)
+            local lookScale = 0.0045 * freecamState.MouseSensitivity
+            freecamState.Yaw = freecamState.Yaw - mouseDelta.X * lookScale
+            freecamState.Pitch = math.clamp(freecamState.Pitch - mouseDelta.Y * lookScale, -1.5, 1.5)
         else
             UserInputService.MouseBehavior = Enum.MouseBehavior.Default
             UserInputService.MouseIconEnabled = true
@@ -5214,12 +5276,31 @@ end))
 
 local thirdPersonBaseCFrame
 local thirdPersonAppliedCFrame
+UI.ThirdPersonTransparencyDefaults = {}
+UI.RestoreThirdPersonTransparency = function()
+    for part, value in pairs(UI.ThirdPersonTransparencyDefaults) do
+        if part and part.Parent then pcall(function() part.LocalTransparencyModifier = value end) end
+    end
+    table.clear(UI.ThirdPersonTransparencyDefaults)
+end
 RunService:BindToRenderStep("TasuHubThirdPerson", Enum.RenderPriority.Camera.Value + 25, function()
     local camera = Workspace.CurrentCamera
     if not camera or not State.World.ThirdPerson or State.World.Freecam then
         thirdPersonBaseCFrame = nil
         thirdPersonAppliedCFrame = nil
+        if next(UI.ThirdPersonTransparencyDefaults) then UI.RestoreThirdPersonTransparency() end
         return
+    end
+    local character = LocalPlayer.Character
+    if character then
+        for _, descendant in ipairs(character:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                if UI.ThirdPersonTransparencyDefaults[descendant] == nil then
+                    UI.ThirdPersonTransparencyDefaults[descendant] = descendant.LocalTransparencyModifier
+                end
+                descendant.LocalTransparencyModifier = 0
+            end
+        end
     end
     local observed = camera.CFrame
     local base = observed
@@ -5259,28 +5340,35 @@ trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
         if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
         local bind = pendingKeybind
         pendingKeybind = nil
+        local function finishBind()
+            if type(bind.OnComplete) == "function" then task.defer(bind.OnComplete, State.Keybinds[bind.Id]) end
+        end
         if input.KeyCode == Enum.KeyCode.Backspace then
             State.Keybinds[bind.Id] = nil
-            bind.Button.Text = (bind.Prefix or "") .. "Bind"
+            if bind.Button then bind.Button.Text = (bind.Prefix or "") .. "Bind" end
             showToast("Keybind cleared")
+            finishBind()
             return
         end
         if input.KeyCode == Enum.KeyCode.RightShift or input.KeyCode == Enum.KeyCode.Unknown then
-            bind.Button.Text = (bind.Prefix or "") .. (State.Keybinds[bind.Id] or "Bind")
+            if bind.Button then bind.Button.Text = (bind.Prefix or "") .. (State.Keybinds[bind.Id] or "Bind") end
             showToast("That key is reserved or unavailable")
+            finishBind()
             return
         end
         local keyName = input.KeyCode.Name
         for id, assignedKey in pairs(State.Keybinds) do
             if id ~= bind.Id and assignedKey == keyName then
-                bind.Button.Text = (bind.Prefix or "") .. (State.Keybinds[bind.Id] or "Bind")
+                if bind.Button then bind.Button.Text = (bind.Prefix or "") .. (State.Keybinds[bind.Id] or "Bind") end
                 showToast("Key is already assigned; clear it first")
+                finishBind()
                 return
             end
         end
         State.Keybinds[bind.Id] = keyName
-        bind.Button.Text = (bind.Prefix or "") .. keyName
+        if bind.Button then bind.Button.Text = (bind.Prefix or "") .. keyName end
         showToast("Bound to " .. keyName)
+        finishBind()
         return
     end
     if processed then
@@ -5413,10 +5501,52 @@ local function restoreFlatTextures()
     table.clear(flatObjectDefaults)
 end
 
+suppressAtmosphere = function(object)
+    if not object:IsA("Atmosphere") then return end
+    if not atmosphereDefaults[object] then
+        atmosphereDefaults[object] = {
+            Density = object.Density,
+            Haze = object.Haze,
+            Glare = object.Glare,
+            Offset = object.Offset
+        }
+    end
+    object.Density = 0
+    object.Haze = 0
+    object.Glare = 0
+    object.Offset = 0
+end
+
+local function restoreAtmosphere()
+    for object, properties in pairs(atmosphereDefaults) do
+        if object and object.Parent then
+            for property, value in pairs(properties) do
+                pcall(function() object[property] = value end)
+            end
+        end
+    end
+    table.clear(atmosphereDefaults)
+end
+
+local function applyFogState()
+    if State.World.NoFog then
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 1000000
+        for _, object in ipairs(Lighting:GetDescendants()) do suppressAtmosphere(object) end
+    else
+        Lighting.FogStart = originalLighting.FogStart
+        Lighting.FogEnd = originalLighting.FogEnd
+        restoreAtmosphere()
+    end
+end
+
 trackConnection(Workspace.DescendantAdded:Connect(function(object)
     if State.World.FlatTextures then
         task.defer(flattenObject, object)
     end
+end))
+trackConnection(Lighting.DescendantAdded:Connect(function(object)
+    if State.World.NoFog then task.defer(suppressAtmosphere, object) end
 end))
 
 UI.ReportLoading(0.6, "Runtime · movement and world engines ready")
@@ -5435,17 +5565,11 @@ local function applyWorld()
         Lighting.Ambient = originalLighting.Ambient
         Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
     end
-    if State.World.NoFog then
-        Lighting.FogStart = 0
-        Lighting.FogEnd = 1000000
-    else
-        Lighting.FogStart = originalLighting.FogStart
-        Lighting.FogEnd = originalLighting.FogEnd
-    end
+    applyFogState()
     local lightingMode = State.World.LightingMode
     local worldRGB = State.World.RGB.World.Enabled or lightingMode == "RGB Vision"
     colorCorrection.Enabled = lightingMode ~= "Default" or worldRGB
-    bloom.Enabled = lightingMode == "Glow" or lightingMode == "Neon Glow" or worldRGB
+    bloom.Enabled = lightingMode == "Glow" or lightingMode == "Neon Glow" or (lightingMode == "Default" and worldRGB)
     if lightingMode == "Glow" then
         bloom.Intensity = State.World.GlowIntensity
         bloom.Size = 36
@@ -5454,7 +5578,7 @@ local function applyWorld()
         bloom.Intensity = State.World.NeonIntensity
         bloom.Size = State.World.NeonSize
         bloom.Threshold = State.World.NeonThreshold
-    elseif worldRGB then
+    elseif lightingMode == "Default" and worldRGB then
         bloom.Intensity = State.World.GlowIntensity * 0.65
         bloom.Size = 28
         bloom.Threshold = 0.9
@@ -5538,6 +5662,9 @@ end
 local unloadButton = addAction(HomeCard, "Unload TasuHub", function()
     if unload then unload() end
 end)
+if UI.Controls["Home/TasuHub/Unload TasuHub"] then
+    UI.Controls["Home/TasuHub/Unload TasuHub"].MainHidden = true
+end
 local unloadButtonIcon = UI.BindActionIcon(unloadButton, "Unload", nil, "      Unload TasuHub")
 unloadButtonIcon.Position = UDim2.fromOffset(18, 15)
 unloadButtonIcon.Size = UDim2.fromOffset(18, 18)
@@ -5567,21 +5694,22 @@ addToggle(AimCard, "Rage Mode", function() return State.Aim.Rage end, function(v
 end)
 addToggle(AimCard, "Show FOV", function() return State.Aim.ShowFOV end, function(value) State.Aim.ShowFOV = value end)
 addToggle(AimCard, "Wall Check", function() return State.Aim.WallCheck end, function(value) State.Aim.WallCheck = value end)
+local predictionControl = addToggle(AimCard, "Prediction", function() return State.Aim.Prediction end, function(value) State.Aim.Prediction = value end)
+addSlider(AimCard, "Prediction Time", 0, 0.5, function() return State.Aim.PredictionTime end, function(value) State.Aim.PredictionTime = value end, 2, function() return State.Aim.Enabled and not State.Aim.Rage and State.Aim.Prediction end)
 local aimSliderVisible = function() return State.Aim.Enabled and not State.Aim.Rage end
 addSlider(AimCard, "FOV Radius", 20, 600, function() return State.Aim.FOV end, function(value) State.Aim.FOV = value end, nil, aimSliderVisible)
 addSlider(AimCard, "Smoothing", 0, 0.95, function() return State.Aim.Smoothing end, function(value) State.Aim.Smoothing = value end, 2, aimSliderVisible)
-addSlider(AimCard, "Prediction Time", 0, 0.5, function() return State.Aim.PredictionTime end, function(value) State.Aim.PredictionTime = value end, 2, function() return aimSliderVisible() and State.Aim.Prediction end)
 addSlider(AimCard, "Maximum Distance", 25, 5000, function() return State.Aim.MaxDistance end, function(value) State.Aim.MaxDistance = value end, nil, aimSliderVisible)
 local aimAdjustables = {
-    addCycle(AimCard, "Activation", {"Right Mouse", "Left Mouse", "Always"}, function() return State.Aim.Activation end, function(value)
+    predictionControl,
+    addCycle(AimCard, "Activation", {"Right Mouse", "Left Mouse"}, function() return State.Aim.Activation end, function(value)
         State.Aim.Activation = value
         State.Aim.HoldRightMouse = value == "Right Mouse"
         currentTarget = nil
     end),
     addCycle(AimCard, "Method", {"Camera", "Mouse"}, function() return State.Aim.Method end, function(value) State.Aim.Method = value end),
     addCycle(AimCard, "Target Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso"}, function() return State.Aim.TargetPart end, function(value) State.Aim.TargetPart = value end),
-    addToggle(AimCard, "Team Check", function() return State.Aim.TeamCheck end, function(value) State.Aim.TeamCheck = value end),
-    addToggle(AimCard, "Prediction", function() return State.Aim.Prediction end, function(value) State.Aim.Prediction = value end)
+    addToggle(AimCard, "Team Check", function() return State.Aim.TeamCheck end, function(value) State.Aim.TeamCheck = value end)
 }
 table.insert(controlRefreshers, function()
     for _, control in ipairs(aimAdjustables) do
@@ -5999,9 +6127,10 @@ addToggle(MobilityCard, "Infinite Jump", function() return State.Movement.Infini
 addToggle(MobilityCard, "Bunny Hop", function() return State.Movement.BunnyHop end, function(value) State.Movement.BunnyHop = value end, true)
 addToggle(MobilityCard, "Ctrl + Click Teleport", function() return State.Movement.ClickTP end, function(value) State.Movement.ClickTP = value end, true)
 local ProtectionCard = createCard(MiscPage, "Character Protection")
-addToggle(ProtectionCard, "Anti Fling", function() return State.Movement.AntiFling end, function(value)
+addToggle(ProtectionCard, "Static Anti Fling", function() return State.Movement.AntiFling end, function(value)
     State.Movement.AntiFling = value
     if value then
+        State.Movement.AntiFlingMoving = false
         State.Movement.Fling = false
         clearFlingState()
         refreshControls()
@@ -6009,15 +6138,22 @@ addToggle(ProtectionCard, "Anti Fling", function() return State.Movement.AntiFli
         UI.ClearAntiFlingState()
     end
 end, true)
-addToggle(ProtectionCard, "Godmode", function() return State.Movement.Godmode end, function(value)
-    State.Movement.Godmode = value
-    if not value then clearGodmodeState() end
+addToggle(ProtectionCard, "Moving Anti Fling", function() return State.Movement.AntiFlingMoving end, function(value)
+    State.Movement.AntiFlingMoving = value
+    UI.ClearAntiFlingState()
+    if value then
+        State.Movement.AntiFling = false
+        State.Movement.Fling = false
+        clearFlingState()
+    end
+    refreshControls()
 end, true)
 local FlingCard = createCard(MiscPage, "Fling")
 addToggle(FlingCard, "Enabled", function() return State.Movement.Fling end, function(value)
     State.Movement.Fling = value
     if value then
         State.Movement.AntiFling = false
+        State.Movement.AntiFlingMoving = false
         UI.ClearAntiFlingState()
         State.Movement.Fly = false
         State.Movement.Noclip = false
@@ -6027,10 +6163,8 @@ addToggle(FlingCard, "Enabled", function() return State.Movement.Fling end, func
     end
     refreshControls()
 end, true)
-addSlider(FlingCard, "Fling Power", 1000, 100000, function() return State.Movement.FlingPower end, function(value) State.Movement.FlingPower = value end, nil, function() return State.Movement.Fling end)
-addSlider(FlingCard, "Fly Fling Speed", 10, 300, function() return State.Movement.FlingFlySpeed end, function(value) State.Movement.FlingFlySpeed = value end, nil, function() return State.Movement.Fling and State.Movement.FlingMode == "Fly Fling" end)
 addCycle(FlingCard, "Fling Mode", {"Walk Fling", "Fly Fling", "Contact Fling"}, function() return State.Movement.FlingMode end, function(value) State.Movement.FlingMode = value end)
-addNote(FlingCard, "Your avatar never spins. Walk uses a continuous hidden pulse, Contact pulses only while touching a player, and Fly uses WASD/Space/Ctrl. Local position is restored every pulse.")
+addNote(FlingCard, "Every mode uses the strongest bounded pulse profile. Contact and network ownership still decide whether another client receives the physics result.")
 local GravityCard = createCard(MovementPage, "World Physics")
 addToggle(GravityCard, "Custom Gravity", function() return State.Movement.Gravity end, function(value)
     State.Movement.Gravity = value
@@ -6086,13 +6220,13 @@ addToggle(OrbitCard, "Orbit Selected Player", function() return State.Movement.O
     State.Movement.Orbit = value
     if not value then clearOrbitMotion() end
 end, true)
-addSlider(OrbitCard, "Orbit Radius", 2, 30, function() return State.Movement.OrbitRadius end, function(value) State.Movement.OrbitRadius = value end, nil, function() return State.Movement.Orbit end)
-addSlider(OrbitCard, "Orbit Speed", 0.2, 100, function() return State.Movement.OrbitSpeed end, function(value) State.Movement.OrbitSpeed = value end, 1, function() return State.Movement.Orbit end)
+addSlider(OrbitCard, "Orbit Radius", 2, 30, function() return State.Movement.OrbitRadius end, function(value) State.Movement.OrbitRadius = value end)
+addSlider(OrbitCard, "Orbit Speed", 0.2, 100, function() return State.Movement.OrbitSpeed end, function(value) State.Movement.OrbitSpeed = value end, 1)
 addSlider(OrbitCard, "Feature Height", -5, 20, function() return State.Movement.OrbitHeight end, function(value) State.Movement.OrbitHeight = value end, 1, function()
-    return State.Movement.Orbit and table.find({"Wave", "Spiral", "Carpet", "Backpack", "Helicopter"}, State.Movement.OrbitMode) ~= nil
+    return table.find({"Wave", "Spiral", "Carpet", "Backpack", "Helicopter"}, State.Movement.OrbitMode) ~= nil
 end)
 addSlider(OrbitCard, "Feature Offset", 0, 10, function() return State.Movement.OrbitOffset end, function(value) State.Movement.OrbitOffset = value end, 1, function()
-    return State.Movement.Orbit and table.find({"Carpet", "Backpack", "Helicopter"}, State.Movement.OrbitMode) ~= nil
+    return table.find({"Carpet", "Backpack", "Helicopter"}, State.Movement.OrbitMode) ~= nil
 end)
 end
 
@@ -6184,40 +6318,61 @@ end, true)
 addSlider(FreecamCard, "Freecam Speed", 0.2, 50, function() return State.World.FreecamSpeed end, function(value) State.World.FreecamSpeed = math.clamp(value, 0.2, 50) end, 1, function() return State.World.Freecam end)
 local freecamTeleportButton = addAction(FreecamCard, "Teleport Player to Freecam", function()
     local camera = Workspace.CurrentCamera
-    local _, _, root = getCharacter(LocalPlayer)
+    local _, humanoid, root = getCharacter(LocalPlayer)
     if not camera or not root then return end
     local look = camera.CFrame.LookVector
     local flatLook = Vector3.new(look.X, 0, look.Z)
     if flatLook.Magnitude < 0.01 then flatLook = Vector3.new(0, 0, -1) end
-    root.CFrame = CFrame.lookAt(camera.CFrame.Position - Vector3.new(0, 2.5, 0), camera.CFrame.Position - Vector3.new(0, 2.5, 0) + flatLook.Unit)
+    local destination = camera.CFrame.Position - Vector3.new(0, 2.5, 0)
+    State.World.Freecam = false
+    releaseFreecamCharacter()
+    root.CFrame = CFrame.lookAt(destination, destination + flatLook.Unit)
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
+    if humanoid then
+        humanoid.PlatformStand = false
+        humanoid.Sit = false
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
+    camera.CameraType = Enum.CameraType.Custom
+    if humanoid then camera.CameraSubject = humanoid end
+    freecamState = nil
+    refreshControls()
 end)
 UI.BindActionIcon(freecamTeleportButton, "FreecamTeleport")
 table.insert(controlRefreshers, function()
     freecamTeleportButton.Visible = State.World.Freecam
 end)
+UI.WaypointGameKey = tostring(game.GameId ~= 0 and game.GameId or game.PlaceId)
+UI.GetCurrentWaypoints = function()
+    if type(State.Waypoints) ~= "table" then State.Waypoints = {} end
+    if type(State.Waypoints[UI.WaypointGameKey]) ~= "table" then State.Waypoints[UI.WaypointGameKey] = {} end
+    return State.Waypoints[UI.WaypointGameKey]
+end
 local WaypointCard = createCard(MiscPage, "Waypoints")
+WaypointCard:SetAttribute("CategoryName", "Waypoints")
 local waypointStatus = addNote(WaypointCard, "No waypoint selected")
 UI.WaypointDropdown = UI.AddDropdown(WaypointCard, "Saved Waypoint", {}, function()
-    local entry = State.Waypoints[selectedWaypoint]
+    local entry = UI.GetCurrentWaypoints()[selectedWaypoint]
     return entry and string.format("%d · %s", selectedWaypoint, entry.Name) or nil
 end, function(value)
     local index = tonumber(tostring(value):match("^(%d+)"))
-    if index and State.Waypoints[index] then
+    local waypoints = UI.GetCurrentWaypoints()
+    if index and waypoints[index] then
         selectedWaypoint = index
-        waypointStatus.Text = State.Waypoints[index].Name
+        waypointStatus.Text = waypoints[index].Name
     end
 end, false)
 UI.RefreshWaypointList = function()
+    local waypoints = UI.GetCurrentWaypoints()
     local options = {}
-    for index, entry in ipairs(State.Waypoints) do
+    for index, entry in ipairs(waypoints) do
         table.insert(options, string.format("%d · %s", index, entry.Name))
     end
-    selectedWaypoint = math.clamp(selectedWaypoint, 1, math.max(1, #State.Waypoints))
+    selectedWaypoint = math.clamp(selectedWaypoint, 1, math.max(1, #waypoints))
     UI.WaypointDropdown:SetOptions(options)
     UI.WaypointDropdown:Render()
-    waypointStatus.Text = State.Waypoints[selectedWaypoint] and State.Waypoints[selectedWaypoint].Name or "No waypoint selected"
+    waypointStatus.Text = waypoints[selectedWaypoint] and waypoints[selectedWaypoint].Name or "No waypoint selected"
 end
 
 UI.WaypointActions = Instance.new("Frame")
@@ -6282,23 +6437,25 @@ end
 local function saveWaypoint()
     local _, _, root = getCharacter(LocalPlayer)
     if not root then return end
+    local waypoints = UI.GetCurrentWaypoints()
     local components = {root.CFrame:GetComponents()}
-    table.insert(State.Waypoints, {Name = "Waypoint " .. tostring(#State.Waypoints + 1), CFrame = components})
-    selectedWaypoint = #State.Waypoints
+    table.insert(waypoints, {Name = "Waypoint " .. tostring(#waypoints + 1), CFrame = components})
+    selectedWaypoint = #waypoints
     UI.RefreshWaypointList()
 end
 local function teleportWaypoint()
-    local entry = State.Waypoints[selectedWaypoint]
+    local entry = UI.GetCurrentWaypoints()[selectedWaypoint]
     local _, _, root = getCharacter(LocalPlayer)
     if entry and root and type(entry.CFrame) == "table" and #entry.CFrame >= 12 then
         root.CFrame = CFrame.new(table.unpack(entry.CFrame))
     end
 end
 local function deleteWaypoint()
-    local entry = State.Waypoints[selectedWaypoint]
+    local waypoints = UI.GetCurrentWaypoints()
+    local entry = waypoints[selectedWaypoint]
     if not entry then return end
     UI.ShowConfirm("Delete Waypoint", "Delete “" .. entry.Name .. "”? This cannot be undone.", function()
-        table.remove(State.Waypoints, selectedWaypoint)
+        table.remove(waypoints, selectedWaypoint)
         UI.RefreshWaypointList()
     end)
 end
@@ -6318,7 +6475,7 @@ for _, bindData in ipairs({
     {"WaypointTeleport", "Teleport", teleportWaypoint},
     {"WaypointDelete", "Delete", deleteWaypoint}
 }) do
-    local bindId = "Misc/Waypoints/" .. bindData[1]
+    local bindId = "Waypoints/Waypoints/" .. bindData[1]
     local bindButton = button(waypointBindRow, bindData[2] .. ": " .. (State.Keybinds[bindId] or "Bind"), UDim2.new(1 / 3, -7, 0, 32))
     bindButton.TextSize = 13
     keybindActions[bindId] = bindData[3]
@@ -6327,9 +6484,9 @@ for _, bindData in ipairs({
         bindButton.Text = bindData[2] .. ": ..."
     end)
 end
-UI.Register("Misc/Waypoints/Save Current Position", {Instance = UI.WaypointSave})
-UI.Register("Misc/Waypoints/Teleport to Waypoint", {Instance = UI.WaypointTeleport})
-UI.Register("Misc/Waypoints/Delete Selected Waypoint", {Instance = UI.WaypointDelete})
+UI.Register("Waypoints/Waypoints/Save Current Position", {Kind = "Action", DisplayLabel = "Save Current Position", Instance = UI.WaypointSave, Activate = saveWaypoint})
+UI.Register("Waypoints/Waypoints/Teleport to Waypoint", {Kind = "Action", DisplayLabel = "Teleport to Waypoint", Instance = UI.WaypointTeleport, Activate = teleportWaypoint})
+UI.Register("Waypoints/Waypoints/Delete Selected Waypoint", {Kind = "Action", DisplayLabel = "Delete Selected Waypoint", Instance = UI.WaypointDelete, Activate = deleteWaypoint})
 UI.RefreshWaypointList()
 end
 
@@ -6888,6 +7045,18 @@ local function loadConfig(name)
         )
     end
     merge(State, decoded)
+    if State.Aim.Activation ~= "Right Mouse" and State.Aim.Activation ~= "Left Mouse" then
+        State.Aim.Activation = "Right Mouse"
+    end
+    State.Aim.HoldRightMouse = State.Aim.Activation == "Right Mouse"
+    State.Movement.Godmode = nil
+    State.Movement.FlingPower = nil
+    State.Movement.FlingFlySpeed = nil
+    if type(State.Waypoints) ~= "table" then
+        State.Waypoints = {}
+    elseif State.Waypoints[1] ~= nil then
+        State.Waypoints = {[UI.WaypointGameKey] = State.Waypoints}
+    end
     State.World.FreecamSpeed = math.clamp(tonumber(State.World.FreecamSpeed) or Defaults.World.FreecamSpeed, 0.2, 50)
     State.Interface.RGBEnabled = nil
     State.Interface.RGBSpeed = nil
@@ -6984,11 +7153,10 @@ addAction(ConfigCard, "Refresh Config List", function()
 end)
 addAction(ConfigCard, "Reset to Defaults", function()
     State.Movement.AntiFling = false
-    State.Movement.Godmode = false
+    State.Movement.AntiFlingMoving = false
     UI.ClearAntiFlingState()
     clearFlingState()
     clearOrbitMotion()
-    clearGodmodeState()
     selectedPlayer = nil
     State = deepCopy(Defaults)
     State.World.CameraFOV = originalCameraFOV
@@ -7251,18 +7419,19 @@ UI.PlayerService, UI.PlayerServiceError = (function()
             RouteColor = UI.DesignTokens.TextPrimary,
             TrackConnection = trackConnection,
             ResolveGlobal = resolveGlobal,
-            GetFlingPower = function() return State.Movement.FlingPower end,
             BeforeExclusiveAction = function()
                 local token = {
                     Fly = State.Movement.Fly,
                     Orbit = State.Movement.Orbit,
                     Fling = State.Movement.Fling,
-                    AntiFling = State.Movement.AntiFling
+                    AntiFling = State.Movement.AntiFling,
+                    AntiFlingMoving = State.Movement.AntiFlingMoving
                 }
                 State.Movement.Fly = false
                 State.Movement.Orbit = false
                 State.Movement.Fling = false
                 State.Movement.AntiFling = false
+                State.Movement.AntiFlingMoving = false
                 clearFlyController()
                 clearOrbitMotion()
                 clearFlingState()
@@ -7275,6 +7444,7 @@ UI.PlayerService, UI.PlayerServiceError = (function()
                 State.Movement.Orbit = token.Orbit == true
                 State.Movement.Fling = token.Fling == true
                 State.Movement.AntiFling = token.AntiFling == true
+                State.Movement.AntiFlingMoving = token.AntiFlingMoving == true
                 refreshControls()
             end
         })
@@ -7294,6 +7464,7 @@ UI.ReportLoading(0.982, UI.PlayerService
     and "Players · live actions and pathfinding ready"
     or "Players · service unavailable")
 
+UI.LoadDuration = os.clock() - bootStartedAt
 UI.MainMenuController, UI.MainMenuError = (function()
     local mainCategories = {
         Home = true,
@@ -7303,6 +7474,7 @@ UI.MainMenuController, UI.MainMenuError = (function()
         Movement = true,
         World = true,
         Lighting = true,
+        Waypoints = true,
         Misc = true,
         Configs = true
     }
@@ -7327,7 +7499,7 @@ UI.MainMenuController, UI.MainMenuError = (function()
         for flag, control in pairs(UI.Controls) do
             local category, section, label = string.match(tostring(flag), "^([^/]+)/([^/]+)/(.+)$")
             local mainCategory = (category == "World" and (section == "Lighting" or section == "RGB Effects")) and "Lighting" or category
-            if category and section and label and mainCategories[mainCategory] and type(control.Kind) == "string" and control.Kind ~= "Color" then
+            if category and section and label and mainCategories[mainCategory] and control.MainHidden ~= true and type(control.Kind) == "string" and control.Kind ~= "Color" then
                 table.insert(entries, {
                     Flag = tostring(flag),
                     Category = mainCategory,
@@ -7342,7 +7514,8 @@ UI.MainMenuController, UI.MainMenuError = (function()
                     Order = control.RegistrationOrder,
                     SectionOrder = control.SectionOrder,
                     MainCategory = mainCategory,
-                    VisibleWhen = control.VisibleWhen
+                    VisibleWhen = control.VisibleWhen,
+                    BindId = control.BindId
                 })
             end
         end
@@ -7419,7 +7592,12 @@ UI.MainMenuController, UI.MainMenuError = (function()
             GetAnchorPoint = getMainAnchorPoint,
             GetViewportSize = getCanvasSize,
             GetCategoryIcon = UI.ResolveCategoryIconAsset,
+            GetInterfaceIcon = UI.ResolveMainIconAsset,
             GetIndexEntries = getMainIndexEntries,
+            GetLoadDuration = function() return UI.LoadDuration end,
+            RequestUnload = function() if unload then unload() end end,
+            GetKeybind = UI.GetKeybind,
+            BeginKeybind = UI.BeginKeybind,
             GetPlayerSnapshot = function(query, sortMode)
                 return UI.PlayerService and UI.PlayerService.GetSnapshot(query, sortMode) or {}
             end,
@@ -7485,6 +7663,36 @@ UI.ReportLoading(0.985, UI.MainMenuController
 
 unload = function()
     if unloaded then return end
+    State.Aim.Enabled = false
+    State.Visuals.Enabled = false
+    State.Movement.Speed = false
+    State.Movement.Jump = false
+    State.Movement.InfiniteJump = false
+    State.Movement.BunnyHop = false
+    State.Movement.Fly = false
+    State.Movement.Fling = false
+    State.Movement.Noclip = false
+    State.Movement.Orbit = false
+    State.Movement.AntiFling = false
+    State.Movement.AntiFlingMoving = false
+    State.Movement.Gravity = false
+    State.World.Freecam = false
+    State.World.ThirdPerson = false
+    State.World.Fullbright = false
+    State.World.NoFog = false
+    State.World.FlatTextures = false
+    State.Stats.Visible = false
+    for _, scope in ipairs({"ESP", "Aim", "World"}) do
+        if State.World.RGB[scope] then State.World.RGB[scope].Enabled = false end
+    end
+    restoreFlatTextures()
+    restoreAtmosphere()
+    UI.RestoreThirdPersonTransparency()
+    releaseFreecamCharacter()
+    clearFlingState()
+    clearOrbitMotion()
+    UI.ClearAntiFlingState()
+    restoreMovement()
     unloaded = true
     for actionId, controller in pairs(UI.GameControllers) do
         local destroy = type(controller) == "table" and (controller.Destroy or controller.Unload) or nil
@@ -7504,28 +7712,9 @@ unload = function()
         pcall(UI.GameCatalogController.Destroy)
         UI.GameCatalogController = nil
     end
-    State.Aim.Enabled = false
-    State.Visuals.Enabled = false
-    State.Movement.Fly = false
-    State.Movement.Fling = false
-    State.Movement.Noclip = false
-    State.Movement.Orbit = false
-    State.Movement.AntiFling = false
-    State.Movement.Godmode = false
-    State.World.Freecam = false
-    releaseFreecamCharacter()
     freecamState = nil
-    clearFlingState()
-    clearOrbitMotion()
-    UI.ClearAntiFlingState()
-    clearGodmodeState()
-    restoreFlatTextures()
     colorCorrection.Enabled = false
     bloom.Enabled = false
-    pcall(function()
-        StarterGui:SetCore("ResetButtonCallback", true)
-    end)
-    restoreMovement()
     Lighting.Brightness = originalLighting.Brightness
     Lighting.ClockTime = originalLighting.ClockTime
     Lighting.FogEnd = originalLighting.FogEnd
@@ -7584,6 +7773,9 @@ env.TasuHub = {
     GetFlag = UI.GetFlag,
     SetCategoryIcon = UI.SetCategoryIcon,
     SetCategoryIconBackground = UI.SetCategoryIconBackground,
+    SetMainIcon = UI.SetMainIcon,
+    CategoryIconUrls = UI.CategoryIconUrls,
+    MainIconUrls = UI.MainIconUrls,
     SetActionIcon = UI.SetActionIcon,
     ActionIconUrls = UI.ActionIconUrls,
     SetCornerButtonIcon = UI.SetCornerButtonIcon,

@@ -58,6 +58,17 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 - Spacing: a shared 4-based spacing scale; arbitrary padding is forbidden.
 - Motion: `MotionFast`, `MotionControl`, `MotionPanel`, `MotionModal`, `MotionLoader`, the catalog pull/content/search tokens, main sidebar/page tokens, and shared easing tokens.
 
+## Main-window interaction additions — improvement pass
+
+- Section disclosure uses one `<` glyph from the shared heading font. Rotation is `90°` while expanded and `-90°` while collapsed; no separate up/down artwork is created.
+- A category with exactly one feature section expands that card across the page. Its controls are balanced into two internal columns while preserving registration order and the same row geometry used elsewhere.
+- Search navigation marks the selected control with exactly three short `Signal`-white surface/stroke pulses after the destination card has opened and scrolled into view.
+- Player actions are icon-only. The central keys are `PlayerWalk`, `PlayerStop`, `PlayerFling`, `PlayerView`, `PlayerUnview`, and `PlayerTeleport`; all use the shared asset resolver and a compact glyph only when their central asset is blank or cannot resolve.
+- Home owns one full-width 54 px unload surface at the bottom. It requires an uninterrupted two-second hold. A `Danger` fill moves linearly from left to right beneath a low-opacity `Signal` grid and emits 20 rising-pitch ticks from the dedicated `UnloadCheckpoint` preset. Releasing or leaving before completion reverses the fill using `MotionControl` and does not unload.
+- Home summary copy is replaced by measured loader duration. Up to 12 seconds uses `Success`, above 12 through 25 seconds uses `Warning`, and above 25 seconds uses `Danger`.
+- Main category motion keeps the exit-first contract but uses `0.20` second exit, `0.22` second empty gap, and `0.28` second entry for a slightly faster transition.
+- Category and player-action artwork is configured only through the central loader icon maps. Numeric Roblox IDs, `rbxassetid://` values, and HTTPS PNG links use the same cache/resolution path; a feature may not construct its own icon downloader.
+
 ## Approved game-catalog window — revision 10
 
 - The upper corner action opens one movable popup supplied by the versioned remote `game_catalog.lua` module. The module receives shared theme, layout, motion, input, audio, and lifecycle services; it may not define a private palette or expose legacy UI.

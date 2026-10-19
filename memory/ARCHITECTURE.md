@@ -22,6 +22,10 @@
 - A loaded game script returns a controller; the loader registers its rail action and lifecycle, while the catalog only consumes the returned activation callback.
 - UI and feature state communicate through stable IDs, not display labels.
 - Main-menu search indexes copied stable descriptors; it never discovers controls by traversing either visible or legacy instances.
+- Category and player-action images resolve through loader-owned `CategoryIconUrls` and `MainIconUrls`. The main view receives only resolved-asset getters and live update callbacks.
+- Waypoints are stored below one experience key (`game.GameId`, falling back to `game.PlaceId`) and are presented as their own category without changing the saved transform payload shape.
+- Unload first drives every active feature flag to its safe disabled state and synchronously restores owned world/character properties. Controller destruction and the global instance/connection sweep happen only after that feature shutdown boundary.
+- Player-service exclusive actions suspend both static and moving anti-fling modes and restore the prior modes after the action token ends.
 
 ## Migration constraint
 
