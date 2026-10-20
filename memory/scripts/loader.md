@@ -35,3 +35,11 @@ Runtime validation follows `../EXECUTOR_TESTING.md`. Visual code follows `../THE
 - Godmode and user-adjustable fling-power state are removed. Old config keys are accepted only long enough to clear them during migration.
 
 Executor verification for this pass is pending; compilation alone is not runtime acceptance.
+
+## Persistence and visual-layer refinement
+
+- `ScreenGui.ZIndexBehavior` is `Global`. ESP GUI primitives remain in the 1–4 band, while catalog/main/rail/game windows retain their 2000+ bands, so cheat visuals cannot cover TasuHub windows.
+- The selected theme and catalog favorites live in the versioned global preference file `TasuHub/preferences_v1.json`. Loader reads it before visible composition and supplies copied favorite state plus a narrow save callback to the catalog. Theme application saves immediately. Normal config payloads omit the theme, legacy config theme fields are ignored, and Reset to Defaults preserves the preferred theme.
+- Orbit player/mode descriptor host frames are explicitly assigned to `Misc/Orbit` before cloning, preventing the adapter from dropping their dropdowns as anonymous `Frame/Frame` controls.
+- Freecam look uses the captured Roblox sensitivity with coefficient `0.009`.
+- ESP box ownership has returned to body-only 3D `SelectionBox` proxies. Screen GUI box-line/fill instances no longer exist; projected bounds remain solely for the attached health bar.

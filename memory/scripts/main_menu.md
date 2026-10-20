@@ -12,9 +12,9 @@ The right header reuses the catalog search language. Search consumes copied regi
 
 The full-width Players page consumes `player_service.lua` snapshots/actions and preserves avatar, display/username, relation, distance, health, View, TP, Fling, and Walk/Stop. Player actions show only centrally resolved state-aware icons with glyph fallback; no action text is rendered. The draggable `Live Stats` overlay consumes only loader snapshots; closing it writes the existing Show Stats controller flag.
 
-Home displays measured loader duration with the shared success/warning/danger thresholds and places one full-width two-second hold-to-unload surface after all Home content. Its red grid fill, rising checkpoint audio, cancellation reversal, and final unload request are presentation owned; the loader remains lifecycle authority.
+Home displays measured loader duration with the shared success/warning/danger thresholds and places one full-width two-second hold-to-unload surface after all Home content. Its red fill uses the outer 14 px radius; its white theme-token grid loops seamlessly toward the upper-right only while held. Rising checkpoint audio, cancellation reversal, and final unload request are presentation owned; the loader remains lifecycle authority.
 
-Every toggle descriptor with a stable `BindId` receives the compact shared bind control. Search selection opens the destination section, scrolls to the row, and flashes it white three times before releasing the temporary stroke.
+Every toggle descriptor with a stable `BindId` receives the compact shared bind control. Search selection opens the destination section, scrolls to the row, and inverts its shared surface/text colors three times before restoring the exact captured colors and releasing the temporary stroke.
 
 Lifecycle: persistent shell connections belong to the controller/global tracker. Page and search-result connections are independently disconnected before their trees are replaced. Transition/page/search revisions reject stale completion. `Destroy` invalidates revisions, stops slider/drag ownership, disconnects all buckets, and destroys `MainMenuRoot`. Loader destroys this controller before the catalog and root sweep. No Studio path exists.
 

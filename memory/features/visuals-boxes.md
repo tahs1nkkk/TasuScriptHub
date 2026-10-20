@@ -2,9 +2,9 @@
 
 State: `Boxes`, `BoxFilled`, `Thickness`.
 
-Behavior: the current branch uses four screen-space box lines plus a clipped fill computed from visible body-part bounds. The renderer stays visible through walls because it is application overlay geometry, not a world `SelectionBox`.
+Behavior: the current branch uses one real world-space `SelectionBox` welded through a transparent, non-colliding proxy to each live character root. Bounds are calculated only from body `BasePart` descendants; `Accessory` and `Tool` descendants never change box width. Screen-space GUI rectangle boxes are prohibited and must not be reintroduced unless the user explicitly reverses this contract.
 
-Rework: keep renderer interchangeable, avoid physical/collision impact, update bounds after avatar scale changes, exclude `Accessory` and `Tool` descendants from hitbox width, use 0.62 fill transparency when filled, and destroy only owned proxies on character swap.
+Rework: avoid physical/collision impact, rebuild the owned proxy after a character swap, use 0.58 surface transparency when filled, map shared thickness into a bounded 3D line thickness, and destroy only owned proxies on character swap/unload. Screen projection remains only for the box-attached health bar.
 
 Executor checks: R6/R15, scaled avatars, accessories, seated/dead players, fill on/off, thickness limits, respawn, and unload.
 

@@ -370,6 +370,50 @@ local function ensureFolder(path)
     return true
 end
 
+local PREFERENCES_PATH = "TasuHub/preferences_v1.json"
+local Preferences = {
+    Version = 1,
+    ThemeName = Defaults.Interface.ThemeName,
+    Favorites = {}
+}
+
+local function loadPreferences()
+    if not capabilities.Files then return false end
+    local isfile = resolveGlobal("isfile")
+    if type(isfile) == "function" and not isfile(PREFERENCES_PATH) then return false end
+    local readfile = resolveGlobal("readfile")
+    if type(readfile) ~= "function" then return false end
+    local readOk, raw = pcall(readfile, PREFERENCES_PATH)
+    if not readOk or type(raw) ~= "string" or raw == "" then return false end
+    local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+    if not decodeOk or type(decoded) ~= "table" or decoded.Version ~= 1 then return false end
+    if type(decoded.ThemeName) == "string" and decoded.ThemeName ~= "" then
+        Preferences.ThemeName = decoded.ThemeName
+    end
+    if type(decoded.Favorites) == "table" then
+        for id, enabled in pairs(decoded.Favorites) do
+            if enabled == true then Preferences.Favorites[tostring(id)] = true end
+        end
+    end
+    return true
+end
+
+local function savePreferences()
+    if not capabilities.Files or not capabilities.Folders or not ensureFolder("TasuHub") then return false end
+    local writefile = resolveGlobal("writefile")
+    if type(writefile) ~= "function" then return false end
+    local encodeOk, encoded = pcall(HttpService.JSONEncode, HttpService, {
+        Version = 1,
+        ThemeName = Preferences.ThemeName,
+        Favorites = Preferences.Favorites
+    })
+    if not encodeOk then return false end
+    return pcall(writefile, PREFERENCES_PATH, encoded)
+end
+
+loadPreferences()
+State.Interface.ThemeName = Preferences.ThemeName
+
 local guiParent
 local gethui = resolveGlobal("gethui")
 if type(gethui) == "function" then
@@ -786,6 +830,8 @@ UI.ApplyTheme = function(name, preserveAccent)
         Theme.Accent = accent
     end
     Theme.ThemeName = resolvedName
+    Preferences.ThemeName = resolvedName
+    savePreferences()
     UI.RefreshTheme()
 end
 
@@ -843,7 +889,7 @@ local ScreenGui = trackInstance(Instance.new("ScreenGui"))
 ScreenGui.Name = "TasuHub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 ScreenGui.DisplayOrder = 999999
 local guiParented = pcall(function()
     ScreenGui.Parent = guiParent
@@ -4321,7 +4367,7 @@ local function destroyESP(player)
     end
     for _, key in ipairs({
         "Tracer", "SkeletonLayer", "Arrow", "Highlight", "BoxProxy",
-        "NameBillboard", "HeadAdornment", "BoxFill", "HealthTrack"
+        "NameBillboard", "HeadAdornment", "HealthTrack"
     }) do
         local object = record[key]
         if typeof(object) == "Instance" then
@@ -4330,21 +4376,11 @@ local function destroyESP(player)
             end)
         end
     end
-    for _, line in ipairs(record.BoxLines or {}) do
-        if line and line.Parent then line:Destroy() end
-    end
     espRecords[player] = nil
 end
 
 local function createESP(player)
     destroyESP(player)
-    local boxFill = Instance.new("Frame")
-    boxFill.BackgroundColor3 = Theme.Accent
-    boxFill.BackgroundTransparency = 1
-    boxFill.BorderSizePixel = 0
-    boxFill.Visible = false
-    boxFill.ZIndex = 1
-    boxFill.Parent = ScreenGui
     local healthTrack = Instance.new("Frame")
     healthTrack.BackgroundColor3 = Color3.fromRGB(22, 24, 29)
     healthTrack.BorderSizePixel = 0
@@ -4363,8 +4399,6 @@ local function createESP(player)
         Tracer = newLine(ScreenGui),
         SkeletonLayer = Instance.new("Frame"),
         SkeletonLines = {},
-        BoxLines = {},
-        BoxFill = boxFill,
         HealthTrack = healthTrack,
         HealthBar = healthFill,
         Arrow = textLabel(ScreenGui, "▲", UDim2.fromOffset(32, 32), nil, 28, Theme.Accent, Enum.TextXAlignment.Center),
@@ -4377,9 +4411,6 @@ local function createESP(player)
     record.SkeletonLayer.Parent = ScreenGui
     for _ = 1, 15 do
         table.insert(record.SkeletonLines, newLine(record.SkeletonLayer))
-    end
-    for _ = 1, 4 do
-        table.insert(record.BoxLines, newLine(ScreenGui))
     end
     record.Arrow.AnchorPoint = Vector2.new(0.5, 0.5)
     record.Arrow.TextStrokeColor3 = Color3.fromRGB(8, 12, 18)
@@ -4397,6 +4428,39 @@ local function createESP(player)
     return record
 end
 
+local function getBodyBounds(character, root)
+    local minimum = Vector3.new(math.huge, math.huge, math.huge)
+    local maximum = Vector3.new(-math.huge, -math.huge, -math.huge)
+    local count = 0
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and not part:FindFirstAncestorOfClass("Accessory") and not part:FindFirstAncestorOfClass("Tool") then
+            local half = part.Size * 0.5
+            for x = -1, 1, 2 do
+                for y = -1, 1, 2 do
+                    for z = -1, 1, 2 do
+                        local worldPoint = part.CFrame:PointToWorldSpace(Vector3.new(half.X * x, half.Y * y, half.Z * z))
+                        local point = root.CFrame:PointToObjectSpace(worldPoint)
+                        minimum = Vector3.new(
+                            math.min(minimum.X, point.X),
+                            math.min(minimum.Y, point.Y),
+                            math.min(minimum.Z, point.Z)
+                        )
+                        maximum = Vector3.new(
+                            math.max(maximum.X, point.X),
+                            math.max(maximum.Y, point.Y),
+                            math.max(maximum.Z, point.Z)
+                        )
+                        count = count + 1
+                    end
+                end
+            end
+        end
+    end
+    if count == 0 then return root.CFrame, root.Size end
+    local center = (minimum + maximum) * 0.5
+    return root.CFrame * CFrame.new(center), maximum - minimum
+end
+
 local function ensureWorldESP(record, character, root)
     if record.WorldCharacter == character and record.BoxProxy and record.BoxProxy.Parent then return end
     for _, key in ipairs({"BoxProxy", "NameBillboard", "HeadAdornment"}) do
@@ -4404,7 +4468,7 @@ local function ensureWorldESP(record, character, root)
         if object then pcall(function() object:Destroy() end) end
         record[key] = nil
     end
-    local boundsCFrame, boundsSize = character:GetBoundingBox()
+    local boundsCFrame, boundsSize = getBodyBounds(character, root)
     local proxy = Instance.new("Part")
     proxy.Name = "TasuESPBounds"
     proxy.Size = boundsSize + Vector3.new(0.18, 0.18, 0.18)
@@ -4420,6 +4484,17 @@ local function ensureWorldESP(record, character, root)
     weld.Part0 = root
     weld.Part1 = proxy
     weld.Parent = proxy
+
+    local box3D = Instance.new("SelectionBox")
+    box3D.Name = "TasuESP3DBox"
+    box3D.Adornee = proxy
+    box3D.Color3 = Theme.Accent
+    box3D.LineThickness = 0.035
+    box3D.SurfaceColor3 = Theme.Accent
+    box3D.SurfaceTransparency = 1
+    box3D.Transparency = 0
+    box3D.Visible = false
+    box3D.Parent = proxy
 
     local nameBillboard = Instance.new("BillboardGui")
     nameBillboard.Name = "TasuESPName"
@@ -4456,6 +4531,7 @@ local function ensureWorldESP(record, character, root)
 
     record.WorldCharacter = character
     record.BoxProxy = proxy
+    record.Box3D = box3D
     record.NameBillboard = nameBillboard
     record.Label = label
     record.HeadAdornment = headAdornment
@@ -4544,11 +4620,10 @@ local function updateSkeleton(record, character, camera, color)
 end
 
 local function hideRecord(record)
-    for _, line in ipairs(record.BoxLines or {}) do line.Visible = false end
     if record.Tracer then record.Tracer.Visible = false end
     if record.SkeletonLayer then record.SkeletonLayer.Visible = false end
     if record.Arrow then record.Arrow.Visible = false end
-    if record.BoxFill then record.BoxFill.Visible = false end
+    if record.Box3D then record.Box3D.Visible = false end
     if record.HealthTrack then record.HealthTrack.Visible = false end
     if record.NameBillboard then record.NameBillboard.Enabled = false end
     if record.HeadAdornment then record.HeadAdornment.Visible = false end
@@ -4589,25 +4664,11 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Camera.Value + 50,
                 end
 
                 local left, right, top, bottom = getBoundingScreenBox(character, camera)
-                local boxVisible = State.Visuals.Boxes and left ~= nil
-                if boxVisible then
-                    local thickness = math.clamp(State.Visuals.Thickness, 1, 4)
-                    local topLeft, topRight = Vector2.new(left, top), Vector2.new(right, top)
-                    local bottomLeft, bottomRight = Vector2.new(left, bottom), Vector2.new(right, bottom)
-                    for _, line in ipairs(record.BoxLines) do line.BackgroundColor3 = color end
-                    setLine(record.BoxLines[1], topLeft, topRight, thickness)
-                    setLine(record.BoxLines[2], topRight, bottomRight, thickness)
-                    setLine(record.BoxLines[3], bottomRight, bottomLeft, thickness)
-                    setLine(record.BoxLines[4], bottomLeft, topLeft, thickness)
-                    record.BoxFill.Position = UDim2.fromOffset(left, top)
-                    record.BoxFill.Size = UDim2.fromOffset(math.max(1, right - left), math.max(1, bottom - top))
-                    record.BoxFill.BackgroundColor3 = color
-                    record.BoxFill.BackgroundTransparency = State.Visuals.BoxFilled and 0.62 or 1
-                    record.BoxFill.Visible = State.Visuals.BoxFilled
-                else
-                    for _, line in ipairs(record.BoxLines) do line.Visible = false end
-                    record.BoxFill.Visible = false
-                end
+                record.Box3D.Color3 = color
+                record.Box3D.SurfaceColor3 = color
+                record.Box3D.LineThickness = math.clamp(State.Visuals.Thickness * 0.018, 0.018, 0.072)
+                record.Box3D.SurfaceTransparency = State.Visuals.BoxFilled and 0.58 or 1
+                record.Box3D.Visible = State.Visuals.Boxes
 
                 record.NameBillboard.MaxDistance = State.Visuals.MaxDistance
                 record.NameBillboard.Enabled = State.Visuals.Names or State.Visuals.Distance
@@ -5245,7 +5306,7 @@ trackFeature("World", RunService.RenderStepped:Connect(function(deltaTime)
             UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
             UserInputService.MouseIconEnabled = true
             local mouseDelta = UserInputService:GetMouseDelta()
-            local lookScale = 0.0045 * freecamState.MouseSensitivity
+            local lookScale = 0.009 * freecamState.MouseSensitivity
             freecamState.Yaw = freecamState.Yaw - mouseDelta.X * lookScale
             freecamState.Pitch = math.clamp(freecamState.Pitch - mouseDelta.Y * lookScale, -1.5, 1.5)
         else
@@ -6190,6 +6251,8 @@ orbitPlayerSlot.BackgroundTransparency = 1
 orbitPlayerSlot.AutomaticSize = Enum.AutomaticSize.Y
 orbitPlayerSlot.Size = UDim2.new(0.5, -4, 0, 42)
 orbitPlayerSlot:SetAttribute("ForceFullWidth", true)
+orbitPlayerSlot:SetAttribute("CategoryName", "Misc")
+orbitPlayerSlot:SetAttribute("CardName", "Orbit")
 orbitPlayerSlot.Parent = orbitSelectionRow
 local orbitModeSlot = orbitPlayerSlot:Clone()
 orbitModeSlot.Parent = orbitSelectionRow
@@ -6983,7 +7046,6 @@ local function configPayload()
     local payload = deepCopy(State)
     payload.Interface = {
         Title = State.Interface.Title,
-        ThemeName = State.Interface.ThemeName,
         Accent = {
             R = math.round(State.Interface.Accent.R * 255),
             G = math.round(State.Interface.Accent.G * 255),
@@ -7036,6 +7098,9 @@ local function loadConfig(name)
     if not ok then return false, raw end
     local decodedOk, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
     if not decodedOk or type(decoded) ~= "table" then return false, decoded end
+    if type(decoded.Interface) == "table" then
+        decoded.Interface.ThemeName = nil
+    end
     if type(decoded.Interface) == "table" and type(decoded.Interface.Accent) == "table" then
         local accent = decoded.Interface.Accent
         decoded.Interface.Accent = Color3.fromRGB(
@@ -7073,8 +7138,9 @@ local function loadConfig(name)
         State.World.RGB.World.Enabled = true
     end
     ensureBuiltinCatalogEntries()
+    State.Interface.ThemeName = Preferences.ThemeName
     Theme = State.Interface
-    UI.ApplyTheme(State.Interface.ThemeName or "Rework Dark", true)
+    UI.ApplyTheme(Preferences.ThemeName or "Rework Dark", true)
     applyWorld()
     TopTitle.Text = State.Interface.Title or Theme.Title
     updateCatalogStatus()
@@ -7159,9 +7225,10 @@ addAction(ConfigCard, "Reset to Defaults", function()
     clearOrbitMotion()
     selectedPlayer = nil
     State = deepCopy(Defaults)
+    State.Interface.ThemeName = Preferences.ThemeName
     State.World.CameraFOV = originalCameraFOV
     Theme = State.Interface
-    UI.ApplyTheme(State.Interface.ThemeName or "Rework Dark", false)
+    UI.ApplyTheme(Preferences.ThemeName or "Rework Dark", false)
     restoreMovement()
     applyWorld()
     TopTitle.Text = State.Interface.Title
@@ -7378,6 +7445,15 @@ do
             GetViewportSize = getCanvasSize,
             GetEntries = function()
                 return deepCopy(State.Catalog)
+            end,
+            GetFavorites = function()
+                return deepCopy(Preferences.Favorites)
+            end,
+            SetFavorite = function(id, enabled)
+                id = tostring(id or "")
+                if id == "" then return false end
+                Preferences.Favorites[id] = enabled == true and true or nil
+                return savePreferences()
             end,
             RunEntry = UI.ExecuteCatalogEntry,
             ResolveCover = UI.ResolveCatalogCoverAsset

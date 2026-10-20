@@ -221,6 +221,14 @@ function CatalogModule.Create(context)
     local close = function() return false end
     local showAllScripts, favoritesOnly = false, false
     local favorites, selectedFeatures = {}, {}
+    if type(context.GetFavorites) == "function" then
+        local ok, savedFavorites = pcall(context.GetFavorites)
+        if ok and type(savedFavorites) == "table" then
+            for id, enabled in pairs(savedFavorites) do
+                if enabled == true then favorites[tostring(id)] = true end
+            end
+        end
+    end
     local activeCards, allItems, filteredItems, coverCache = {}, {}, {}, {}
     local virtualFirstRow, virtualCellWidth = -1, -1
     local contentLoaded, contentRevision = false, 0
@@ -1003,6 +1011,9 @@ function CatalogModule.Create(context)
             if state ~= "Open" then return end
             playSound("ButtonClick")
             favorites[favoriteId] = not favorites[favoriteId] or nil
+            if type(context.SetFavorite) == "function" then
+                pcall(context.SetFavorite, favoriteId, favorites[favoriteId] == true)
+            end
             if favoritesOnly then
                 applyFilters(false)
             else

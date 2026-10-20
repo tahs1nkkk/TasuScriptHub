@@ -26,6 +26,8 @@
 - Waypoints are stored below one experience key (`game.GameId`, falling back to `game.PlaceId`) and are presented as their own category without changing the saved transform payload shape.
 - Unload first drives every active feature flag to its safe disabled state and synchronously restores owned world/character properties. Controller destruction and the global instance/connection sweep happen only after that feature shutdown boundary.
 - Player-service exclusive actions suspend both static and moving anti-fling modes and restore the prior modes after the action token ends.
+- Global UI preferences are loader-owned and versioned independently from feature configs. Views receive copied getters and narrow setters; no view reads/writes executor files directly.
+- The shared `ScreenGui` uses global Z-index ordering: feature overlay GUI remains in the low renderer band and application windows remain in the 2000+ interaction bands.
 
 ## Migration constraint
 

@@ -261,6 +261,8 @@ function PlayerServiceModule.Create(context)
             local safeCFrame = localRoot.CFrame
             local safeVelocity = localRoot.AssemblyLinearVelocity
             local safeAngular = localRoot.AssemblyAngularVelocity
+            local safeCanCollide = localRoot.CanCollide
+            local safeMassless = localRoot.Massless
             local safeAutoRotate = localHumanoid.AutoRotate
             local safePlatformStand = localHumanoid.PlatformStand
             local cameraType = camera and camera.CameraType
@@ -268,12 +270,15 @@ function PlayerServiceModule.Create(context)
             local cameraCFrame = camera and camera.CFrame
             local cameraLock
             local localTransparency = {}
+            local localPhysics = {}
             local function restore()
                 if cameraLock then cameraLock:Disconnect() end
                 if localRoot and localRoot.Parent then
                     localRoot.CFrame = safeCFrame
                     localRoot.AssemblyLinearVelocity = safeVelocity
                     localRoot.AssemblyAngularVelocity = safeAngular
+                    localRoot.CanCollide = safeCanCollide
+                    localRoot.Massless = safeMassless
                 end
                 if localHumanoid and localHumanoid.Parent then
                     localHumanoid.AutoRotate = safeAutoRotate
@@ -282,6 +287,14 @@ function PlayerServiceModule.Create(context)
                 end
                 for part, value in pairs(localTransparency) do
                     if part and part.Parent then pcall(function() part.LocalTransparencyModifier = value end) end
+                end
+                for part, values in pairs(localPhysics) do
+                    if part and part.Parent then
+                        pcall(function()
+                            part.CanCollide = values.CanCollide
+                            part.Massless = values.Massless
+                        end)
+                    end
                 end
                 if camera and camera.Parent then
                     camera.CameraType = cameraType or Enum.CameraType.Custom
@@ -305,38 +318,46 @@ function PlayerServiceModule.Create(context)
                     local setHiddenProperty = context.ResolveGlobal("sethiddenproperty")
                     if type(setHiddenProperty) == "function" then pcall(setHiddenProperty, LocalPlayer, "SimulationRadius", math.huge) end
                 end
-                local power = 10000000
                 localHumanoid.AutoRotate = false
-                localHumanoid.PlatformStand = false
+                localHumanoid.PlatformStand = true
+                localHumanoid:ChangeState(Enum.HumanoidStateType.Physics)
+                localRoot.CanCollide = true
+                localRoot.Massless = false
                 for _, descendant in ipairs(localRoot.Parent:GetDescendants()) do
                     if descendant:IsA("BasePart") then
                         localTransparency[descendant] = descendant.LocalTransparencyModifier
                         descendant.LocalTransparencyModifier = 1
+                        if descendant ~= localRoot and not descendant:FindFirstAncestorOfClass("Accessory") and not descendant:FindFirstAncestorOfClass("Tool") then
+                            localPhysics[descendant] = {
+                                CanCollide = descendant.CanCollide,
+                                Massless = descendant.Massless
+                            }
+                            descendant.CanCollide = true
+                            descendant.Massless = false
+                        end
                     end
                 end
-                for index = 1, 36 do
+                local angularPower = 2000000
+                local linearPower = 4200
+                for index = 1, 8 do
                     if destroyed or revision ~= actionRevision or not localRoot.Parent or not targetCharacter.Parent or not targetRoot.Parent or targetHumanoid.Health <= 0 then break end
-                    local phase = index * math.pi * 0.5
-                    local offset = Vector3.new(math.cos(phase) * 0.82, (index % 3 - 1) * 0.28, math.sin(phase) * 0.82)
-                    local predicted = targetRoot.Position + targetRoot.AssemblyLinearVelocity * 0.035
+                    local phase = index * math.pi * 0.75
+                    local offset = Vector3.new(math.cos(phase) * 0.58, (index % 2 == 0 and 0.22 or -0.22), math.sin(phase) * 0.58)
+                    local targetVelocity = targetRoot.AssemblyLinearVelocity
+                    if targetVelocity.Magnitude > 180 then targetVelocity = targetVelocity.Unit * 180 end
+                    local predicted = targetRoot.Position + targetVelocity * 0.025
                     localRoot.CFrame = CFrame.new(predicted + offset, predicted)
                     local sign = index % 2 == 0 and 1 or -1
-                    localRoot.AssemblyAngularVelocity = Vector3.new(power * sign, power, -power * sign)
-                    localRoot.AssemblyLinearVelocity = targetRoot.AssemblyLinearVelocity + Vector3.new(-offset.X * power, power, -offset.Z * power)
-                    RunService.Stepped:Wait()
+                    local tangent = Vector3.new(-math.sin(phase), 0.42, math.cos(phase)).Unit
+                    localRoot.AssemblyAngularVelocity = Vector3.new(angularPower * sign, angularPower, -angularPower * sign)
+                    localRoot.AssemblyLinearVelocity = targetVelocity + tangent * linearPower + Vector3.new(0, linearPower * 0.55, 0)
                     RunService.Heartbeat:Wait()
-                    if index % 4 == 0 then
-                        localRoot.CFrame = safeCFrame
-                        localRoot.AssemblyLinearVelocity = safeVelocity
-                        localRoot.AssemblyAngularVelocity = Vector3.zero
-                        RunService.RenderStepped:Wait()
-                    end
                 end
             end)
             restore()
             if not ok then walkStatus = "Fling failed" end
         end)
-        return true, "Fling pulse started"
+        return true, "Fast fling burst started"
     end
 
     local function snapshot(query, sortMode)

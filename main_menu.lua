@@ -1534,25 +1534,34 @@ function MainMenuModule.Create(context)
         fillClip.Visible = false
         fillClip.ZIndex = 4009
         fillClip.Parent = shell
+        round(fillClip, 14)
+
+        local gridLayer = Instance.new("Frame")
+        gridLayer.BackgroundTransparency = 1
+        gridLayer.BorderSizePixel = 0
+        gridLayer.Position = UDim2.fromOffset(-14, 0)
+        gridLayer.Size = UDim2.new(1, 28, 1, 28)
+        gridLayer.ZIndex = 4010
+        gridLayer.Parent = fillClip
         for index = 0, 56 do
             local line = Instance.new("Frame")
             line.BackgroundColor3 = theme.Signal
             line.BackgroundTransparency = 0.78
             line.BorderSizePixel = 0
             line.Position = UDim2.fromOffset(index * 14, 0)
-            line.Size = UDim2.fromOffset(1, 54)
+            line.Size = UDim2.new(0, 1, 1, 0)
             line.ZIndex = 4010
-            line.Parent = fillClip
+            line.Parent = gridLayer
         end
-        for index = 1, 3 do
+        for index = 0, 5 do
             local line = Instance.new("Frame")
             line.BackgroundColor3 = theme.Signal
             line.BackgroundTransparency = 0.82
             line.BorderSizePixel = 0
             line.Position = UDim2.fromOffset(0, index * 14)
-            line.Size = UDim2.fromOffset(layout.WindowWidth, 1)
+            line.Size = UDim2.new(1, 0, 0, 1)
             line.ZIndex = 4010
-            line.Parent = fillClip
+            line.Parent = gridLayer
         end
 
         local button = Instance.new("TextButton")
@@ -1593,9 +1602,17 @@ function MainMenuModule.Create(context)
             fillClip.Visible = true
             fillClip.BackgroundTransparency = 0.06
             fillClip.Size = UDim2.fromScale(0, 1)
+            gridLayer.Position = UDim2.fromOffset(-14, 0)
             button.Text = "Keep holding to unload..."
             shellStroke.Color = theme.Danger
             fillTween = animate(fillClip, {Size = UDim2.fromScale(1, 1)}, 2, Enum.EasingStyle.Linear)
+            task.spawn(function()
+                while not destroyed and holding and revision == holdUnloadRevision and gridLayer.Parent do
+                    gridLayer.Position = UDim2.fromOffset(-14, 0)
+                    local gridTween = animate(gridLayer, {Position = UDim2.fromOffset(0, -14)}, 0.62, Enum.EasingStyle.Linear)
+                    gridTween.Completed:Wait()
+                end
+            end)
             task.spawn(function()
                 for checkpoint = 1, 20 do
                     task.wait(0.1)
@@ -1843,11 +1860,23 @@ function MainMenuModule.Create(context)
             local originalColor = row.BackgroundColor3
             local originalTransparency = row.BackgroundTransparency
             local pulseStroke = outline(row, 2, 1, theme.Signal)
+            local textColors = {}
+            for _, descendant in ipairs(row:GetDescendants()) do
+                if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                    textColors[descendant] = descendant.TextColor3
+                end
+            end
             for _ = 1, 3 do
                 if destroyed or not row.Parent then break end
                 animate(row, {BackgroundColor3 = theme.Signal, BackgroundTransparency = 0.08}, 0.13, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                for textObject in pairs(textColors) do
+                    if textObject.Parent then animate(textObject, {TextColor3 = theme.Base}, 0.13, Enum.EasingStyle.Sine, Enum.EasingDirection.Out) end
+                end
                 animate(pulseStroke, {Transparency = 0.02}, 0.13, Enum.EasingStyle.Sine, Enum.EasingDirection.Out).Completed:Wait()
                 animate(row, {BackgroundColor3 = originalColor, BackgroundTransparency = originalTransparency}, 0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+                for textObject, color in pairs(textColors) do
+                    if textObject.Parent then animate(textObject, {TextColor3 = color}, 0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.In) end
+                end
                 animate(pulseStroke, {Transparency = 1}, 0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.In).Completed:Wait()
             end
             if pulseStroke.Parent then pulseStroke:Destroy() end
