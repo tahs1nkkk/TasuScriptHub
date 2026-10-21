@@ -126,7 +126,7 @@ function MainMenuModule.Create(context)
 
     local function windowSize()
         local viewport = context.GetViewportSize()
-        local scale = math.min(1,
+        local scale = math.min(layout.WorkspaceScale or 0.86,
             math.max(0.1, (viewport.X - layout.ViewportInset * 2) / layout.WindowWidth),
             math.max(0.1, (viewport.Y - layout.ViewportInset * 2) / layout.WindowHeight)
         )

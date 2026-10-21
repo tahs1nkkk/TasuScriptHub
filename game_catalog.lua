@@ -141,10 +141,13 @@ function CatalogModule.Create(context)
 
     local function windowSize()
         local viewport = context.GetViewportSize()
-        return viewport, Vector2.new(
-            math.min(layout.WindowWidth, math.max(360, viewport.X - layout.ViewportInset * 2)),
-            math.min(layout.WindowHeight, math.max(360, viewport.Y - layout.ViewportInset * 2))
+        local size = Vector2.new(layout.WindowWidth, layout.WindowHeight)
+        local scale = math.min(
+            layout.WorkspaceScale or 0.86,
+            math.max(0.1, (viewport.X - layout.ViewportInset * 2) / size.X),
+            math.max(0.1, (viewport.Y - layout.ViewportInset * 2) / size.Y)
         )
+        return viewport, size, scale
     end
 
     local function visibleRatio(point, size, viewport)
@@ -156,11 +159,11 @@ function CatalogModule.Create(context)
     end
 
     local function targetGeometry()
-        local viewport, size = windowSize()
-        windowPixelSize = size
+        local viewport, size, scale = windowSize()
+        windowPixelSize = size * scale
         restingPosition = restingPosition or viewport * 0.5
-        if visibleRatio(restingPosition, size, viewport) < 0.5 then restingPosition = viewport * 0.5 end
-        return viewport, size, restingPosition
+        if visibleRatio(restingPosition, windowPixelSize, viewport) < 0.5 then restingPosition = viewport * 0.5 end
+        return viewport, size, restingPosition, scale
     end
 
     local root = Instance.new("Frame")
@@ -1426,8 +1429,9 @@ function CatalogModule.Create(context)
     end)
 
     local function setWindowToTarget()
-        local _, size, center = targetGeometry()
+        local _, size, center, scale = targetGeometry()
         window.Size, window.Position = UDim2.fromOffset(size.X, size.Y), UDim2.fromOffset(center.X, center.Y)
+        windowScale.Scale = scale
     end
     local function beginDrag(input)
         if state ~= "Open" then return end
@@ -1457,7 +1461,7 @@ function CatalogModule.Create(context)
         local reversingClose = state == "Closing"
         transitionRevision, state = transitionRevision + 1, "Opening"
         local revision = transitionRevision
-        local _, size, center = targetGeometry()
+        local _, size, center, targetScale = targetGeometry()
         window.Size = UDim2.fromOffset(size.X, size.Y)
         if not reversingClose then
             local source = context.GetAnchorPoint()
@@ -1472,7 +1476,7 @@ function CatalogModule.Create(context)
         contentRevealOverlay.Visible = true
         window.Visible = true
         local move = animate(window, {Position = UDim2.fromOffset(center.X, center.Y), GroupTransparency = 0}, motion.Open, Enum.EasingStyle.Quint)
-        animate(windowScale, {Scale = 1}, motion.Open, Enum.EasingStyle.Back)
+        animate(windowScale, {Scale = targetScale}, motion.Open, Enum.EasingStyle.Back)
         virtualFirstRow = -1
         applyFilters(true)
         contentLoaded = true

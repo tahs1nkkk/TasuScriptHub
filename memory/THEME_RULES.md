@@ -30,6 +30,12 @@ Status: the rework uses a dark-gray, minimal, vector-first direction, three perm
 
 ## One theme, one source
 
+### Workspace comfort scale
+
+- Catalog, main-menu, and game-window trees keep their approved 780×520 or 620×420 design canvases and render through one shared `WorkspaceScale` token capped at `0.86`. Children are never resized independently from their parent window.
+- Responsive fit may lower that whole-tree scale below `0.86` on small viewports, but may not exceed it on large viewports. This prevents oversized controls and eliminates the former catalog failure where the shell shrank while absolute-size contents overflowed.
+- Loader geometry and timing do not consume `WorkspaceScale`; the approved loader remains unchanged.
+
 - The application has exactly one active theme object and one semantic token registry.
 - New features consume existing tokens. They cannot create a feature-specific palette, font set, corner-radius scale, shadow recipe, or animation style.
 - Direct `Color3.fromRGB` values are forbidden in feature UI code. Colors are defined only in the theme registry, except runtime data colors such as health gradients, team colors, ESP target colors, and game-derived colors.

@@ -54,6 +54,8 @@ Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch now c
 
 ## Confirmed removals
 
+- Workspace-scale/MM2 automation correction: no duplicate per-window size workaround, second shooting loop, second farm worker, per-coin Heartbeat, or Studio compatibility branch was added. The catalog's shell-only responsive resize is superseded by one shared whole-tree scale; MM2's workspace-wide collectible scan and repeated PlayerGui scan are superseded by cached container/bag paths. The prior guessed direct `ShootGun` call remains a clearly labeled compatibility fallback and the primary path is the game-owned Tool/namecall flow. `InspectRuntime` is exported through both service and MM2 controller and therefore is not dead diagnostic code. Bytecode and reference results are recorded with the implementation commit; executor acceptance remains pending.
+
 - Loader rework: removed the radial segment spinner and legacy loader card implementation; replaced by the shared vector icon and horizontal progress system.
 - Loader exit revision: removed the independent icon/bar/status exit tweens, their stagger/delay tokens, and the unused per-item pop-out audio entry. Exit now has one whole-loader motion path.
 - Loader background revision: removed `LoaderTopFade`, its 1000 px exit offset, and all gradient keypoints. Background depth now comes from tracked blur and a lower viewport vector dot grid.

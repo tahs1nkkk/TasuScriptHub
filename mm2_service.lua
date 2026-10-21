@@ -122,6 +122,17 @@ function Module.Create(context)
     local farmRevision, farmState = 0, "Stopped"
     local farmSnapshot, antiIdleConnection = nil, nil
     local avatarCache = {}
+    local farmCache = {
+        Map = nil,
+        Container = nil,
+        LastMapScan = 0,
+        BagLabel = nil,
+        FullBagIndicator = nil,
+        LastBagScan = 0,
+        FailedUntil = setmetatable({}, {__mode = "k"})
+    }
+    local shotHook = {Pending = nil, Installed = false}
+    local shotBusy = false
 
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
@@ -430,28 +441,100 @@ function Module.Create(context)
     end
 
     local function findShootRemote(gun)
+        if shotHook.ObservedRemote and shotHook.ObservedRemote.Parent then return shotHook.ObservedRemote end
         if not gun then return nil end
         local direct = gun:FindFirstChild("ShootGun", true)
-        if direct and direct:IsA("RemoteFunction") then return direct end
+        if direct and direct:IsA("RemoteFunction") then shotHook.ObservedRemote = direct; return direct end
         for _, object in ipairs(gun:GetDescendants()) do
             if object:IsA("RemoteFunction") then
                 local lowered = string.lower(object.Name)
-                if string.find(lowered, "shoot", 1, true) or string.find(lowered, "fire", 1, true) then return object end
+                if string.find(lowered, "shoot", 1, true) or string.find(lowered, "fire", 1, true) then
+                    shotHook.ObservedRemote = object
+                    return object
+                end
             end
         end
+        local replicatedStorage = game:GetService("ReplicatedStorage")
+        local shared = replicatedStorage:FindFirstChild("ShootGun", true)
+        if shared and shared:IsA("RemoteFunction") then shotHook.ObservedRemote = shared; return shared end
         return nil
     end
 
+    local function setMetatableReadonly(metatableValue, readonly)
+        local setter = resolveGlobal("setreadonly")
+        if type(setter) == "function" then return pcall(setter, metatableValue, readonly) end
+        local alternate = resolveGlobal(readonly and "make_readonly" or "make_writeable")
+        if type(alternate) == "function" then return pcall(alternate, metatableValue) end
+        return false
+    end
+
+    local function installShootHook()
+        if shotHook.Installed then return true end
+        local getRawMetatable = resolveGlobal("getrawmetatable")
+        local getNamecallMethod = resolveGlobal("getnamecallmethod")
+        if type(getRawMetatable) ~= "function" or type(getNamecallMethod) ~= "function" then return false end
+        local ok, metatableValue = pcall(getRawMetatable, game)
+        if not ok or type(metatableValue) ~= "table" or type(metatableValue.__namecall) ~= "function" then return false end
+        local original = metatableValue.__namecall
+        local wrapper
+        wrapper = function(target, ...)
+            local method = getNamecallMethod()
+            local pending = shotHook.Pending
+            if pending and os.clock() <= pending.ExpiresAt and method == "InvokeServer"
+                and typeof(target) == "Instance" and target:IsA("RemoteFunction")
+                and string.lower(target.Name) == "shootgun" then
+                local arguments = table.pack(...)
+                if arguments.n >= 2 then
+                    arguments[2] = pending.Position
+                    pending.Observed = true
+                    pending.Remote = target
+                    shotHook.ObservedRemote = target
+                end
+                return original(target, table.unpack(arguments, 1, arguments.n))
+            end
+            return original(target, ...)
+        end
+        local newClosure = resolveGlobal("newcclosure")
+        if type(newClosure) == "function" then wrapper = newClosure(wrapper) end
+        setMetatableReadonly(metatableValue, false)
+        local assigned = pcall(function() metatableValue.__namecall = wrapper end)
+        setMetatableReadonly(metatableValue, true)
+        if not assigned then return false end
+        shotHook.Metatable = metatableValue
+        shotHook.Original = original
+        shotHook.Wrapper = wrapper
+        shotHook.Installed = true
+        return true
+    end
+
+    local function removeShootHook()
+        shotHook.Pending = nil
+        local metatableValue = shotHook.Metatable
+        if not shotHook.Installed or not metatableValue then return end
+        if metatableValue.__namecall == shotHook.Wrapper then
+            setMetatableReadonly(metatableValue, false)
+            pcall(function() metatableValue.__namecall = shotHook.Original end)
+            setMetatableReadonly(metatableValue, true)
+        end
+        shotHook.Installed = false
+    end
+
     local function requestShot(requireVisibility)
+        if shotBusy then return false, "A shot is already in progress" end
+        shotBusy = true
+        local function finish(ok, message)
+            shotBusy = false
+            return ok, message
+        end
         local murderer, targetRoot = findMurderer()
-        if not murderer or not targetRoot then return false, "Murderer is unavailable" end
+        if not murderer or not targetRoot then return finish(false, "Murderer is unavailable") end
         local gun = findTool(LocalPlayer, "Gun")
-        if not gun or not equipTool(gun) then return false, "Gun is unavailable" end
+        if not gun or not equipTool(gun) then return finish(false, "Gun is unavailable") end
         if requireVisibility then
             local camera = Workspace.CurrentCamera
-            if not camera then return false, "Camera is unavailable" end
+            if not camera then return finish(false, "Camera is unavailable") end
             local screen, onScreen = camera:WorldToViewportPoint(targetRoot.Position)
-            if not onScreen or screen.Z <= 0 then return false, "Murderer is outside the viewport" end
+            if not onScreen or screen.Z <= 0 then return finish(false, "Murderer is outside the viewport") end
             local localCharacter = LocalPlayer.Character
             local parameters = RaycastParams.new()
             parameters.FilterType = Enum.RaycastFilterType.Exclude
@@ -459,14 +542,24 @@ function Module.Create(context)
             local result = Workspace:Raycast(camera.CFrame.Position, targetRoot.Position - camera.CFrame.Position, parameters)
             local targetCharacter = murderer.Character
             if result and (not targetCharacter or not result.Instance:IsDescendantOf(targetCharacter)) then
-                return false, "Murderer is behind cover"
+                return finish(false, "Murderer is behind cover")
             end
         end
+        RunService.Heartbeat:Wait()
+        gun = findTool(LocalPlayer, "Gun") or gun
+        local predicted = targetRoot.Position + targetRoot.AssemblyLinearVelocity / 40
+        local hooked = installShootHook()
+        local pending = {Position = predicted, ExpiresAt = os.clock() + 0.45, Observed = false}
+        if hooked then shotHook.Pending = pending end
+        local activated = pcall(function() gun:Activate() end)
+        local deadline = os.clock() + 0.32
+        while activated and hooked and not pending.Observed and os.clock() < deadline do task.wait(0.02) end
+        if shotHook.Pending == pending then shotHook.Pending = nil end
+        if pending.Observed then return finish(true, "Shot fired through the game gun controller") end
         local remote = findShootRemote(gun)
-        if not remote then return false, "ShootGun RemoteFunction is unavailable" end
-        local predicted = targetRoot.Position + targetRoot.AssemblyLinearVelocity * 0.12
+        if not remote then return finish(false, "ShootGun RemoteFunction is unavailable") end
         local ok = pcall(function() remote:InvokeServer(1, predicted, "AH") end)
-        return ok, ok and "Shot sent" or "ShootGun invocation failed"
+        return finish(ok, ok and "Shot sent through compatibility fallback" or "ShootGun invocation failed")
     end
 
     local function collectiblePart(object)
@@ -475,10 +568,6 @@ function Module.Create(context)
     end
 
     local function isCollectible(object)
-        local lowered = string.lower(object.Name)
-        local named = string.find(lowered, "coin", 1, true) or string.find(lowered, "candy", 1, true)
-            or string.find(lowered, "token", 1, true) or string.find(lowered, "snow", 1, true)
-        if not named then return false end
         return collectiblePart(object) ~= nil and (
             object:FindFirstChildWhichIsA("TouchTransmitter", true) ~= nil
             or object:FindFirstChild("CoinVisual", true) ~= nil
@@ -486,45 +575,82 @@ function Module.Create(context)
         )
     end
 
+    local function findActiveMap(force)
+        if not force and farmCache.Container and farmCache.Container.Parent and farmCache.Container:IsDescendantOf(Workspace) then
+            return farmCache.Map, farmCache.Container
+        end
+        if not force and os.clock() - farmCache.LastMapScan < 1 then return nil, nil end
+        farmCache.LastMapScan = os.clock()
+        farmCache.Map, farmCache.Container = nil, nil
+        for _, candidate in ipairs(Workspace:GetChildren()) do
+            if candidate.Name ~= "Lobby" then
+                local container = candidate:FindFirstChild("CoinContainer", true)
+                if container and (candidate:FindFirstChild("Spawns", true) or #container:GetChildren() > 0) then
+                    farmCache.Map, farmCache.Container = candidate, container
+                    break
+                end
+            end
+        end
+        return farmCache.Map, farmCache.Container
+    end
+
     local function discoverCollectibles()
         local result, seen = {}, {}
-        for _, object in ipairs(Workspace:GetDescendants()) do
-            if isCollectible(object) then
-                local candidate = object
-                while candidate.Parent and candidate.Parent ~= Workspace do
-                    local lower = string.lower(candidate.Parent.Name)
-                    if string.find(lower, "coincontainer", 1, true) then candidate = candidate.Parent; break end
-                    candidate = candidate.Parent
-                end
-                local source = string.find(string.lower(candidate.Name), "coincontainer", 1, true) and candidate:GetChildren() or {object}
-                for _, item in ipairs(source) do
-                    local part = collectiblePart(item)
-                    if part and not seen[part] and isCollectible(item) then
-                        seen[part] = true
-                        table.insert(result, {Object = item, Part = part})
-                    end
-                end
+        local _, container = findActiveMap(false)
+        if not container then return result end
+        for _, object in ipairs(container:GetChildren()) do
+            local part = collectiblePart(object)
+            if part and not seen[part] and isCollectible(object) then
+                seen[part] = true
+                table.insert(result, {Object = object, Part = part})
             end
         end
         return result
     end
 
-    local function readBagState()
+    local function findDescendantPath(root, names)
+        local current = root
+        for _, name in ipairs(names) do
+            current = current and current:FindFirstChild(name)
+        end
+        return current
+    end
+
+    local function scanBagGui()
         local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-        if not playerGui then return nil, nil end
+        if not playerGui then return end
+        farmCache.BagLabel = findDescendantPath(playerGui, {
+            "MainGUI", "Game", "CoinBags", "Container", "Candy", "CurrencyFrame", "Icon", "Coins"
+        })
+        farmCache.FullBagIndicator = nil
+        if farmCache.BagLabel and (farmCache.BagLabel:IsA("TextLabel") or farmCache.BagLabel:IsA("TextButton")) then return end
+        farmCache.BagLabel = nil
         for _, object in ipairs(playerGui:GetDescendants()) do
             local lowered = string.lower(object.Name)
-            if object:IsA("GuiObject") and object.Visible and string.find(lowered, "fullbag", 1, true) then return true, nil end
-            if (object:IsA("TextLabel") or object:IsA("TextButton")) and (
+            if not farmCache.FullBagIndicator and object:IsA("GuiObject")
+                and string.find(lowered, "fullbag", 1, true) then farmCache.FullBagIndicator = object end
+            if not farmCache.BagLabel and (object:IsA("TextLabel") or object:IsA("TextButton")) and (
                 string.find(lowered, "coin", 1, true) or string.find(lowered, "candy", 1, true)
                 or string.find(lowered, "token", 1, true) or string.find(lowered, "bag", 1, true)
-            ) then
-                local current, capacity = string.match(object.Text or "", "(%d+)%s*/%s*(%d+)")
-                if current and capacity then
-                    current, capacity = tonumber(current), tonumber(capacity)
-                    return current >= capacity, current
-                end
-            end
+            ) and string.match(object.Text or "", "%d+") then farmCache.BagLabel = object end
+        end
+    end
+
+    local function readBagState()
+        if (not farmCache.BagLabel or not farmCache.BagLabel.Parent)
+            and os.clock() - farmCache.LastBagScan >= 1 then
+            farmCache.LastBagScan = os.clock()
+            scanBagGui()
+        end
+        if farmCache.FullBagIndicator and farmCache.FullBagIndicator.Parent and farmCache.FullBagIndicator.Visible then
+            return true, nil
+        end
+        local label = farmCache.BagLabel
+        if label and label.Parent then
+            local text = label.Text or ""
+            local current, capacity = string.match(text, "(%d+)%s*/%s*(%d+)")
+            current, capacity = tonumber(current or string.match(text, "(%d+)")), tonumber(capacity)
+            if current then return current >= (capacity or 40), current end
         end
         return false, nil
     end
@@ -611,9 +737,9 @@ function Module.Create(context)
             local position = start:Lerp(target, alpha)
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
-            character:PivotTo(CFrame.new(position, position + root.CFrame.LookVector))
+            root.CFrame = CFrame.new(position, position + root.CFrame.LookVector)
             if alpha >= 1 then return true end
-            RunService.Heartbeat:Wait()
+            task.wait(1 / 30)
         end
         return false
     end
@@ -626,17 +752,17 @@ function Module.Create(context)
         local _, beforeCount = readBagState()
         local ok = pcall(function()
             touch(root, entry.Part, 0)
-            RunService.Heartbeat:Wait()
+            task.wait(0.04)
             touch(root, entry.Part, 1)
         end)
         if not ok then return false end
-        local deadline = os.clock() + 0.8
+        local deadline = os.clock() + 0.45
         repeat
             if not entry.Object.Parent or entry.Object.Parent ~= beforeParent or not entry.Part.Parent
                 or entry.Part.Transparency >= 0.95 then return true end
             local _, currentCount = readBagState()
             if beforeCount and currentCount and currentCount > beforeCount then return true end
-            RunService.Heartbeat:Wait()
+            task.wait(0.04)
         until os.clock() >= deadline
         return false
     end
@@ -644,7 +770,8 @@ function Module.Create(context)
     local function closestCollectible(entries, origin)
         local best, bestDistance
         for _, entry in ipairs(entries) do
-            if entry.Part and entry.Part.Parent then
+            local failedUntil = farmCache.FailedUntil[entry.Object] or 0
+            if entry.Part and entry.Part.Parent and failedUntil <= os.clock() then
                 local distance = (entry.Part.Position - origin).Magnitude
                 if not bestDistance or distance < bestDistance then best, bestDistance = entry, distance end
             end
@@ -696,6 +823,7 @@ function Module.Create(context)
                     local entries = discoverCollectibles()
                     if #entries == 0 then
                         setFarmState("LobbyIdle", "Waiting in lobby")
+                        findActiveMap(true)
                         task.wait(0.75)
                     else
                         setFarmState("Collect", "Collecting coins and candy")
@@ -706,12 +834,17 @@ function Module.Create(context)
                                 if touchCollectible(target) then collected = true; break end
                             end
                             failures = collected and 0 or failures + 1
+                            if not collected then farmCache.FailedUntil[target.Object] = os.clock() + 3 end
                             if failures >= 5 then
-                                State.AutoFarm = false
-                                setFarmState("Stopped", "Farm stopped after repeated collection failures")
-                                emit("Error", "Collectible touch could not be verified", false)
-                                break
+                                failures = 0
+                                farmCache.Map, farmCache.Container = nil, nil
+                                setFarmState("DiscoverMap", "Refreshing collectible cache")
+                                emit("Error", "Several collectibles were skipped after touch verification failed", false)
+                                task.wait(0.5)
                             end
+                        elseif not target then
+                            setFarmState("Collect", "Waiting for the next collectible")
+                            task.wait(0.2)
                         else
                             failures = failures + 1
                         end
@@ -730,6 +863,9 @@ function Module.Create(context)
         end
         State.AutoFarm = true
         farmRevision = farmRevision + 1
+        farmCache.Map, farmCache.Container = nil, nil
+        farmCache.LastMapScan = 0
+        table.clear(farmCache.FailedUntil)
         local revision = farmRevision
         setFarmState("WaitForRound", "Farm started")
         task.spawn(runFarm, revision)
@@ -740,6 +876,8 @@ function Module.Create(context)
     local function stopFarm(message)
         State.AutoFarm = false
         farmRevision = farmRevision + 1
+        farmCache.Map, farmCache.Container = nil, nil
+        table.clear(farmCache.FailedUntil)
         restoreFarmCharacter()
         setFarmState("Stopped", message or "Farm stopped")
         return true, message or "Farm stopped"
@@ -768,6 +906,54 @@ function Module.Create(context)
         end
         emit("StateChanged", key .. (State[key] == true and " enabled" or State[key] == false and " disabled" or " updated"), true)
         return true
+    end
+
+    local function instancePath(instance)
+        if not instance then return "Unavailable" end
+        local ok, path = pcall(function() return instance:GetFullName() end)
+        return ok and path or instance.Name
+    end
+
+    local function inspectRuntime()
+        local gun = findTool(LocalPlayer, "Gun")
+        local map, container = findActiveMap(true)
+        farmCache.LastBagScan = 0
+        readBagState()
+        local report = {
+            Gun = instancePath(gun),
+            ShootRemote = instancePath(findShootRemote(gun)),
+            ShootHookAvailable = installShootHook(),
+            Map = instancePath(map),
+            CoinContainer = instancePath(container),
+            CollectibleCount = #discoverCollectibles(),
+            BagLabel = instancePath(farmCache.BagLabel),
+            BagText = farmCache.BagLabel and farmCache.BagLabel.Text or "Unavailable",
+            DecompiledShootReferences = {}
+        }
+        local decompileFunction = resolveGlobal("decompile")
+        if gun and type(decompileFunction) == "function" then
+            local attempts = 0
+            for _, scope in ipairs({gun, LocalPlayer.Character, LocalPlayer:FindFirstChild("PlayerScripts")}) do
+                for _, object in ipairs(scope and scope:GetDescendants() or {}) do
+                    if attempts >= 12 or #report.DecompiledShootReferences >= 4 then break end
+                    if object:IsA("LocalScript") or object:IsA("ModuleScript") then
+                        attempts = attempts + 1
+                        local ok, source = pcall(decompileFunction, object)
+                        if ok and type(source) == "string" then
+                            local startIndex = string.find(string.lower(source), "shootgun", 1, true)
+                            if startIndex then
+                                local from = math.max(1, startIndex - 180)
+                                local snippet = string.sub(source, from, math.min(#source, startIndex + 360))
+                                snippet = string.gsub(snippet, "%s+", " ")
+                                table.insert(report.DecompiledShootReferences, instancePath(object) .. ": " .. snippet)
+                            end
+                        end
+                    end
+                end
+                if attempts >= 12 or #report.DecompiledShootReferences >= 4 then break end
+            end
+        end
+        return report
     end
 
     connect(RunService.Heartbeat, function(deltaTime)
@@ -801,6 +987,7 @@ function Module.Create(context)
         if destroyed then return end
         destroyed = true
         stopFarm("Service destroyed")
+        removeShootHook()
         disconnectAll(connections)
         for player in pairs(espRecords) do destroyESP(player) end
         if gunHighlight then gunHighlight:Destroy(); gunHighlight = nil end
@@ -832,6 +1019,7 @@ function Module.Create(context)
             emit(ok and "Action" or "Error", message, ok)
             return ok, message
         end,
+        InspectRuntime = inspectRuntime,
         StartFarm = startFarm,
         StopFarm = stopFarm,
         Destroy = destroy

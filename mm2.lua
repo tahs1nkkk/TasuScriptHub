@@ -647,7 +647,7 @@ local uiState, transitionRevision = "Closed", 0
 local restingPosition, dragging, dragStart, dragWindowStart = nil, false, nil, nil
 local function responsiveScale()
     local viewport = context.GetViewportSize()
-    return math.min(1, (viewport.X - layout.ViewportInset * 2) / layout.WindowWidth, (viewport.Y - layout.ViewportInset * 2) / layout.WindowHeight)
+    return math.min(layout.WorkspaceScale or 0.86, (viewport.X - layout.ViewportInset * 2) / layout.WindowWidth, (viewport.Y - layout.ViewportInset * 2) / layout.WindowHeight)
 end
 local function visibleRatio(center, scale)
     local viewport = context.GetViewportSize()
@@ -774,6 +774,7 @@ controller = table.freeze({
     Close = close,
     Toggle = function() return (uiState == "Open" or uiState == "Opening") and close() or open() end,
     IsOpen = function() return uiState == "Open" or uiState == "Opening" end,
+    InspectRuntime = service.InspectRuntime,
     Destroy = unload,
     Unload = unload
 })
