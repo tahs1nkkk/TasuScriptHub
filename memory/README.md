@@ -17,6 +17,7 @@ This directory is the persistent source of truth for the executor-only UI rework
 - `scripts/main_menu.md`
 - `scripts/player_service.md`
 - `scripts/mm2.md`
+- `scripts/mm2_service.md`
 
 ## Retained systems to rework
 
@@ -39,4 +40,4 @@ Feature-specific files live under `features/`. Each file records current behavio
 
 ## Current gate
 
-The loader design is user-approved and closed after the final ready-text scale revision. Preserve it as a finished shared system unless the user explicitly reopens loader work. Game-catalog revision 10 remains on the upper base action. Main-menu revision 2 uses the lower base action: a versioned `main_menu.lua` view plus the separate `player_service.lua` engine, ten English categories including per-experience `Waypoints`, fixed-geometry collapsible navigation, responsive two-column cards, hierarchical search with target pulses, shared dropdowns, centralized category/player-action icons, responsive whole-window scaling, offscreen-aware reopening, live stats snapshots, and no legacy presentation. The current improvement pass adds a two-second hold-to-unload control, loader-duration health feedback, icon-only player actions, universal toggle binds, corrected ESP ownership/projection, fixed-strength fling profiles, two anti-fling modes, camera/freecam/flat-texture/fog restoration, and stronger unload ordering. Catalog and main windows are mutually exclusive. MM2 game-window revision 1 preserves its engines behind the smaller shared-theme controller view. Bytecode compilation is complete; executor and visual acceptance are still required before merging to `main`.
+The loader design is user-approved and closed apart from cold-start reliability. Critical sounds, the loader mark, the two base rail icons, and remote runtime sources now resolve before ready-state release; missing assets stay hidden/silent. Game-catalog revision 11 and all game windows allow unrestricted offscreen dragging and recenter only when less than 50% remains visible at reopen. Main-menu revision 2 remains on the lower base action. MM2 revision 4 separates its three-page shared-theme view from `mm2_service.lua`, which owns role chams/glow, overlay priority, cards, shooting, gun pickup/drop, and underground farm lifecycle. Bytecode compilation is complete; executor and visual acceptance are still required before merging to `main`.

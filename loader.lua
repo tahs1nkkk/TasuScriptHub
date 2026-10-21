@@ -488,6 +488,11 @@ local UI = {
     CornerButtonActions = {},
     GameActionButtons = {},
     GameControllers = {},
+    GameOverlayClaims = setmetatable({}, {__mode = "k"}),
+    AudioTemplates = {},
+    AudioUnavailable = {},
+    RemoteSourceCache = {},
+    RemoteSourceErrors = {},
     CornerButtonDefinitions = {
         {Name = "CatalogAction", AssetId = 137753054375497, IntendedAction = "Catalog", CurrentAction = "Catalog"},
         {Name = "GeneralMenuAction", AssetId = 83533116222028, IntendedAction = "GeneralMenu", CurrentAction = "GeneralMenu"}
@@ -739,8 +744,10 @@ UI.PlaySound = function(name, overrides)
     if type(preset) ~= "table" or type(preset.Id) ~= "string" or preset.Id == "" then
         return false
     end
+    if UI.AudioUnavailable[name] then return false end
     overrides = type(overrides) == "table" and overrides or {}
-    local sound = trackInstance(Instance.new("Sound"))
+    local template = UI.AudioTemplates[name]
+    local sound = trackInstance(template and template:Clone() or Instance.new("Sound"))
     sound.Name = "TasuHub" .. tostring(name)
     sound.SoundId = overrides.Id or preset.Id
     sound.Volume = overrides.Volume or preset.Volume or 0.15
@@ -767,6 +774,46 @@ UI.PlaySound = function(name, overrides)
         end
     end)
     return played
+end
+
+UI.PreloadCriticalAssets = function(extraInstances)
+    local targets = {}
+    for name, preset in pairs(UI.AudioLibrary) do
+        if type(preset) == "table" and type(preset.Id) == "string" and preset.Id ~= "" then
+            local template = UI.AudioTemplates[name]
+            if not template or not template.Parent then
+                template = trackInstance(Instance.new("Sound"))
+                template.Name = "TasuHubPreloaded" .. tostring(name)
+                template.SoundId = preset.Id
+                template.Volume = 0
+                template.PlaybackSpeed = preset.PlaybackSpeed or 1
+                template.Parent = SoundService
+                UI.AudioTemplates[name] = template
+            end
+            table.insert(targets, template)
+        end
+    end
+    for _, object in ipairs(type(extraInstances) == "table" and extraInstances or {}) do
+        if typeof(object) == "Instance" and object.Parent then
+            table.insert(targets, object)
+        elseif type(object) == "string" and object ~= "" then
+            local image = trackInstance(Instance.new("ImageLabel"))
+            image.Image = object
+            image.BackgroundTransparency = 1
+            table.insert(targets, image)
+        end
+    end
+    if #targets == 0 then return true end
+    local ok = pcall(function()
+        game:GetService("ContentProvider"):PreloadAsync(targets)
+    end)
+    for name, template in pairs(UI.AudioTemplates) do
+        if template and template.Parent and not template.IsLoaded then
+            UI.AudioTemplates[name] = nil
+            UI.AudioUnavailable[name] = true
+        end
+    end
+    return ok
 end
 
 UI.BindTheme = function(object, property, token)
@@ -1617,6 +1664,11 @@ do
         error("[TasuHub] Required loader icon failed before UI start: " .. tostring(iconError))
     end
 
+    UI.PreloadCriticalAssets({
+        UI.LoaderIcon:FindFirstChild("Asset"),
+        "rbxassetid://" .. tostring(UI.CornerButtonDefinitions[1].AssetId),
+        "rbxassetid://" .. tostring(UI.CornerButtonDefinitions[2].AssetId)
+    })
     UI.PlaySound("FadeIn")
     animate(UI.LoaderVersion, {TextTransparency = 0.58}, tokens.MotionLoader, Enum.EasingStyle.Quint)
     animate(UI.LoaderBlur, {Size = tokens.LoaderBlurSize}, tokens.MotionLoader, Enum.EasingStyle.Quint)
@@ -1846,27 +1898,56 @@ do
         local revision = record.IconRevision
         record.Icon.Image = ""
         record.Icon.ImageTransparency = 1
+        record.IconState = "Loading"
         if assetId == nil or tostring(assetId) == "" then
+            record.IconState = "Failed"
             return true
         end
         local numericId = tonumber(tostring(assetId):match("%d+"))
         if not numericId then
+            record.IconState = "Failed"
             return false, "invalid Roblox asset id"
         end
         record.IconAssetId = numericId
-        record.Icon.Image = "rbxassetid://" .. tostring(numericId)
-        record.Icon.ImageTransparency = 0
         task.spawn(function()
             local resolved = UI.LoadRobloxThumbnailAsset(
                 numericId,
                 "TasuHub/Icons/CornerButton" .. tostring(index) .. ".png"
             )
-            if resolved and record.Icon.Parent and record.IconRevision == revision then
-                record.Icon.Image = resolved
-                record.Icon.ImageTransparency = 0
+            if record.Icon.Parent and record.IconRevision == revision then
+                if resolved then
+                    record.Icon.Image = resolved
+                    record.Icon.ImageTransparency = 0
+                    record.IconState = "Ready"
+                else
+                    record.Icon.Image = ""
+                    record.Icon.ImageTransparency = 1
+                    record.IconState = "Failed"
+                end
             end
         end)
         return true
+    end
+
+    UI.WaitForCriticalCornerIcons = function(timeout)
+        local deadline = os.clock() + (tonumber(timeout) or 12)
+        while not unloaded and os.clock() < deadline do
+            local loading = false
+            for _, record in ipairs(UI.CornerButtons) do
+                if not record.IsGameAction and record.IconState == "Loading" then loading = true; break end
+            end
+            if not loading then return true end
+            task.wait()
+        end
+        for _, record in ipairs(UI.CornerButtons) do
+            if not record.IsGameAction and record.IconState == "Loading" then
+                record.IconRevision = record.IconRevision + 1
+                record.IconState = "Failed"
+                record.Icon.Image = ""
+                record.Icon.ImageTransparency = 1
+            end
+        end
+        return false
     end
 
     UI.SetCornerButtonAction = function(index, callback)
@@ -4365,9 +4446,12 @@ local function destroyESP(player)
     if not record then
         return
     end
+    for _, edge in ipairs(record.BoxEdges or {}) do
+        if typeof(edge) == "Instance" then pcall(function() edge:Destroy() end) end
+    end
     for _, key in ipairs({
         "Tracer", "SkeletonLayer", "Arrow", "Highlight", "BoxProxy",
-        "NameBillboard", "HeadAdornment", "HealthTrack"
+        "Box3D", "NameBillboard", "HeadAdornment", "HealthTrack"
     }) do
         local object = record[key]
         if typeof(object) == "Instance" then
@@ -4463,7 +4547,11 @@ end
 
 local function ensureWorldESP(record, character, root)
     if record.WorldCharacter == character and record.BoxProxy and record.BoxProxy.Parent then return end
-    for _, key in ipairs({"BoxProxy", "NameBillboard", "HeadAdornment"}) do
+    for _, edge in ipairs(record.BoxEdges or {}) do
+        if edge then pcall(function() edge:Destroy() end) end
+    end
+    record.BoxEdges = nil
+    for _, key in ipairs({"BoxProxy", "Box3D", "NameBillboard", "HeadAdornment"}) do
         local object = record[key]
         if object then pcall(function() object:Destroy() end) end
         record[key] = nil
@@ -4485,16 +4573,31 @@ local function ensureWorldESP(record, character, root)
     weld.Part1 = proxy
     weld.Parent = proxy
 
-    local box3D = Instance.new("SelectionBox")
+    local box3D = Instance.new("BoxHandleAdornment")
     box3D.Name = "TasuESP3DBox"
     box3D.Adornee = proxy
     box3D.Color3 = Theme.Accent
-    box3D.LineThickness = 0.035
-    box3D.SurfaceColor3 = Theme.Accent
-    box3D.SurfaceTransparency = 1
-    box3D.Transparency = 0
+    box3D.Size = proxy.Size
+    box3D.CFrame = CFrame.identity
+    box3D.AlwaysOnTop = true
+    box3D.Transparency = 1
     box3D.Visible = false
-    box3D.Parent = proxy
+    box3D.ZIndex = 1
+    box3D.Parent = ScreenGui
+
+    local boxEdges = {}
+    for _ = 1, 12 do
+        local edge = Instance.new("BoxHandleAdornment")
+        edge.Name = "TasuESP3DEdge"
+        edge.Adornee = proxy
+        edge.AlwaysOnTop = true
+        edge.Color3 = Theme.Accent
+        edge.Transparency = 0
+        edge.Visible = false
+        edge.ZIndex = 2
+        edge.Parent = ScreenGui
+        table.insert(boxEdges, edge)
+    end
 
     local nameBillboard = Instance.new("BillboardGui")
     nameBillboard.Name = "TasuESPName"
@@ -4532,10 +4635,45 @@ local function ensureWorldESP(record, character, root)
     record.WorldCharacter = character
     record.BoxProxy = proxy
     record.Box3D = box3D
+    record.BoxEdges = boxEdges
+    record.BoxSize = proxy.Size
+    record.BoxThickness = nil
     record.NameBillboard = nameBillboard
     record.Label = label
     record.HeadAdornment = headAdornment
     record.LastInfoUpdate = 0
+end
+
+local function updateBoxEdges(record, thickness, color, visible)
+    local edges = record.BoxEdges
+    local size = record.BoxSize
+    if not edges or not size then return end
+    thickness = math.clamp(thickness, 0.025, 0.12)
+    local half = size * 0.5
+    local index = 0
+    local function setEdge(edgeSize, position)
+        index = index + 1
+        local edge = edges[index]
+        edge.Size = edgeSize
+        edge.CFrame = CFrame.new(position)
+        edge.Color3 = color
+        edge.Visible = visible
+    end
+    for y = -1, 1, 2 do
+        for z = -1, 1, 2 do
+            setEdge(Vector3.new(size.X, thickness, thickness), Vector3.new(0, y * half.Y, z * half.Z))
+        end
+    end
+    for x = -1, 1, 2 do
+        for z = -1, 1, 2 do
+            setEdge(Vector3.new(thickness, size.Y, thickness), Vector3.new(x * half.X, 0, z * half.Z))
+        end
+    end
+    for x = -1, 1, 2 do
+        for y = -1, 1, 2 do
+            setEdge(Vector3.new(thickness, thickness, size.Z), Vector3.new(x * half.X, y * half.Y, 0))
+        end
+    end
 end
 
 local function updateSkeleton(record, character, camera, color)
@@ -4624,6 +4762,7 @@ local function hideRecord(record)
     if record.SkeletonLayer then record.SkeletonLayer.Visible = false end
     if record.Arrow then record.Arrow.Visible = false end
     if record.Box3D then record.Box3D.Visible = false end
+    for _, edge in ipairs(record.BoxEdges or {}) do edge.Visible = false end
     if record.HealthTrack then record.HealthTrack.Visible = false end
     if record.NameBillboard then record.NameBillboard.Enabled = false end
     if record.HeadAdornment then record.HeadAdornment.Visible = false end
@@ -4650,7 +4789,7 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Camera.Value + 50,
             local record = espRecords[player] or createESP(player)
             local alive, character, humanoid, root = getAlive(player)
             local distance = localAlive and localRoot and root and (root.Position - localRoot.Position).Magnitude or math.huge
-            if not alive or distance > State.Visuals.MaxDistance then
+            if UI.IsGameOverlayClaimed(player) or not alive or distance > State.Visuals.MaxDistance then
                 hideRecord(record)
             else
                 ensureWorldESP(record, character, root)
@@ -4665,10 +4804,14 @@ RunService:BindToRenderStep("TasuHubESP", Enum.RenderPriority.Camera.Value + 50,
 
                 local left, right, top, bottom = getBoundingScreenBox(character, camera)
                 record.Box3D.Color3 = color
-                record.Box3D.SurfaceColor3 = color
-                record.Box3D.LineThickness = math.clamp(State.Visuals.Thickness * 0.018, 0.018, 0.072)
-                record.Box3D.SurfaceTransparency = State.Visuals.BoxFilled and 0.58 or 1
+                record.Box3D.Transparency = State.Visuals.BoxFilled and 0.58 or 1
                 record.Box3D.Visible = State.Visuals.Boxes
+                updateBoxEdges(
+                    record,
+                    State.Visuals.Thickness * 0.03,
+                    color,
+                    State.Visuals.Boxes
+                )
 
                 record.NameBillboard.MaxDistance = State.Visuals.MaxDistance
                 record.NameBillboard.Enabled = State.Visuals.Names or State.Visuals.Distance
@@ -6595,7 +6738,72 @@ local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptH
 UI.GameCatalogModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/game_catalog.lua"
 UI.MainMenuModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/main_menu.lua"
 UI.PlayerServiceModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/player_service.lua"
+UI.MM2ServiceModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/mm2_service.lua"
 UI.CatalogExecutionLocks = {}
+
+UI.GetRemoteSource = function(url)
+    url = tostring(url or "")
+    if url == "" then return nil, "module URL is empty" end
+    if UI.RemoteSourceCache[url] then return UI.RemoteSourceCache[url] end
+    local source, requestError = httpGet(url)
+    if type(source) == "string" and source ~= "" then
+        UI.RemoteSourceCache[url] = source
+        UI.RemoteSourceErrors[url] = nil
+        return source
+    end
+    UI.RemoteSourceErrors[url] = requestError or "module could not be downloaded"
+    return nil, UI.RemoteSourceErrors[url]
+end
+
+UI.ReportLoading(0.90, "Runtime · preloading remote modules")
+do
+    local urls = {
+        UI.GameCatalogModuleUrl,
+        UI.MainMenuModuleUrl,
+        UI.PlayerServiceModuleUrl,
+        UI.MM2ServiceModuleUrl,
+        MM2_CATALOG_URL
+    }
+    local pending = #urls
+    for _, url in ipairs(urls) do
+        task.spawn(function()
+            UI.GetRemoteSource(url)
+            pending = pending - 1
+        end)
+    end
+    while pending > 0 and not unloaded do task.wait() end
+end
+
+UI.MM2ServiceModule, UI.MM2ServiceError = (function()
+    if not capabilities.LoadString then return nil, "executor loadstring capability is unavailable" end
+    local source, requestError = UI.GetRemoteSource(UI.MM2ServiceModuleUrl)
+    if type(source) ~= "string" or source == "" then return nil, requestError end
+    local chunk, compileError = loadstring(source, "@TasuHub/mm2_service.lua")
+    if not chunk then return nil, "MM2 service compile error: " .. tostring(compileError) end
+    local loaded, module = pcall(chunk)
+    if not loaded then return nil, "MM2 service runtime error: " .. tostring(module) end
+    if type(module) ~= "table" or module.Version ~= 1 or type(module.Create) ~= "function" then
+        return nil, "MM2 service contract/version mismatch"
+    end
+    return module
+end)()
+UI.ReportLoading(0.91, UI.MM2ServiceModule
+    and "MM2 · feature service preloaded"
+    or "MM2 · feature service unavailable")
+
+UI.ClaimGameOverlay = function(player, owner)
+    if typeof(player) ~= "Instance" or not player:IsA("Player") then return false end
+    UI.GameOverlayClaims[player] = tostring(owner or "game")
+    return true
+end
+
+UI.ReleaseGameOverlay = function(player, owner)
+    if UI.GameOverlayClaims[player] == tostring(owner or "game") then UI.GameOverlayClaims[player] = nil end
+end
+
+UI.IsGameOverlayClaimed = function(player)
+    return UI.GameOverlayClaims[player] ~= nil
+end
 
 UI.GetGameActionAnchorPoint = function(actionId)
     local record = UI.GameActionButtons[tostring(actionId or "")]
@@ -6614,8 +6822,11 @@ end
 
 UI.GetGameUIContext = function(actionId)
     actionId = tostring(actionId or "")
+    local placeId = actionId == "mm2" and 142823291 or game.PlaceId
     return {
         Parent = InterfaceRoot,
+        GameName = actionId == "mm2" and "Murder Mystery 2" or actionId,
+        PlaceId = placeId,
         Theme = {
             Base = UI.DesignTokens.Canvas,
             Layer = UI.DesignTokens.Surface,
@@ -6649,7 +6860,29 @@ UI.GetGameUIContext = function(actionId)
         PlaySound = UI.PlaySound,
         InputService = UserInputService,
         GetViewportSize = getCanvasSize,
-        GetAnchorPoint = function() return UI.GetGameActionAnchorPoint(actionId) end
+        GetAnchorPoint = function() return UI.GetGameActionAnchorPoint(actionId) end,
+        GetBannerAsset = function() return UI.ResolveCatalogCoverAsset(placeId) end,
+        ServiceError = UI.MM2ServiceError,
+        CreateService = function(initialState)
+            if actionId ~= "mm2" or not UI.MM2ServiceModule then return nil end
+            return UI.MM2ServiceModule.Create({
+                Players = Players,
+                LocalPlayer = LocalPlayer,
+                Workspace = Workspace,
+                RunService = RunService,
+                TweenService = TweenService,
+                OverlayParent = ScreenGui,
+                Theme = {
+                    Base = UI.DesignTokens.Canvas,
+                    Layer = UI.DesignTokens.Surface,
+                    Signal = UI.DesignTokens.TextPrimary
+                },
+                ResolveGlobal = resolveGlobal,
+                InitialState = initialState,
+                ClaimOverlay = UI.ClaimGameOverlay,
+                ReleaseOverlay = UI.ReleaseGameOverlay
+            })
+        end
     }
 end
 
@@ -6704,7 +6937,7 @@ UI.ExecuteCatalogEntry = function(entry)
         if type(entry.Url) ~= "string" or not entry.Url:match("^https://") then
             return {Ok = false, Message = "No valid HTTPS script source was found"}
         end
-        local remoteSource, requestError = httpGet(entry.Url)
+        local remoteSource, requestError = UI.GetRemoteSource(entry.Url)
         if type(remoteSource) ~= "string" or remoteSource == "" then
             return {Ok = false, Message = requestError or "Script indirilemedi"}
         end
@@ -7369,7 +7602,7 @@ do
         if not capabilities.Http or not capabilities.LoadString then
             return nil, "executor HTTP/loadstring capability is unavailable"
         end
-        local source, requestError = httpGet(UI.GameCatalogModuleUrl)
+        local source, requestError = UI.GetRemoteSource(UI.GameCatalogModuleUrl)
         if type(source) ~= "string" or source == "" then
             return nil, requestError or "catalog module could not be downloaded"
         end
@@ -7475,7 +7708,7 @@ UI.PlayerService, UI.PlayerServiceError = (function()
         if not capabilities.Http or not capabilities.LoadString then
             return nil, "executor HTTP/loadstring capability is unavailable"
         end
-        local source, requestError = httpGet(UI.PlayerServiceModuleUrl)
+        local source, requestError = UI.GetRemoteSource(UI.PlayerServiceModuleUrl)
         if type(source) ~= "string" or source == "" then
             return nil, requestError or "player service module could not be downloaded"
         end
@@ -7606,7 +7839,7 @@ UI.MainMenuController, UI.MainMenuError = (function()
         if not capabilities.Http or not capabilities.LoadString then
             return nil, "executor HTTP/loadstring capability is unavailable"
         end
-        local source, requestError = httpGet(UI.MainMenuModuleUrl)
+        local source, requestError = UI.GetRemoteSource(UI.MainMenuModuleUrl)
         if type(source) ~= "string" or source == "" then
             return nil, requestError or "main menu module could not be downloaded"
         end
@@ -7899,6 +8132,7 @@ env.TasuHub = {
 
 UI.ReportLoading(0.99, "Runtime · executor API and cleanup ready")
 
+UI.WaitForCriticalCornerIcons(12)
 UI.SetLoading(1)
 UI.WaitForLoadingCheckpoints(UI.DesignTokens.LoaderCheckpointCount)
 task.wait(UI.DesignTokens.MotionLoaderCheckpoint)

@@ -1,204 +1,53 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local CoreGui = game:GetService("CoreGui")
-local Workspace = game:GetService("Workspace")
-
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then error("[TasuHub/MM2] LocalPlayer is unavailable") end
 
 local env = getgenv and getgenv() or _G
-if env.TasuHubMM2 and type(env.TasuHubMM2.Unload) == "function" then
-    pcall(env.TasuHubMM2.Unload)
+local previousState
+if env.TasuHubMM2 and type(env.TasuHubMM2.GetState) == "function" then
+    local ok, state = pcall(env.TasuHubMM2.GetState)
+    if ok and type(state) == "table" then previousState = state end
 end
-
+if env.TasuHubMM2 and type(env.TasuHubMM2.Unload) == "function" then pcall(env.TasuHubMM2.Unload) end
 local hub = env.TasuHub
 if type(hub) ~= "table" or type(hub.GetGameUIContext) ~= "function" then
     error("[TasuHub/MM2] Shared TasuHub UI context is unavailable")
 end
 local context = hub.GetGameUIContext("mm2")
-if type(context) ~= "table" or not context.Parent then
-    error("[TasuHub/MM2] Shared game-window context is invalid")
+if type(context) ~= "table" or not context.Parent or type(context.CreateService) ~= "function" then
+    error("[TasuHub/MM2] Shared game-window/service context is invalid")
 end
 
 local theme, fonts = context.Theme, context.Fonts
 local motion, layout = context.Motion, context.Layout
-local animate = context.Animate
-local playSound = context.PlaySound or function() end
+local animate, playSound = context.Animate, context.PlaySound or function() end
 local inputService = context.InputService
+local service = context.CreateService(previousState)
+if type(service) ~= "table" or type(service.GetState) ~= "function" then
+    error("[TasuHub/MM2] MM2 service creation failed: " .. tostring(context.ServiceError or "unknown error"))
+end
 
-local State = {
-    Enabled = false,
-    PlayerESP = true,
-    GunDropESP = true,
-    AutoPickup = false,
-    AutoFire = false
-}
-local connections = {}
-local playerESP = {}
-local gunHighlight
+local connections, controlRenderers = {}, {}
 local unloaded = false
-
 local function connect(signal, callback)
     local connection = signal:Connect(callback)
     table.insert(connections, connection)
     return connection
 end
-
 local function round(object, radius)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, radius)
     corner.Parent = object
     return corner
 end
-
 local function outline(object, thickness, transparency, color)
-    local item = Instance.new("UIStroke")
-    item.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    item.Color = color or theme.Base
-    item.Thickness = thickness
-    item.Transparency = transparency or 0
-    item.Parent = object
-    return item
-end
-
-local function characterInfo(player)
-    local character = player and player.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    local root = character and (character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart)
-    return character, humanoid, root
-end
-
-local function findTool(player, toolName)
-    local character = player.Character
-    local backpack = player:FindFirstChildOfClass("Backpack")
-    local tool = character and character:FindFirstChild(toolName)
-    if not tool and backpack then tool = backpack:FindFirstChild(toolName) end
-    return tool and tool:IsA("Tool") and tool or nil
-end
-
-local function replicatedRole(player)
-    for _, container in ipairs({player, player.Character}) do
-        if container then
-            for _, name in ipairs({"Role", "ServerRole", "MM2ServerRole"}) do
-                local value = container:GetAttribute(name)
-                local object = container:FindFirstChild(name)
-                if object and object:IsA("StringValue") then value = object.Value end
-                if type(value) == "string" then
-                    local lowered = string.lower(value)
-                    if string.find(lowered, "murder", 1, true) then return "Murderer" end
-                    if string.find(lowered, "sheriff", 1, true) then return "Sheriff" end
-                end
-            end
-        end
-    end
-    if findTool(player, "Knife") then return "Murderer" end
-    if findTool(player, "Gun") then return "Sheriff" end
-    return "Innocent"
-end
-
-local function destroyPlayerESP(player)
-    local record = playerESP[player]
-    if not record then return end
-    pcall(function() record.Highlight:Destroy() end)
-    pcall(function() record.Billboard:Destroy() end)
-    playerESP[player] = nil
-end
-
-local function ensurePlayerESP(player)
-    local record = playerESP[player]
-    if record then return record end
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "TasuHubMM2Highlight"
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillTransparency = 0.72
-    highlight.OutlineTransparency = 0.05
-    highlight.Enabled = false
-    highlight.Parent = CoreGui
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "TasuHubMM2Name"
-    billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.fromOffset(180, 26)
-    billboard.StudsOffset = Vector3.new(0, 3.25, 0)
-    billboard.Enabled = false
-    billboard.Parent = CoreGui
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.fromScale(1, 1)
-    label.FontFace = fonts.HeadingHeavy
-    label.TextSize = 15
-    label.TextStrokeTransparency = 0.15
-    label.Parent = billboard
-    record = {Highlight = highlight, Billboard = billboard, Label = label}
-    playerESP[player] = record
-    return record
-end
-
-local function findGunDrop()
-    for _, object in ipairs(Workspace:GetDescendants()) do
-        if object.Name == "GunDrop" then return object end
-    end
-    return nil
-end
-
-local function updateGunDrop()
-    local gunDrop = findGunDrop()
-    if not gunHighlight then
-        gunHighlight = Instance.new("Highlight")
-        gunHighlight.Name = "TasuHubMM2GunDrop"
-        gunHighlight.FillColor = Color3.fromRGB(65, 145, 255)
-        gunHighlight.OutlineColor = Color3.fromRGB(190, 225, 255)
-        gunHighlight.FillTransparency = 0.55
-        gunHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        gunHighlight.Parent = CoreGui
-    end
-    gunHighlight.Adornee = State.Enabled and State.GunDropESP and gunDrop or nil
-    gunHighlight.Enabled = gunHighlight.Adornee ~= nil
-    return gunDrop
-end
-
-local function requestPickup()
-    local gunDrop = findGunDrop()
-    local _, _, root = characterInfo(LocalPlayer)
-    if not gunDrop or not root then return false end
-    local prompt = gunDrop:FindFirstChildWhichIsA("ProximityPrompt", true)
-    local firePrompt = env.fireproximityprompt or _G.fireproximityprompt
-    if prompt and type(firePrompt) == "function" then
-        pcall(firePrompt, prompt)
-        return true
-    end
-    local touch = env.firetouchinterest or _G.firetouchinterest
-    local part = gunDrop:IsA("BasePart") and gunDrop or gunDrop:FindFirstChildWhichIsA("BasePart", true)
-    if part and type(touch) == "function" then
-        pcall(touch, root, part, 0)
-        pcall(touch, root, part, 1)
-        return true
-    end
-    return false
-end
-
-local function requestShot()
-    local gun = findTool(LocalPlayer, "Gun")
-    if not gun then return false end
-    local targetRoot
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and replicatedRole(player) == "Murderer" then
-            local _, humanoid, root = characterInfo(player)
-            if humanoid and humanoid.Health > 0 and root then
-                targetRoot = root
-                break
-            end
-        end
-    end
-    if not targetRoot then return false end
-    for _, object in ipairs(gun:GetDescendants()) do
-        local lowered = string.lower(object.Name)
-        if object:IsA("RemoteEvent")
-            and (string.find(lowered, "shoot", 1, true) or string.find(lowered, "fire", 1, true)) then
-            pcall(function() object:FireServer(targetRoot.Position) end)
-            return true
-        end
-    end
-    return false
+    local stroke = Instance.new("UIStroke")
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Color = color or theme.Base
+    stroke.Thickness = thickness
+    stroke.Transparency = transparency or 0
+    stroke.Parent = object
+    return stroke
 end
 
 local root = Instance.new("Frame")
@@ -243,9 +92,41 @@ header.Name = "Header"
 header.Active = true
 header.BackgroundColor3 = theme.Base
 header.BorderSizePixel = 0
+header.ClipsDescendants = true
 header.Size = UDim2.new(1, 0, 0, layout.HeaderHeight)
 header.ZIndex = 4002
 header.Parent = clip
+
+local bannerLayer = Instance.new("Frame")
+bannerLayer.Name = "BannerBlurLayer"
+bannerLayer.BackgroundTransparency = 1
+bannerLayer.ClipsDescendants = true
+bannerLayer.Size = UDim2.fromScale(1, 1)
+bannerLayer.ZIndex = 4002
+bannerLayer.Parent = header
+local bannerImages = {}
+for index, offset in ipairs({-5, -2, 0, 2, 5}) do
+    local image = Instance.new("ImageLabel")
+    image.Name = "BlurSample" .. tostring(index)
+    image.BackgroundTransparency = 1
+    image.BorderSizePixel = 0
+    image.Image = ""
+    image.ImageTransparency = index == 3 and 0.46 or 0.78
+    image.Position = UDim2.fromOffset(offset, math.abs(offset) * 0.25 - 3)
+    image.ScaleType = Enum.ScaleType.Stretch
+    image.Size = UDim2.new(1, math.abs(offset) * 2, 1, 6)
+    image.ZIndex = 4002
+    image.Parent = bannerLayer
+    table.insert(bannerImages, image)
+end
+local bannerShade = Instance.new("Frame")
+bannerShade.Name = "HeaderTint"
+bannerShade.BackgroundColor3 = theme.Base
+bannerShade.BackgroundTransparency = 0.28
+bannerShade.BorderSizePixel = 0
+bannerShade.Size = UDim2.fromScale(1, 1)
+bannerShade.ZIndex = 4003
+bannerShade.Parent = header
 
 local headerDrag = Instance.new("Frame")
 headerDrag.Name = "HeaderDragArea"
@@ -261,11 +142,13 @@ title.AnchorPoint = Vector2.new(0.5, 0.5)
 title.BackgroundTransparency = 1
 title.FontFace = fonts.HeadingBlack
 title.Position = UDim2.fromScale(0.5, 0.5)
-title.Size = UDim2.new(1, -120, 1, 0)
-title.Text = "Murder Mystery 2"
+title.Size = UDim2.new(1, -130, 1, 0)
+title.Text = context.GameName or "Murder Mystery 2"
 title.TextColor3 = theme.Signal
 title.TextSize = 21
-title.ZIndex = 4003
+title.TextStrokeColor3 = theme.Base
+title.TextStrokeTransparency = 0.42
+title.ZIndex = 4005
 title.Parent = header
 
 local closeButton = Instance.new("TextButton")
@@ -281,7 +164,7 @@ closeButton.Size = UDim2.fromOffset(38, 38)
 closeButton.Text = "×"
 closeButton.TextColor3 = theme.Signal
 closeButton.TextSize = 23
-closeButton.ZIndex = 4005
+closeButton.ZIndex = 4006
 closeButton.Parent = header
 round(closeButton, 11)
 outline(closeButton, 2, 0.08)
@@ -295,7 +178,6 @@ body.Position = UDim2.fromOffset(0, layout.HeaderHeight)
 body.Size = UDim2.new(1, 0, 1, -(layout.HeaderHeight + layout.FooterHeight))
 body.ZIndex = 4002
 body.Parent = clip
-
 local footer = Instance.new("Frame")
 footer.Name = "Footer"
 footer.Active = true
@@ -306,7 +188,6 @@ footer.Position = UDim2.fromScale(0, 1)
 footer.Size = UDim2.new(1, 0, 0, layout.FooterHeight)
 footer.ZIndex = 4002
 footer.Parent = clip
-
 local statusLabel = Instance.new("TextLabel")
 statusLabel.BackgroundTransparency = 1
 statusLabel.FontFace = fonts.Body
@@ -319,88 +200,176 @@ statusLabel.TextTransparency = 0.28
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.ZIndex = 4003
 statusLabel.Parent = footer
-
-local function setStatus(message, color)
+local function setStatus(message, success)
     statusLabel.Text = tostring(message or "Ready")
-    statusLabel.TextColor3 = color or theme.Signal
-    statusLabel.TextTransparency = color and 0 or 0.28
+    statusLabel.TextColor3 = success == false and theme.Danger or success == true and theme.Success or theme.Signal
+    statusLabel.TextTransparency = success == nil and 0.28 or 0
 end
 
-local controls = {}
-local contentPadding = layout.ContentPadding
-local columnGap, rowGap, rowHeight = 12, 12, 62
+local sidebarExpanded = true
+local sidebarExpandedWidth, sidebarCollapsedWidth = 138, 58
+local sidebar = Instance.new("Frame")
+sidebar.Name = "PageNavigation"
+sidebar.BackgroundColor3 = theme.Base
+sidebar.BackgroundTransparency = 0.06
+sidebar.BorderSizePixel = 0
+sidebar.ClipsDescendants = true
+sidebar.Size = UDim2.new(0, sidebarExpandedWidth, 1, 0)
+sidebar.ZIndex = 4003
+sidebar.Parent = body
+local collapseButton = Instance.new("TextButton")
+collapseButton.Name = "CollapseNavigation"
+collapseButton.AutoButtonColor = false
+collapseButton.BackgroundColor3 = theme.Layer
+collapseButton.BackgroundTransparency = 0.12
+collapseButton.BorderSizePixel = 0
+collapseButton.FontFace = fonts.HeadingBlack
+collapseButton.Position = UDim2.fromOffset(9, 9)
+collapseButton.Size = UDim2.fromOffset(40, 38)
+collapseButton.Text = "≡"
+collapseButton.TextColor3 = theme.Signal
+collapseButton.TextSize = 21
+collapseButton.ZIndex = 4005
+collapseButton.Parent = sidebar
+round(collapseButton, 11)
 
-local function controlPosition(column, row)
-    return UDim2.new(
-        (column - 1) * 0.5,
-        column == 1 and contentPadding or columnGap * 0.5,
-        0,
-        contentPadding + (row - 1) * (rowHeight + rowGap)
-    )
-end
+local pageHost = Instance.new("Frame")
+pageHost.Name = "PageHost"
+pageHost.BackgroundTransparency = 1
+pageHost.BorderSizePixel = 0
+pageHost.ClipsDescendants = true
+pageHost.Position = UDim2.fromOffset(sidebarExpandedWidth, 0)
+pageHost.Size = UDim2.new(1, -sidebarExpandedWidth, 1, 0)
+pageHost.ZIndex = 4003
+pageHost.Parent = body
 
-local function controlSize(height)
-    return UDim2.new(0.5, -(contentPadding + columnGap * 0.5), 0, height)
-end
-
-local function addToggle(labelText, key, column, row)
+local pageDefinitions = {{Id = "ESP", Glyph = "◇"}, {Id = "AIM", Glyph = "◎"}, {Id = "FARM", Glyph = "◆"}}
+local pages, navRecords = {}, {}
+for index, definition in ipairs(pageDefinitions) do
     local button = Instance.new("TextButton")
-    button.Name = key
+    button.Name = definition.Id
     button.AutoButtonColor = false
-    button.BackgroundColor3 = theme.Base
-    button.BackgroundTransparency = 0.14
+    button.BackgroundColor3 = theme.Layer
+    button.BackgroundTransparency = index == 1 and 0 or 0.65
     button.BorderSizePixel = 0
-    button.Position = controlPosition(column, row)
-    button.Size = controlSize(rowHeight)
+    button.Position = UDim2.fromOffset(9, 58 + (index - 1) * 52)
+    button.Size = UDim2.new(1, -18, 0, 44)
     button.Text = ""
-    button.ZIndex = 4003
-    button.Parent = body
-    round(button, 13)
-    local cardStroke = outline(button, 2, 0.16)
-
+    button.ZIndex = 4004
+    button.Parent = sidebar
+    round(button, 11)
+    local glyph = Instance.new("TextLabel")
+    glyph.BackgroundTransparency = 1
+    glyph.FontFace = fonts.HeadingBlack
+    glyph.Size = UDim2.fromOffset(40, 44)
+    glyph.Text = definition.Glyph
+    glyph.TextColor3 = theme.Signal
+    glyph.TextSize = 20
+    glyph.ZIndex = 4005
+    glyph.Parent = button
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.FontFace = fonts.HeadingHeavy
-    label.Position = UDim2.fromOffset(15, 0)
-    label.Size = UDim2.new(1, -75, 1, 0)
+    label.Position = UDim2.fromOffset(42, 0)
+    label.Size = UDim2.new(1, -48, 1, 0)
+    label.Text = definition.Id
+    label.TextColor3 = theme.Signal
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 4005
+    label.Parent = button
+    navRecords[definition.Id] = {Button = button, Label = label}
+    local page = Instance.new("CanvasGroup")
+    page.Name = definition.Id .. "Page"
+    page.BackgroundTransparency = 1
+    page.GroupTransparency = index == 1 and 0 or 1
+    page.Size = UDim2.fromScale(1, 1)
+    page.Visible = index == 1
+    page.ZIndex = 4003
+    page.Parent = pageHost
+    pages[definition.Id] = page
+end
+
+local function createPageGrid(page)
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Active = true
+    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scroll.BackgroundTransparency = 1
+    scroll.BorderSizePixel = 0
+    scroll.CanvasSize = UDim2.fromOffset(0, 0)
+    scroll.Position = UDim2.fromOffset(layout.ContentPadding, layout.ContentPadding)
+    scroll.ScrollBarImageColor3 = theme.Signal
+    scroll.ScrollBarImageTransparency = 0.48
+    scroll.ScrollBarThickness = 3
+    scroll.Size = UDim2.new(1, -layout.ContentPadding * 2, 1, -layout.ContentPadding * 2)
+    scroll.ZIndex = 4003
+    scroll.Parent = page
+    local grid = Instance.new("UIGridLayout")
+    grid.CellPadding = UDim2.fromOffset(10, 10)
+    grid.CellSize = UDim2.new(0.5, -5, 0, 72)
+    grid.SortOrder = Enum.SortOrder.LayoutOrder
+    grid.Parent = scroll
+    return scroll
+end
+local pageGrids = {ESP = createPageGrid(pages.ESP), AIM = createPageGrid(pages.AIM), FARM = createPageGrid(pages.FARM)}
+
+local function createControlBase(parent, labelText, order, height)
+    local item = Instance.new("Frame")
+    item.BackgroundColor3 = theme.Base
+    item.BackgroundTransparency = 0.14
+    item.BorderSizePixel = 0
+    item.LayoutOrder = order
+    item.Size = UDim2.new(0.5, -5, 0, height or 58)
+    item.ZIndex = 4004
+    item.Parent = parent
+    round(item, 13)
+    local itemStroke = outline(item, 2, 0.16)
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.FontFace = fonts.HeadingHeavy
+    label.Position = UDim2.fromOffset(14, 0)
+    label.Size = UDim2.new(1, -72, 1, 0)
     label.Text = labelText
     label.TextColor3 = theme.Signal
-    label.TextSize = 15
+    label.TextSize = 14
     label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 4004
-    label.Parent = button
+    label.ZIndex = 4005
+    label.Parent = item
+    return item, itemStroke, label
+end
 
+local function addToggle(parent, labelText, key, order)
+    local item, itemStroke = createControlBase(parent, labelText, order, 58)
+    local button = Instance.new("TextButton")
+    button.AutoButtonColor = false
+    button.BackgroundTransparency = 1
+    button.Size = UDim2.fromScale(1, 1)
+    button.Text = ""
+    button.ZIndex = 4006
+    button.Parent = item
     local track = Instance.new("Frame")
     track.AnchorPoint = Vector2.new(1, 0.5)
     track.BackgroundColor3 = theme.Layer
     track.BackgroundTransparency = 0.08
     track.BorderSizePixel = 0
-    track.Position = UDim2.new(1, -14, 0.5, 0)
+    track.Position = UDim2.new(1, -13, 0.5, 0)
     track.Size = UDim2.fromOffset(38, 22)
-    track.ZIndex = 4004
-    track.Parent = button
+    track.ZIndex = 4005
+    track.Parent = item
     round(track, 999)
     outline(track, 1, 0.22, theme.Signal)
-
     local knob = Instance.new("Frame")
     knob.AnchorPoint = Vector2.new(0.5, 0.5)
     knob.BackgroundColor3 = theme.Signal
     knob.BorderSizePixel = 0
     knob.Size = UDim2.fromOffset(14, 14)
-    knob.ZIndex = 4005
+    knob.ZIndex = 4006
     knob.Parent = track
     round(knob, 999)
-
     local function render(instant)
-        local enabled = State[key] == true
-        local trackProperties = {
-            BackgroundColor3 = enabled and theme.Signal or theme.Layer,
-            BackgroundTransparency = enabled and 0 or 0.08
-        }
-        local knobProperties = {
-            BackgroundColor3 = enabled and theme.Base or theme.Signal,
-            Position = enabled and UDim2.new(1, -8, 0.5, 0) or UDim2.new(0, 8, 0.5, 0)
-        }
+        local enabled = service.GetState()[key] == true
+        local trackProperties = {BackgroundColor3 = enabled and theme.Signal or theme.Layer, BackgroundTransparency = enabled and 0 or 0.08}
+        local knobProperties = {BackgroundColor3 = enabled and theme.Base or theme.Signal, Position = enabled and UDim2.new(1, -8, 0.5, 0) or UDim2.new(0, 8, 0.5, 0)}
         if instant then
             for property, value in pairs(trackProperties) do track[property] = value end
             for property, value in pairs(knobProperties) do knob[property] = value end
@@ -408,93 +377,180 @@ local function addToggle(labelText, key, column, row)
             animate(track, trackProperties, motion.Control, Enum.EasingStyle.Quint)
             animate(knob, knobProperties, motion.Control, Enum.EasingStyle.Quint)
         end
-        cardStroke.Color = enabled and theme.Signal or theme.Base
+        itemStroke.Color = enabled and theme.Signal or theme.Base
     end
-    connect(button.MouseEnter, function()
-        playSound("ButtonHover")
-        animate(button, {BackgroundTransparency = 0.04}, motion.Control, Enum.EasingStyle.Quint)
-    end)
-    connect(button.MouseLeave, function()
-        animate(button, {BackgroundTransparency = 0.14}, motion.Control, Enum.EasingStyle.Quint)
-    end)
+    connect(button.MouseEnter, function() playSound("ButtonHover"); animate(item, {BackgroundTransparency = 0.04}, motion.Control, Enum.EasingStyle.Quint) end)
+    connect(button.MouseLeave, function() animate(item, {BackgroundTransparency = 0.14}, motion.Control, Enum.EasingStyle.Quint) end)
     connect(button.Activated, function()
-        State[key] = not State[key]
         playSound("ButtonClick")
+        local ok, message = service.SetState(key, not service.GetState()[key])
         render(false)
-        setStatus(labelText .. (State[key] and " enabled" or " disabled"), State[key] and theme.Success or nil)
+        setStatus(message or labelText, ok)
     end)
-    controls[key] = {Render = render}
+    controlRenderers[key] = render
     render(true)
 end
 
-local function addAction(labelText, callback, column, row)
+local function addAction(parent, labelText, callback, order)
+    local item, itemStroke, label = createControlBase(parent, labelText, order, 58)
+    label.Size = UDim2.new(1, -28, 1, 0)
+    label.TextXAlignment = Enum.TextXAlignment.Center
     local button = Instance.new("TextButton")
     button.AutoButtonColor = false
-    button.BackgroundColor3 = theme.Layer
-    button.BackgroundTransparency = 0.04
-    button.BorderSizePixel = 0
-    button.FontFace = fonts.HeadingBlack
-    button.Position = controlPosition(column, row)
-    button.Size = controlSize(48)
-    button.Text = labelText
-    button.TextColor3 = theme.Signal
-    button.TextSize = 15
-    button.ZIndex = 4003
-    button.Parent = body
-    round(button, 13)
-    local actionStroke = outline(button, 2, 0.08, theme.Signal)
+    button.BackgroundTransparency = 1
+    button.Size = UDim2.fromScale(1, 1)
+    button.Text = ""
+    button.ZIndex = 4006
+    button.Parent = item
     connect(button.MouseEnter, function()
         playSound("ButtonHover")
-        animate(button, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
-        animate(actionStroke, {Transparency = 0}, motion.Control, Enum.EasingStyle.Quint)
+        animate(item, {BackgroundTransparency = 0.03}, motion.Control, Enum.EasingStyle.Quint)
+        animate(itemStroke, {Transparency = 0}, motion.Control, Enum.EasingStyle.Quint)
     end)
     connect(button.MouseLeave, function()
-        animate(button, {BackgroundTransparency = 0.04}, motion.Control, Enum.EasingStyle.Quint)
-        animate(actionStroke, {Transparency = 0.08}, motion.Control, Enum.EasingStyle.Quint)
+        animate(item, {BackgroundTransparency = 0.14}, motion.Control, Enum.EasingStyle.Quint)
+        animate(itemStroke, {Transparency = 0.16}, motion.Control, Enum.EasingStyle.Quint)
     end)
     connect(button.Activated, function()
         playSound("ButtonClick")
-        local ok = callback()
-        setStatus(ok and (labelText .. " succeeded") or (labelText .. " unavailable"), ok and theme.Success or theme.Danger)
+        local ok, message = callback()
+        setStatus(message or (ok and "Action completed" or "Action unavailable"), ok)
     end)
 end
 
-addToggle("Main System", "Enabled", 1, 1)
-addToggle("Role ESP", "PlayerESP", 2, 1)
-addToggle("GunDrop ESP", "GunDropESP", 1, 2)
-addToggle("Auto Pickup", "AutoPickup", 2, 2)
-addToggle("Auto Fire", "AutoFire", 1, 3)
-addAction("Pick Up Gun Now", requestPickup, 1, 4)
-addAction("Shoot Now", requestShot, 2, 4)
+local function addSlider(parent, labelText, key, minimum, maximum, order)
+    local item, _, label = createControlBase(parent, labelText, order, 72)
+    label.Size = UDim2.new(1, -70, 0, 34)
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.FontFace = fonts.Body
+    valueLabel.Position = UDim2.new(1, -64, 0, 0)
+    valueLabel.Size = UDim2.fromOffset(50, 34)
+    valueLabel.TextColor3 = theme.Signal
+    valueLabel.TextSize = 13
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valueLabel.ZIndex = 4005
+    valueLabel.Parent = item
+    local track = Instance.new("Frame")
+    track.Active = true
+    track.BackgroundColor3 = theme.Layer
+    track.BorderSizePixel = 0
+    track.Position = UDim2.new(0, 14, 1, -20)
+    track.Size = UDim2.new(1, -28, 0, 6)
+    track.ZIndex = 4005
+    track.Parent = item
+    round(track, 999)
+    local fill = Instance.new("Frame")
+    fill.BackgroundColor3 = theme.Signal
+    fill.BorderSizePixel = 0
+    fill.Size = UDim2.fromScale(0, 1)
+    fill.ZIndex = 4006
+    fill.Parent = track
+    round(fill, 999)
+    local dragging = false
+    local function render()
+        local value = tonumber(service.GetState()[key]) or minimum
+        fill.Size = UDim2.fromScale(math.clamp((value - minimum) / (maximum - minimum), 0, 1), 1)
+        valueLabel.Text = tostring(math.floor(value + 0.5))
+    end
+    local function update(input)
+        local ratio = math.clamp((input.Position.X - track.AbsolutePosition.X) / math.max(1, track.AbsoluteSize.X), 0, 1)
+        service.SetState(key, minimum + (maximum - minimum) * ratio)
+        render()
+    end
+    connect(track.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true; update(input) end
+    end)
+    connect(inputService.InputChanged, function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then update(input) end
+    end)
+    connect(inputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end)
+    controlRenderers[key] = render
+    render()
+end
 
-local uiState = "Closed"
-local transitionRevision = 0
-local restingPosition
-local dragging, dragStart, dragWindowStart = false, nil, nil
+addToggle(pageGrids.ESP, "Main System", "Enabled", 1)
+addToggle(pageGrids.ESP, "Murderer ESP", "MurdererESP", 2)
+addToggle(pageGrids.ESP, "Sheriff ESP", "SheriffESP", 3)
+addToggle(pageGrids.ESP, "Innocent ESP", "InnocentESP", 4)
+addToggle(pageGrids.ESP, "Avatar Card", "AvatarCardESP", 5)
+addToggle(pageGrids.ESP, "Weapon Card", "WeaponCardESP", 6)
+addToggle(pageGrids.ESP, "Gun Drop ESP", "GunDropESP", 7)
+addToggle(pageGrids.AIM, "Auto Fire", "AutoFire", 1)
+addToggle(pageGrids.AIM, "Auto Pickup", "AutoPickup", 2)
+addAction(pageGrids.AIM, "Shoot Now", service.ShootNow, 3)
+addAction(pageGrids.AIM, "Pick Up Gun", service.PickupGun, 4)
+addToggle(pageGrids.FARM, "Auto Farm", "AutoFarm", 1)
+addSlider(pageGrids.FARM, "Farm Speed", "FarmSpeed", 20, 90, 2)
+addSlider(pageGrids.FARM, "Underground Offset", "UndergroundOffset", 7, 30, 3)
 
-local function windowSize()
+local currentPage, pageRevision = "ESP", 0
+local function selectPage(pageId)
+    if unloaded or not pages[pageId] or pageId == currentPage then return false end
+    pageRevision = pageRevision + 1
+    local revision, oldId = pageRevision, currentPage
+    currentPage = pageId
+    for id, record in pairs(navRecords) do
+        animate(record.Button, {BackgroundTransparency = id == pageId and 0 or 0.65}, motion.Control, Enum.EasingStyle.Quint)
+    end
+    local oldPage = pages[oldId]
+    animate(oldPage, {Position = UDim2.fromOffset(0, -18), GroupTransparency = 1}, 0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    task.delay(0.18, function()
+        if unloaded or revision ~= pageRevision then return end
+        oldPage.Visible = false
+        task.delay(0.22, function()
+            if unloaded or revision ~= pageRevision then return end
+            local newPage = pages[pageId]
+            newPage.Position = UDim2.fromOffset(0, -18)
+            newPage.GroupTransparency = 1
+            newPage.Visible = true
+            animate(newPage, {Position = UDim2.fromOffset(0, 0), GroupTransparency = 0}, 0.26, Enum.EasingStyle.Quint)
+        end)
+    end)
+    return true
+end
+for id, record in pairs(navRecords) do
+    connect(record.Button.MouseEnter, function() playSound("ButtonHover") end)
+    connect(record.Button.Activated, function() playSound("ButtonClick"); selectPage(id) end)
+end
+connect(collapseButton.Activated, function()
+    sidebarExpanded = not sidebarExpanded
+    playSound("ButtonClick")
+    local width = sidebarExpanded and sidebarExpandedWidth or sidebarCollapsedWidth
+    animate(sidebar, {Size = UDim2.new(0, width, 1, 0)}, 0.34, Enum.EasingStyle.Quint)
+    animate(pageHost, {Position = UDim2.fromOffset(width, 0), Size = UDim2.new(1, -width, 1, 0)}, 0.34, Enum.EasingStyle.Quint)
+    for _, record in pairs(navRecords) do
+        animate(record.Label, {
+            Position = sidebarExpanded and UDim2.fromOffset(42, 0) or UDim2.fromOffset(55, 0),
+            TextTransparency = sidebarExpanded and 0 or 1
+        }, 0.24, Enum.EasingStyle.Quint)
+    end
+end)
+
+local uiState, transitionRevision = "Closed", 0
+local restingPosition, dragging, dragStart, dragWindowStart = nil, false, nil, nil
+local function responsiveScale()
     local viewport = context.GetViewportSize()
-    return viewport, Vector2.new(
-        math.min(layout.WindowWidth, math.max(360, viewport.X - layout.ViewportInset * 2)),
-        math.min(layout.WindowHeight, math.max(320, viewport.Y - layout.ViewportInset * 2))
-    )
+    return math.min(1, (viewport.X - layout.ViewportInset * 2) / layout.WindowWidth, (viewport.Y - layout.ViewportInset * 2) / layout.WindowHeight)
 end
-
-local function clampCenter(point, size, viewport)
-    local margin, halfX, halfY = layout.ViewportInset, size.X * 0.5, size.Y * 0.5
-    local minX, maxX = halfX + margin, viewport.X - halfX - margin
-    local minY, maxY = halfY + margin, viewport.Y - halfY - margin
-    if minX > maxX then minX, maxX = viewport.X * 0.5, viewport.X * 0.5 end
-    if minY > maxY then minY, maxY = viewport.Y * 0.5, viewport.Y * 0.5 end
-    return Vector2.new(math.clamp(point.X, minX, maxX), math.clamp(point.Y, minY, maxY))
+local function visibleRatio(center, scale)
+    local viewport = context.GetViewportSize()
+    local size = Vector2.new(layout.WindowWidth, layout.WindowHeight) * scale
+    local left, top = center.X - size.X * 0.5, center.Y - size.Y * 0.5
+    local right, bottom = center.X + size.X * 0.5, center.Y + size.Y * 0.5
+    local width = math.max(0, math.min(right, viewport.X) - math.max(left, 0))
+    local height = math.max(0, math.min(bottom, viewport.Y) - math.max(top, 0))
+    return width * height / math.max(1, size.X * size.Y)
 end
-
 local function targetGeometry()
-    local viewport, size = windowSize()
-    restingPosition = clampCenter(restingPosition or viewport * 0.5, size, viewport)
-    return viewport, size, restingPosition
+    local viewport = context.GetViewportSize()
+    local scale = responsiveScale()
+    restingPosition = restingPosition or viewport * 0.5
+    if visibleRatio(restingPosition, scale) < 0.5 then restingPosition = viewport * 0.5 end
+    return restingPosition, scale
 end
-
 local function beginDrag(input)
     if uiState ~= "Open" then return end
     if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
@@ -507,9 +563,8 @@ connect(footer.InputBegan, beginDrag)
 connect(inputService.InputChanged, function(input)
     if not dragging or not dragStart or not dragWindowStart then return end
     if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
-    local viewport, size = windowSize()
     local pointer = Vector2.new(input.Position.X, input.Position.Y)
-    restingPosition = clampCenter(dragWindowStart + pointer - dragStart, size, viewport)
+    restingPosition = dragWindowStart + pointer - dragStart
     window.Position = UDim2.fromOffset(restingPosition.X, restingPosition.Y)
 end)
 connect(inputService.InputEnded, function(input)
@@ -520,124 +575,83 @@ end)
 
 local function open()
     if unloaded or uiState == "Open" or uiState == "Opening" then return false end
-    local reversingClose = uiState == "Closing"
     transitionRevision, uiState = transitionRevision + 1, "Opening"
     local revision = transitionRevision
-    local _, size, center = targetGeometry()
-    window.Size = UDim2.fromOffset(size.X, size.Y)
-    if not reversingClose then
-        local source = context.GetAnchorPoint()
-        window.Position = UDim2.fromOffset(source.X, source.Y)
-        windowScale.Scale, window.GroupTransparency = 0, 1
-    end
+    local center, scale = targetGeometry()
+    local source = context.GetAnchorPoint()
+    window.Position = UDim2.fromOffset(source.X, source.Y)
+    windowScale.Scale, window.GroupTransparency = 0, 1
     window.Visible = true
     local move = animate(window, {Position = UDim2.fromOffset(center.X, center.Y), GroupTransparency = 0}, motion.Open, Enum.EasingStyle.Quint)
-    animate(windowScale, {Scale = 1}, motion.Open, Enum.EasingStyle.Back)
+    animate(windowScale, {Scale = scale}, motion.Open, Enum.EasingStyle.Back)
     task.spawn(function()
         move.Completed:Wait()
         if not unloaded and revision == transitionRevision then uiState = "Open" end
     end)
     return true
 end
-
 local function close()
     if unloaded or uiState == "Closed" or uiState == "Closing" then return false end
     transitionRevision, uiState = transitionRevision + 1, "Closing"
-    local revision = transitionRevision
-    local source = context.GetAnchorPoint()
+    local revision, source = transitionRevision, context.GetAnchorPoint()
     dragging = false
     local move = animate(window, {Position = UDim2.fromOffset(source.X, source.Y), GroupTransparency = 1}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
     animate(windowScale, {Scale = 0}, motion.Close, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
     task.spawn(function()
         move.Completed:Wait()
-        if not unloaded and revision == transitionRevision then
-            window.Visible, uiState = false, "Closed"
-        end
+        if not unloaded and revision == transitionRevision then window.Visible, uiState = false, "Closed" end
     end)
     return true
 end
 
-connect(closeButton.MouseEnter, function()
-    animate(closeButton, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
-end)
-connect(closeButton.MouseLeave, function()
-    animate(closeButton, {BackgroundTransparency = 0.12}, motion.Control, Enum.EasingStyle.Quint)
-end)
-connect(closeButton.Activated, function()
-    playSound("ButtonClick")
-    close()
-end)
+connect(closeButton.MouseEnter, function() animate(closeButton, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint) end)
+connect(closeButton.MouseLeave, function() animate(closeButton, {BackgroundTransparency = 0.12}, motion.Control, Enum.EasingStyle.Quint) end)
+connect(closeButton.Activated, function() playSound("ButtonClick"); close() end)
 connect(context.Parent:GetPropertyChangedSignal("AbsoluteSize"), function()
     if unloaded or (uiState ~= "Open" and uiState ~= "Opening") then return end
-    local _, size, center = targetGeometry()
-    window.Size = UDim2.fromOffset(size.X, size.Y)
-    window.Position = UDim2.fromOffset(center.X, center.Y)
+    windowScale.Scale = responsiveScale()
 end)
 
-local clock = 0
-connect(RunService.Heartbeat, function(deltaTime)
-    clock = clock + deltaTime
-    if clock < 0.15 then return end
-    clock = 0
-    local gunDrop = updateGunDrop()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local record = ensurePlayerESP(player)
-            local character, humanoid, characterRoot = characterInfo(player)
-            local role = replicatedRole(player)
-            local color = role == "Murderer" and Color3.fromRGB(244, 72, 83)
-                or role == "Sheriff" and Color3.fromRGB(65, 145, 255) or nil
-            local visible = State.Enabled and State.PlayerESP and color ~= nil
-                and humanoid and humanoid.Health > 0 and characterRoot ~= nil
-            record.Highlight.Adornee = visible and character or nil
-            record.Highlight.FillColor = color or Color3.new(1, 1, 1)
-            record.Highlight.OutlineColor = color or Color3.new(1, 1, 1)
-            record.Highlight.Enabled = visible
-            record.Billboard.Adornee = visible and characterRoot or nil
-            record.Billboard.Enabled = visible
-            record.Label.Text = player.DisplayName
-            record.Label.TextColor3 = color or Color3.new(1, 1, 1)
-        end
-    end
-    if State.Enabled and State.AutoPickup and gunDrop then requestPickup() end
-    if State.Enabled and State.AutoFire then requestShot() end
+local unsubscribe = service.Subscribe(function(_, eventName, message, success)
+    if eventName ~= "Snapshot" then setStatus(message, success) end
+    for _, render in pairs(controlRenderers) do render(false) end
 end)
-connect(Players.PlayerRemoving, destroyPlayerESP)
+task.spawn(function()
+    if type(context.GetBannerAsset) ~= "function" then return end
+    local ok, asset = pcall(context.GetBannerAsset)
+    if ok and type(asset) == "string" and asset ~= "" and not unloaded then
+        for _, image in ipairs(bannerImages) do image.Image = asset end
+    end
+end)
 
 local controller
 local function unload()
     if unloaded then return end
     unloaded = true
-    transitionRevision = transitionRevision + 1
+    transitionRevision, pageRevision = transitionRevision + 1, pageRevision + 1
+    if unsubscribe then pcall(unsubscribe); unsubscribe = nil end
+    pcall(service.Destroy)
     for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
-    for player in pairs(playerESP) do destroyPlayerESP(player) end
-    if gunHighlight then gunHighlight:Destroy() end
+    table.clear(connections)
     if root.Parent then root:Destroy() end
     if env.TasuHubMM2 == controller then env.TasuHubMM2 = nil end
 end
 
 controller = table.freeze({
-    State = State,
-    PlaceId = 142823291,
-    GetState = function()
-        local copy = {}
-        for key, value in pairs(State) do copy[key] = value end
-        return copy
-    end,
+    State = service.GetState(),
+    PlaceId = context.PlaceId or 142823291,
+    GetState = service.GetState,
     SetState = function(key, value)
-        if State[key] == nil then return false end
-        State[key] = value == true
-        if controls[key] then controls[key].Render(false) end
-        return true
+        local ok, message = service.SetState(key, value)
+        if controlRenderers[key] then controlRenderers[key](false) end
+        return ok, message
     end,
-    Enable = function() State.Enabled = true; controls.Enabled.Render(false); return true end,
-    Disable = function() State.Enabled = false; controls.Enabled.Render(false); return true end,
+    Enable = function() return service.SetState("Enabled", true) end,
+    Disable = function() return service.SetState("Enabled", false) end,
     RefreshCharacter = function() return true end,
     Open = open,
     Close = close,
-    Toggle = function()
-        return (uiState == "Open" or uiState == "Opening") and close() or open()
-    end,
+    Toggle = function() return (uiState == "Open" or uiState == "Opening") and close() or open() end,
     IsOpen = function() return uiState == "Open" or uiState == "Opening" end,
     Destroy = unload,
     Unload = unload

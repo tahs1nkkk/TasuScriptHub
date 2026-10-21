@@ -2,6 +2,8 @@
 
 Status: implemented, user-approved, and closed pending explicit reopening.
 
+Cold-start reliability addition: after the required TasuHub icon resolves but before the first fade/audio frame, `ContentProvider:PreloadAsync` receives the icon, both base rail asset IDs, and a silent template for every shared sound preset. Playback clones those templates. A template that remains unloaded is marked unavailable and skipped for the session. The final ready boundary waits up to 12 seconds for both base custom-asset icon workers to reach `Ready` or `Failed`; failure remains hidden and cannot appear late.
+
 ## Approved behavior
 
 - A `Base` dark-gray full-screen scrim at 0.20 transparency covers the complete viewport and ignores the Roblox inset through the parent `ScreenGui`; the game view remains visible through a tracked `BlurEffect` whose size animates from 0 to 34.

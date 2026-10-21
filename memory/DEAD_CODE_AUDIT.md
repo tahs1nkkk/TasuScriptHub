@@ -1,6 +1,8 @@
 # Dead-code audit
 
-Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch contains catalog revisions 3–10, MM2 window revision 1, main-window revision 1 plus its register-boundary correction, and main-window/player-service revision-2 implementation commit `400c4f6`; it remains pending executor acceptance and is intentionally not merged into `main`.
+Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch now contains catalog revisions 3–11, MM2 revision 4 with its separate service, main-window revision 1 plus its register-boundary correction, and main-window/player-service revision-2 implementation commit `400c4f6`; it remains pending executor acceptance and is intentionally not merged into `main`.
+
+- Cold-start/MM2 revision 4 (2026-10-21): the mixed MM2 runtime/view, single `PlayerESP`, MM2 name billboard, guessed shoot/fire `RemoteEvent`, viewport-clamped game/catalog drag, general `SelectionBox`, and direct-before-custom base rail icon path are superseded. Live replacements are `mm2_service.lua`, three role toggles, pulsing AlwaysOnTop chams, optional avatar/weapon cards, overlay claims, `ShootGun` RemoteFunction invocation, underground collectible lifecycle, unrestricted drag with 50%-visible reopen recovery, twelve AlwaysOnTop 3D edges plus fill, preloaded sound templates, deterministic base-icon gating, and a shared remote-source cache. Named-local scans report zero definition-only functions across all six runtime files. `git diff --check` passes. Luau 0.739 `--null` compilation passes at O0/O1/O2 for all six files; the initial O0 register regression from a persistent `ContentProvider` local was removed by resolving the service inside the preload function. Executor and visual acceptance remain pending; no Studio path or visible legacy surface was introduced.
 
 ## Confirmed dead state
 

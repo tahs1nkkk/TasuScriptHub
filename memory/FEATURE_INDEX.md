@@ -43,7 +43,8 @@ This map prevents state or behavior from being lost during the rebuild.
 | Per-experience `Waypoints` category and config state | `features/waypoints.md` |
 | Search registration/ranking/navigation | `systems/search-index.md` |
 | Config serialization, files, migrations | `systems/config-storage.md` |
-| MM2 shared-theme game window and script lifecycle | `scripts/mm2.md` |
+| MM2 shared-theme game window and controller lifecycle | `scripts/mm2.md` |
+| MM2 feature engine, state, overlays, shooting and farm lifecycle | `scripts/mm2_service.md` |
 | MM2 role ESP | `features/mm2-role-esp.md` |
 | MM2 gun-drop ESP | `features/mm2-gun-drop.md` |
-| MM2 pickup/fire automatic and manual actions | `features/mm2-automation.md` |
+| MM2 pickup/fire/farm automatic and manual actions | `features/mm2-automation.md` |

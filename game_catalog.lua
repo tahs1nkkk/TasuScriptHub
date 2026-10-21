@@ -142,19 +142,19 @@ function CatalogModule.Create(context)
         )
     end
 
-    local function clampCenter(point, size, viewport)
-        local margin, halfX, halfY = layout.ViewportInset, size.X * 0.5, size.Y * 0.5
-        local minX, maxX = halfX + margin, viewport.X - halfX - margin
-        local minY, maxY = halfY + margin, viewport.Y - halfY - margin
-        if minX > maxX then minX, maxX = viewport.X * 0.5, viewport.X * 0.5 end
-        if minY > maxY then minY, maxY = viewport.Y * 0.5, viewport.Y * 0.5 end
-        return Vector2.new(math.clamp(point.X, minX, maxX), math.clamp(point.Y, minY, maxY))
+    local function visibleRatio(point, size, viewport)
+        local left, top = point.X - size.X * 0.5, point.Y - size.Y * 0.5
+        local right, bottom = point.X + size.X * 0.5, point.Y + size.Y * 0.5
+        local width = math.max(0, math.min(right, viewport.X) - math.max(left, 0))
+        local height = math.max(0, math.min(bottom, viewport.Y) - math.max(top, 0))
+        return width * height / math.max(1, size.X * size.Y)
     end
 
     local function targetGeometry()
         local viewport, size = windowSize()
         windowPixelSize = size
-        restingPosition = clampCenter(restingPosition or viewport * 0.5, size, viewport)
+        restingPosition = restingPosition or viewport * 0.5
+        if visibleRatio(restingPosition, size, viewport) < 0.5 then restingPosition = viewport * 0.5 end
         return viewport, size, restingPosition
     end
 
@@ -1360,9 +1360,8 @@ function CatalogModule.Create(context)
     connect(inputService.InputChanged, function(input)
         if not dragging or not dragStart or not dragWindowStart then return end
         if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
-        local viewport, size = windowSize()
         local pointer = Vector2.new(input.Position.X, input.Position.Y)
-        restingPosition = clampCenter(dragWindowStart + pointer - dragStart, size, viewport)
+        restingPosition = dragWindowStart + pointer - dragStart
         window.Position = UDim2.fromOffset(restingPosition.X, restingPosition.Y)
     end)
     connect(inputService.InputEnded, function(input)

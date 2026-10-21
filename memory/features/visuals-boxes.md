@@ -2,9 +2,9 @@
 
 State: `Boxes`, `BoxFilled`, `Thickness`.
 
-Behavior: the current branch uses one real world-space `SelectionBox` welded through a transparent, non-colliding proxy to each live character root. Bounds are calculated only from body `BasePart` descendants; `Accessory` and `Tool` descendants never change box width. Screen-space GUI rectangle boxes are prohibited and must not be reintroduced unless the user explicitly reverses this contract.
+Behavior: the current branch uses one AlwaysOnTop `BoxHandleAdornment` fill plus twelve AlwaysOnTop thin `BoxHandleAdornment` edges around a transparent welded body-bounds proxy. Bounds use body `BasePart` descendants only; Accessory and Tool descendants never change width. Screen-space rectangle boxes and `SelectionBox` are prohibited.
 
-Rework: avoid physical/collision impact, rebuild the owned proxy after a character swap, use 0.58 surface transparency when filled, map shared thickness into a bounded 3D line thickness, and destroy only owned proxies on character swap/unload. Screen projection remains only for the box-attached health bar.
+Rework: XRay-style AlwaysOnTop adornments remain visible through walls, fill uses 0.58 transparency, and thickness maps to bounded edge geometry. A game-overlay claim hides the complete general record for that target. Cleanup destroys only owned proxies/adornments; screen projection remains only for the box-attached health bar.
 
 Executor checks: R6/R15, scaled avatars, accessories, seated/dead players, fill on/off, thickness limits, respawn, and unload.
 

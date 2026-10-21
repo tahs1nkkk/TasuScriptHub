@@ -9,7 +9,7 @@
 5. UI shell — navigation, panels, overlays, component library, shared theme, and animation coordinator.
 6. Feature views — declarative control registration only; no gameplay loops or private styling.
 
-`game_catalog.lua` owns catalog presentation and virtualized metadata interaction. `main_menu.lua` owns the general window, navigation/search/dropdown/card/player-row/stats-overlay presentation, and view-scoped inputs only. `player_service.lua` owns player metadata sampling, pathfinding/route ownership, camera view, TP, and targeted fling actions without constructing UI. `loader.lua` retains state/descriptors, stats sampling, icon/HTTP resolution, validated module/script execution, game-controller registration, shared contexts, and global lifecycle. `mm2.lua` remains the first migrated game controller/view.
+`game_catalog.lua` owns catalog presentation and virtualized metadata interaction. `main_menu.lua` owns the general window, navigation/search/dropdown/card/player-row/stats-overlay presentation, and view-scoped inputs only. `player_service.lua` owns player metadata sampling, pathfinding/route ownership, camera view, TP, and targeted fling actions without constructing UI. `mm2_service.lua` owns every MM2 feature loop and overlay; `mm2.lua` owns only the shared-theme game-window presentation and controller adapter. `loader.lua` retains state/descriptors, source/audio/icon preloading, validated module execution, overlay arbitration, game-controller registration, shared contexts, and global lifecycle.
 
 ## Contracts
 
@@ -28,6 +28,7 @@
 - Player-service exclusive actions suspend both static and moving anti-fling modes and restore the prior modes after the action token ends.
 - Global UI preferences are loader-owned and versioned independently from feature configs. Views receive copied getters and narrow setters; no view reads/writes executor files directly.
 - The shared `ScreenGui` uses global Z-index ordering: feature overlay GUI remains in the low renderer band and application windows remain in the 2000+ interaction bands.
+- Game overlays claim a player through the loader-owned weak claim registry. While a game claim exists, the general ESP renderer hides its record for that player; release is mandatory on disable, death/removal, role loss, and destroy.
 
 ## Migration constraint
 
