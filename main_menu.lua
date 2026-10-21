@@ -46,6 +46,7 @@ function MainMenuModule.Create(context)
     assert(type(motion) == "table" and type(layout) == "table", "main menu motion/layout tokens are required")
 
     local animate = context.Animate
+    local uiRuntime = context.UIRuntime
     local playSound = context.PlaySound or function() end
     local trackConnection = context.TrackConnection or function(connection) return connection end
     local inputService = context.InputService
@@ -86,6 +87,7 @@ function MainMenuModule.Create(context)
     end
 
     local function round(object, radius)
+        if uiRuntime and type(uiRuntime.Round) == "function" then return uiRuntime.Round(object, radius) end
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, radius)
         corner.Parent = object
@@ -93,6 +95,9 @@ function MainMenuModule.Create(context)
     end
 
     local function outline(object, thickness, transparency, color)
+        if uiRuntime and type(uiRuntime.Outline) == "function" then
+            return uiRuntime.Outline(object, thickness, transparency, color)
+        end
         local stroke = Instance.new("UIStroke")
         stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         stroke.Color = color or theme.Base
@@ -846,6 +851,7 @@ function MainMenuModule.Create(context)
             round(toggle, 999)
             outline(toggle, 1, 0.22, theme.Signal)
             local bindButton
+            local bindScale
             if hasBind then
                 bindButton = Instance.new("TextButton")
                 bindButton.AnchorPoint = Vector2.new(1, 0.5)
@@ -862,6 +868,9 @@ function MainMenuModule.Create(context)
                 bindButton.ZIndex = 4012
                 bindButton.Parent = row
                 round(bindButton, 7)
+                bindScale = Instance.new("UIScale")
+                bindScale.Scale = 1
+                bindScale.Parent = bindButton
             end
             local knob = Instance.new("Frame")
             knob.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -895,8 +904,38 @@ function MainMenuModule.Create(context)
                 scopedConnect(pageConnections, bindButton.Activated, function()
                     playSound("ButtonClick")
                     bindButton.Text = "..."
-                    context.BeginKeybind(entry.BindId, function()
-                        if bindButton.Parent then render() end
+                    context.BeginKeybind(entry.BindId, function(result)
+                        if not bindButton.Parent then return end
+                        result = type(result) == "table" and result or {Status = "Success"}
+                        if result.Status == "Success" or result.Status == "Cleared" then
+                            bindButton.Text = tostring(context.GetKeybind(entry.BindId) or "Bind")
+                            bindButton.TextColor3 = theme.Success
+                            animate(bindScale, {Scale = 1.1}, 0.12, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+                            task.delay(0.12, function()
+                                if bindButton.Parent then
+                                    animate(bindScale, {Scale = 1}, 0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+                                    animate(bindButton, {TextColor3 = theme.Signal}, 0.18, Enum.EasingStyle.Quint)
+                                end
+                            end)
+                        elseif result.Status == "Cancelled" then
+                            render()
+                        else
+                            local resting = bindButton.Position
+                            bindButton.Text = tostring(result.Key or result.PreviousKey or "Bind")
+                            bindButton.TextColor3 = theme.Danger
+                            task.spawn(function()
+                                for _, offset in ipairs({-5, 5, -3, 3, 0}) do
+                                    if not bindButton.Parent then return end
+                                    bindButton.Position = resting + UDim2.fromOffset(offset, 0)
+                                    task.wait(0.045)
+                                end
+                                if bindButton.Parent then
+                                    bindButton.Position = resting
+                                    bindButton.Text = tostring(context.GetKeybind(entry.BindId) or "Bind")
+                                    animate(bindButton, {TextColor3 = theme.Signal}, 0.18, Enum.EasingStyle.Quint)
+                                end
+                            end)
+                        end
                     end)
                 end)
             end
@@ -1071,13 +1110,19 @@ function MainMenuModule.Create(context)
         local section = Instance.new("Frame")
         section.Name = tostring(name):gsub("[^%w_]", "_")
         section.BackgroundColor3 = theme.Layer
-        section.BackgroundTransparency = 0.06
+        section.BackgroundTransparency = 1
         section.BorderSizePixel = 0
         section.Size = UDim2.new(1, 0, 0, 44)
         section.ZIndex = 4008
         section.Parent = parent
-        round(section, 14)
-        outline(section, 2, 0.16)
+        local divider = Instance.new("Frame")
+        divider.BackgroundColor3 = theme.Signal
+        divider.BackgroundTransparency = 0.84
+        divider.BorderSizePixel = 0
+        divider.Position = UDim2.fromOffset(0, 43)
+        divider.Size = UDim2.new(1, 0, 0, 1)
+        divider.ZIndex = 4009
+        divider.Parent = section
         local heading = Instance.new("TextLabel")
         heading.BackgroundTransparency = 1
         heading.FontFace = fonts.HeadingBlack
@@ -2204,6 +2249,11 @@ function MainMenuModule.Create(context)
         task.spawn(function()
             move.Completed:Wait()
             if not destroyed and revision == transitionRevision then
+                clearScopedConnections(pageConnections)
+                if currentPage and currentPage.Parent then currentPage:Destroy() end
+                currentPage = nil
+                table.clear(currentRows)
+                table.clear(sectionRecords)
                 window.Visible, state = false, "Closed"
             end
         end)
@@ -2230,7 +2280,7 @@ function MainMenuModule.Create(context)
     end)
 
     setSidebarExpanded(true, true)
-    selectCategory("Home", nil, true)
+    refreshNavigation()
 
     local controller = {}
     controller.Open, controller.Close, controller.Toggle = open, close, toggle

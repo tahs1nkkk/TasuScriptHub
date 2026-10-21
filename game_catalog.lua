@@ -67,7 +67,7 @@ local function getFeatures(entry)
 end
 
 local function getEntryId(entry)
-    return tostring(entry.BuiltInId or entry.PlaceId or entry.Name or "catalog-entry")
+    return tostring(entry.BuiltInId or entry.Id or entry.PlaceId or entry.Name or "catalog-entry")
 end
 
 local function getFeatureSet(featureText)
@@ -95,6 +95,7 @@ function CatalogModule.Create(context)
     assert(type(motion) == "table" and type(layout) == "table", "catalog motion/layout tokens are required")
 
     local animate = context.Animate
+    local uiRuntime = context.UIRuntime
     local playSound = context.PlaySound or function() end
     local trackConnection = context.TrackConnection or function(connection) return connection end
     local inputService = context.InputService
@@ -112,6 +113,7 @@ function CatalogModule.Create(context)
     end
 
     local function round(object, radius)
+        if uiRuntime and type(uiRuntime.Round) == "function" then return uiRuntime.Round(object, radius) end
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, radius)
         corner.Parent = object
@@ -119,6 +121,9 @@ function CatalogModule.Create(context)
     end
 
     local function outline(object, thickness, transparency, color)
+        if uiRuntime and type(uiRuntime.Outline) == "function" then
+            return uiRuntime.Outline(object, thickness, transparency, color)
+        end
         local stroke = Instance.new("UIStroke")
         stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         stroke.Color = color or theme.Base
@@ -230,6 +235,7 @@ function CatalogModule.Create(context)
         end
     end
     local activeCards, allItems, filteredItems, coverCache = {}, {}, {}, {}
+    local refreshAutoRunCards = function() end
     local virtualFirstRow, virtualCellWidth = -1, -1
     local contentLoaded, contentRevision = false, 0
 
@@ -317,7 +323,7 @@ function CatalogModule.Create(context)
     searchBox.ClearTextOnFocus = false
     searchBox.FontFace = fonts.Body
     searchBox.PlaceholderColor3 = theme.Signal
-    searchBox.PlaceholderText = "Ara..."
+    searchBox.PlaceholderText = "Search..."
     searchBox.Position = UDim2.fromOffset(0, 0)
     searchBox.Size = UDim2.new(1, -48, 1, 0)
     searchBox.Text = ""
@@ -1070,6 +1076,76 @@ function CatalogModule.Create(context)
         featureLabel.ZIndex = 3005
         featureLabel.Parent = card
 
+        local autoRunButton, renderAutoRun
+        local autoRunEligible = entry.AutoRunEligible ~= false and not entry.Placeholder and status ~= "Un-Supported"
+            and (entry.BuiltInId ~= nil or string.match(tostring(entry.Url or ""), "^https://") ~= nil
+                or (type(entry.Source) == "string" and entry.Source ~= ""))
+        if autoRunEligible then
+            featureLabel.Size = UDim2.new(1, -108, 0, 34)
+            autoRunButton = uiRuntime and type(uiRuntime.CreateButton) == "function" and uiRuntime.CreateButton(card, {
+                Name = "AutoRun",
+                Color = theme.Base,
+                Transparency = 0.16,
+                Size = UDim2.fromOffset(88, 27),
+                TextColor = theme.Signal,
+                TextSize = 11,
+                Font = fonts.HeadingHeavy,
+                ZIndex = 3009,
+                Radius = 8
+            }) or Instance.new("TextButton")
+            autoRunButton.Name = "AutoRun"
+            autoRunButton.Active = true
+            autoRunButton.AnchorPoint = Vector2.new(1, 1)
+            autoRunButton.AutoButtonColor = false
+            autoRunButton.BackgroundColor3 = theme.Base
+            autoRunButton.BackgroundTransparency = 0.16
+            autoRunButton.BorderSizePixel = 0
+            autoRunButton.FontFace = fonts.HeadingHeavy
+            autoRunButton.Position = UDim2.new(1, -9, 1, -9)
+            autoRunButton.Size = UDim2.fromOffset(88, 27)
+            autoRunButton.TextColor3 = theme.Signal
+            autoRunButton.TextSize = 11
+            autoRunButton.ZIndex = 3009
+            autoRunButton.Parent = card
+            if not uiRuntime or type(uiRuntime.CreateButton) ~= "function" then round(autoRunButton, 8) end
+            local autoRunStroke = outline(autoRunButton, 1, 0.18)
+            renderAutoRun = function(instant)
+                local selected = type(context.GetAutoRun) == "function" and context.GetAutoRun(entry) == true
+                local properties = {
+                    BackgroundColor3 = selected and theme.Success or theme.Base,
+                    BackgroundTransparency = selected and 0.02 or 0.16,
+                    TextColor3 = selected and theme.Base or theme.Signal
+                }
+                autoRunButton.Text = selected and "✓  AUTO-RUN" or "□  AUTO-RUN"
+                if instant then
+                    for property, value in pairs(properties) do autoRunButton[property] = value end
+                    autoRunStroke.Color = selected and theme.Success or theme.Signal
+                else
+                    animate(autoRunButton, properties, motion.Control, Enum.EasingStyle.Quint)
+                    animate(autoRunStroke, {Color = selected and theme.Success or theme.Signal}, motion.Control, Enum.EasingStyle.Quint)
+                end
+            end
+            cardConnect(autoRunButton.MouseEnter, function()
+                playSound("ButtonHover")
+                animate(autoRunButton, {BackgroundTransparency = 0}, motion.Control, Enum.EasingStyle.Quint)
+            end)
+            cardConnect(autoRunButton.MouseLeave, function() renderAutoRun(false) end)
+            cardConnect(autoRunButton.Activated, function()
+                if state ~= "Open" or filterOpen then return end
+                local selected = type(context.GetAutoRun) == "function" and context.GetAutoRun(entry) == true
+                local ok, message = false, "Auto-run storage is unavailable"
+                if type(context.SetAutoRun) == "function" then ok, message = context.SetAutoRun(entry, not selected) end
+                if ok then
+                    playSound("ButtonClick")
+                    refreshAutoRunCards()
+                else
+                    playSound("CatalogError")
+                    showToast(message or "Auto-run could not be changed", theme.Danger)
+                end
+            end)
+            renderAutoRun(true)
+        end
+
         local function restoreHover()
             if destroyed or not card.Parent then return end
             outcomeActive = false
@@ -1155,7 +1231,7 @@ function CatalogModule.Create(context)
                 end
             end)
         end
-        return {Slot = slot, Connections = cardConnections, ClearHover = clearHover}
+        return {Slot = slot, Connections = cardConnections, ClearHover = clearHover, RenderAutoRun = renderAutoRun}
     end
 
     local usedIds = {}
@@ -1213,6 +1289,12 @@ function CatalogModule.Create(context)
             if record.Slot and record.Slot.Parent then record.Slot:Destroy() end
         end
         table.clear(activeCards)
+    end
+
+    refreshAutoRunCards = function()
+        for _, record in ipairs(activeCards) do
+            if type(record.RenderAutoRun) == "function" then record.RenderAutoRun(false) end
+        end
     end
 
     local function renderVirtualPage(force)

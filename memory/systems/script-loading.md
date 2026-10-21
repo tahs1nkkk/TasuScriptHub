@@ -6,6 +6,8 @@ Rework requirements: separate catalog data from its view; validate HTTPS URLs an
 
 The system consumes shared theme components and never constructs a private catalog palette or modal.
 
+Premium revision 1 uses loader-owned `UI.GamePackages` as the built-in package contract. Exact `PlaceId`/`GameId` compatibility is checked before any download or compilation. The catalog can persist validated custom HTTPS/source entries in `TasuHub/catalog_v2.json`; duplicate execution locks remain keyed by stable package identity. Global Auto-run runs only after loader exit and only when the current experience exactly matches the preference record.
+
 The upper post-loader corner button opens contract-version-1 `game_catalog.lua`; the lower opens contract-version-2 `main_menu.lua`. Loader also downloads contract-version-1 `player_service.lua` before composing the main view. All are fetched from the `codex/ui-rework` raw branch and compiled through executor `loadstring`; none has a Studio or embedded legacy UI fallback.
 
 Revision 4 adds contract-version-1 `mm2_service.lua`. A concurrent loader-owned source cache fetches catalog, main, player service, MM2 view, and MM2 service once; later consumers reuse the exact cached source. Failed entries may be retried through the same narrow getter. MM2 execution returns a view controller while its context-created service owns runtime in a separate register frame.

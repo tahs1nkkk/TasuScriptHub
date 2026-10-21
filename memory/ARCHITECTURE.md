@@ -11,6 +11,8 @@
 
 `game_catalog.lua` owns catalog presentation and virtualized metadata interaction. `main_menu.lua` owns the general window, navigation/search/dropdown/card/player-row/stats-overlay presentation, and view-scoped inputs only. `player_service.lua` owns player metadata sampling, pathfinding/route ownership, camera view, TP, and targeted fling actions without constructing UI. `mm2_service.lua` owns every MM2 feature loop and overlay; `mm2.lua` owns only the shared-theme game-window presentation and controller adapter. `loader.lua` retains state/descriptors, source/audio/icon preloading, validated module execution, overlay arbitration, game-controller registration, shared contexts, and global lifecycle.
 
+Premium runtime revision 1 adds three isolated modules: `ui_runtime.lua` owns shared presentation primitives/scopes, `bind_service.lua` owns the only key router plus right-center HUD/cooldown scheduler, and `config_service.lua` owns Config V2 validation/file transactions. `UI.GamePackages` is the central built-in package manifest. Global preferences, custom catalog records, and feature configs are separate stores: `preferences_v2.json`, `catalog_v2.json`, and `configs/v2/*.json`.
+
 ## Contracts
 
 - A feature controller exposes `GetState`, `SetState`, `Enable`, `Disable`, `RefreshCharacter`, and `Destroy` as applicable.
@@ -29,6 +31,7 @@
 - Global UI preferences are loader-owned and versioned independently from feature configs. Views receive copied getters and narrow setters; no view reads/writes executor files directly.
 - The shared `ScreenGui` uses global Z-index ordering: feature overlay GUI remains in the low renderer band and application windows remain in the 2000+ interaction bands.
 - Game overlays claim a player through the loader-owned weak claim registry. While a game claim exists, the general ESP renderer hides its record for that player; release is mandatory on disable, death/removal, role loss, and destroy.
+- Game views register bind metadata and controller callbacks with `bind_service.lua`; they never create feature key listeners. Config adapters use stable `ControlId`/package IDs and apply values through controllers rather than merging raw state.
 
 ## Migration constraint
 

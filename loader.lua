@@ -370,23 +370,28 @@ local function ensureFolder(path)
     return true
 end
 
-local PREFERENCES_PATH = "TasuHub/preferences_v1.json"
+local PREFERENCES_PATH = "TasuHub/preferences_v2.json"
+local LEGACY_PREFERENCES_PATH = "TasuHub/preferences_v1.json"
 local Preferences = {
-    Version = 1,
+    Version = 2,
     ThemeName = Defaults.Interface.ThemeName,
-    Favorites = {}
+    Favorites = {},
+    AutoRunByGame = {}
 }
-
 local function loadPreferences()
     if not capabilities.Files then return false end
     local isfile = resolveGlobal("isfile")
-    if type(isfile) == "function" and not isfile(PREFERENCES_PATH) then return false end
     local readfile = resolveGlobal("readfile")
     if type(readfile) ~= "function" then return false end
-    local readOk, raw = pcall(readfile, PREFERENCES_PATH)
+    local sourcePath = PREFERENCES_PATH
+    if type(isfile) == "function" and not isfile(sourcePath) then
+        sourcePath = LEGACY_PREFERENCES_PATH
+        if not isfile(sourcePath) then return false end
+    end
+    local readOk, raw = pcall(readfile, sourcePath)
     if not readOk or type(raw) ~= "string" or raw == "" then return false end
     local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
-    if not decodeOk or type(decoded) ~= "table" or decoded.Version ~= 1 then return false end
+    if not decodeOk or type(decoded) ~= "table" or (decoded.Version ~= 1 and decoded.Version ~= 2) then return false end
     if type(decoded.ThemeName) == "string" and decoded.ThemeName ~= "" then
         Preferences.ThemeName = decoded.ThemeName
     end
@@ -395,7 +400,14 @@ local function loadPreferences()
             if enabled == true then Preferences.Favorites[tostring(id)] = true end
         end
     end
-    return true
+    if decoded.Version == 2 and type(decoded.AutoRunByGame) == "table" then
+        for gameKey, entryId in pairs(decoded.AutoRunByGame) do
+            if tostring(gameKey) ~= "" and tostring(entryId) ~= "" then
+                Preferences.AutoRunByGame[tostring(gameKey)] = tostring(entryId)
+            end
+        end
+    end
+    return sourcePath == LEGACY_PREFERENCES_PATH
 end
 
 local function savePreferences()
@@ -403,15 +415,16 @@ local function savePreferences()
     local writefile = resolveGlobal("writefile")
     if type(writefile) ~= "function" then return false end
     local encodeOk, encoded = pcall(HttpService.JSONEncode, HttpService, {
-        Version = 1,
+        Version = 2,
         ThemeName = Preferences.ThemeName,
-        Favorites = Preferences.Favorites
+        Favorites = Preferences.Favorites,
+        AutoRunByGame = Preferences.AutoRunByGame
     })
     if not encodeOk then return false end
     return pcall(writefile, PREFERENCES_PATH, encoded)
 end
 
-loadPreferences()
+if loadPreferences() then savePreferences() end
 State.Interface.ThemeName = Preferences.ThemeName
 
 local guiParent
@@ -484,6 +497,16 @@ local UI = {
         PlayerTeleport = ""
     },
     MainIconAssets = {},
+    BindIconUrls = {
+        Generic = "rbxasset://textures/ui/Settings/MenuBarIcons/GameSettingsTab.png",
+        Toggle = "rbxasset://textures/ui/Settings/MenuBarIcons/GameSettingsTab.png",
+        Action = "rbxasset://textures/ui/Settings/MenuBarIcons/HelpTab.png",
+        MM2PickupGun = "rbxasset://textures/ui/TopBar/inventoryOff.png",
+        MM2ShootNow = "rbxasset://textures/ui/MouseLockCursor.png",
+        MM2AutoFire = "rbxasset://textures/ui/MouseLockCursor.png",
+        MM2AutoPickup = "rbxasset://textures/ui/TopBar/inventoryOff.png"
+    },
+    BindIconAssets = {},
     CornerButtons = {},
     CornerButtonActions = {},
     GameActionButtons = {},
@@ -503,6 +526,11 @@ local UI = {
     IconLibrary = {},
     DesignTokens = {
         Palette = ReworkPalette,
+        DataColors = {
+            Murderer = Color3.fromRGB(239, 86, 92),
+            Sheriff = Color3.fromRGB(86, 139, 235),
+            Innocent = Color3.fromRGB(79, 224, 141)
+        },
         Canvas = ReworkPalette.Base,
         Surface = ReworkPalette.Layer,
         ControlIdle = ReworkPalette.Layer,
@@ -661,6 +689,13 @@ local UI = {
         }
     }
 }
+UI.AssetManifest = table.freeze({
+    Brand = UI.IconAssets,
+    Actions = UI.ActionIconUrls,
+    Main = UI.MainIconUrls,
+    Categories = UI.CategoryIconUrls,
+    BindHUD = UI.BindIconUrls
+})
 
 UI.LoadRobloxThumbnailAsset = function(assetId, path)
     if not capabilities.Http or not capabilities.Files or not capabilities.CustomAsset then
@@ -739,6 +774,35 @@ UI.ResolveMainIconAsset = function(name)
     return resolved
 end
 
+UI.ResolveBindIconAsset = function(name)
+    local raw = tostring(UI.BindIconUrls[tostring(name or "")] or UI.BindIconUrls.Generic or "")
+    if raw == "" then return "" end
+    local cacheKey = tostring(name or "Generic") .. "|" .. raw
+    if UI.BindIconAssets[cacheKey] ~= nil then return UI.BindIconAssets[cacheKey] end
+    local resolved = ""
+    local hash = 5381
+    for index = 1, #raw do hash = (hash * 33 + string.byte(raw, index)) % 2147483647 end
+    local cachePath = "TasuHub/Icons/Bind_" .. tostring(hash) .. ".png"
+    if string.match(raw, "^%d+$") then
+        resolved = UI.LoadRobloxThumbnailAsset(tonumber(raw), cachePath) or ""
+    elseif string.match(raw, "^rbxassetid://%d+$") or string.match(raw, "^rbxasset://") then
+        resolved = raw
+    elseif string.match(raw, "^https?://") then
+        resolved = loadRemoteAsset(raw, cachePath) or ""
+    end
+    if resolved ~= "" then UI.BindIconAssets[cacheKey] = resolved end
+    return resolved
+end
+
+UI.SetBindIcon = function(name, source)
+    name = tostring(name or "")
+    if name == "" then return false end
+    UI.BindIconUrls[name] = tostring(source or "")
+    table.clear(UI.BindIconAssets)
+    if UI.BindService then UI.BindService.Refresh() end
+    return true
+end
+
 UI.PlaySound = function(name, overrides)
     local preset = UI.AudioLibrary[name]
     if type(preset) ~= "table" or type(preset.Id) ~= "string" or preset.Id == "" then
@@ -778,6 +842,7 @@ end
 
 UI.PreloadCriticalAssets = function(extraInstances)
     local targets = {}
+    local seenImages = {}
     for name, preset in pairs(UI.AudioLibrary) do
         if type(preset) == "table" and type(preset.Id) == "string" and preset.Id ~= "" then
             local template = UI.AudioTemplates[name]
@@ -801,6 +866,18 @@ UI.PreloadCriticalAssets = function(extraInstances)
             image.Image = object
             image.BackgroundTransparency = 1
             table.insert(targets, image)
+            seenImages[object] = true
+        end
+    end
+    for _, source in pairs(UI.BindIconUrls) do
+        source = tostring(source or "")
+        if source ~= "" and not seenImages[source]
+            and (source:match("^rbxasset://") or source:match("^rbxassetid://")) then
+            local image = trackInstance(Instance.new("ImageLabel"))
+            image.Image = source
+            image.BackgroundTransparency = 1
+            table.insert(targets, image)
+            seenImages[source] = true
         end
     end
     if #targets == 0 then return true end
@@ -893,6 +970,10 @@ UI.Register = function(flag, control)
     end
     control.SectionOrder = control.SectionOrder or (sectionKey and UI.SectionRegistrationOrders[sectionKey])
     control.MainCategory = control.MainCategory or category
+    control.ControlId = control.ControlId or ("global." .. string.lower(tostring(flag))
+        :gsub("[^%w]+", ".")
+        :gsub("^%.*", "")
+        :gsub("%.*$", ""))
     UI.Flags[flag] = control
     UI.Controls[flag] = control
     control.Flag = flag
@@ -1702,14 +1783,21 @@ do
             + (count - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap)
             + stackPadding * 2
     end
+    local function calculateHorizontalStackWidth()
+        local count = math.max(2, #UI.CornerButtons)
+        return tokens.CornerButtonHoverSize
+            + (count - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap)
+            + stackPadding * 2
+    end
     local stackHeight = calculateStackHeight()
+    local horizontalStackWidth = calculateHorizontalStackWidth()
     local sideRailWidth = stackWidth + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
-    local capRailHeight = stackHeight + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
+    local capRailHeight = stackWidth + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
     local applyCornerDock = function() end
     local beginCornerDockDrag = function() end
 
-    UI.CornerDockSide = "Right"
-    UI.CornerDockRatio = 1
+    UI.CornerDockSide = "Bottom"
+    UI.CornerDockRatio = 0.08
     UI.CornerButtonsHidden = false
     UI.CornerButtonToggleRevision = 0
     UI.CornerRailSuppressClickUntil = 0
@@ -1866,7 +1954,7 @@ do
     createCornerButton(1, UI.CornerButtonDefinitions[1].Name, tokens.Surface, tokens.Canvas)
     createCornerButton(2, UI.CornerButtonDefinitions[2].Name, tokens.Surface, tokens.Canvas)
 
-    local function refreshCornerButtonLayout(redock)
+    local function orderedCornerButtons()
         local ordered = {}
         for _, record in ipairs(UI.CornerButtons) do
             if record.IsGameAction then table.insert(ordered, record) end
@@ -1874,16 +1962,37 @@ do
         for _, record in ipairs(UI.CornerButtons) do
             if not record.IsGameAction then table.insert(ordered, record) end
         end
+        return ordered
+    end
+
+    local function layoutCornerButtons(side)
+        local ordered = orderedCornerButtons()
+        local horizontal = side == "Top" or side == "Bottom"
         for displayIndex, record in ipairs(ordered) do
-            record.Button.Position = UDim2.fromOffset(
-                stackPadding + tokens.CornerButtonHoverSize * 0.5,
-                stackPadding + tokens.CornerButtonHoverSize * 0.5
-                    + (displayIndex - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap)
-            )
+            if horizontal then
+                record.Button.Position = UDim2.fromOffset(
+                    stackPadding + tokens.CornerButtonHoverSize * 0.5
+                        + (displayIndex - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap),
+                    stackPadding + tokens.CornerButtonHoverSize * 0.5
+                )
+            else
+                record.Button.Position = UDim2.fromOffset(
+                    stackPadding + tokens.CornerButtonHoverSize * 0.5,
+                    stackPadding + tokens.CornerButtonHoverSize * 0.5
+                        + (displayIndex - 1) * (tokens.CornerButtonSize + tokens.CornerButtonGap)
+                )
+            end
         end
+        UI.CornerButtonStack.Size = horizontal
+            and UDim2.fromOffset(horizontalStackWidth, stackWidth)
+            or UDim2.fromOffset(stackWidth, stackHeight)
+    end
+
+    local function refreshCornerButtonLayout(redock)
         stackHeight = calculateStackHeight()
-        capRailHeight = stackHeight + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
-        UI.CornerButtonStack.Size = UDim2.fromOffset(stackWidth, stackHeight)
+        horizontalStackWidth = calculateHorizontalStackWidth()
+        capRailHeight = stackWidth + tokens.CornerRailToggleGap + tokens.CornerRailToggleThickness
+        layoutCornerButtons(UI.CornerDockSide)
         if redock then applyCornerDock(UI.CornerDockSide, UI.CornerDockRatio) end
     end
     refreshCornerButtonLayout(false)
@@ -1999,13 +2108,11 @@ do
     local function getCornerToggleArrowRotation(side, hidden)
         local outwardRotation = {
             Left = 180,
-            Right = 0,
             Top = -90,
             Bottom = 90
         }
         local inwardRotation = {
             Left = 0,
-            Right = 180,
             Top = 90,
             Bottom = -90
         }
@@ -2027,6 +2134,7 @@ do
     end
 
     local function getDockLayout(side)
+        layoutCornerButtons(side)
         if side == "Left" then
             return {
                 RootSize = Vector2.new(sideRailWidth, stackHeight),
@@ -2040,38 +2148,29 @@ do
             }
         elseif side == "Top" then
             return {
-                RootSize = Vector2.new(stackWidth, capRailHeight),
+                RootSize = Vector2.new(horizontalStackWidth, capRailHeight),
                 StackVisible = UDim2.fromOffset(0, tokens.CornerRailToggleThickness + tokens.CornerRailToggleGap),
-                StackHidden = UDim2.fromOffset(0, -stackHeight),
-                TogglePosition = UDim2.fromOffset((stackWidth - tokens.CornerRailToggleLength) * 0.5, 0),
+                StackHidden = UDim2.fromOffset(0, -stackWidth),
+                TogglePosition = UDim2.fromOffset((horizontalStackWidth - tokens.CornerRailToggleLength) * 0.5, 0),
                 ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleLength, tokens.CornerRailToggleThickness)
             }
         elseif side == "Bottom" then
             return {
-                RootSize = Vector2.new(stackWidth, capRailHeight),
+                RootSize = Vector2.new(horizontalStackWidth, capRailHeight),
                 StackVisible = UDim2.fromOffset(0, 0),
                 StackHidden = UDim2.fromOffset(0, capRailHeight),
                 TogglePosition = UDim2.fromOffset(
-                    (stackWidth - tokens.CornerRailToggleLength) * 0.5,
+                    (horizontalStackWidth - tokens.CornerRailToggleLength) * 0.5,
                     capRailHeight - tokens.CornerRailToggleThickness
                 ),
                 ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleLength, tokens.CornerRailToggleThickness)
             }
         end
-        return {
-            RootSize = Vector2.new(sideRailWidth, stackHeight),
-            StackVisible = UDim2.fromOffset(0, 0),
-            StackHidden = UDim2.fromOffset(sideRailWidth, 0),
-            TogglePosition = UDim2.fromOffset(
-                sideRailWidth - tokens.CornerRailToggleThickness,
-                (stackHeight - tokens.CornerRailToggleLength) * 0.5 + tokens.CornerRailToggleOffsetY
-            ),
-            ToggleSize = UDim2.fromOffset(tokens.CornerRailToggleThickness, tokens.CornerRailToggleLength)
-        }
+        return getDockLayout("Left")
     end
 
     applyCornerDock = function(side, ratio)
-        side = table.find({"Left", "Right", "Top", "Bottom"}, side) and side or "Right"
+        side = table.find({"Left", "Top", "Bottom"}, side) and side or "Bottom"
         ratio = math.clamp(tonumber(ratio) or 0.5, 0, 1)
         UI.CornerDockSide = side
         UI.CornerDockRatio = ratio
@@ -2079,9 +2178,9 @@ do
         local canvas = getCanvasSize()
         local margin = tokens.CornerDockTravelMargin
         local rootX, rootY
-        if side == "Left" or side == "Right" then
+        if side == "Left" then
             local travel = math.max(0, canvas.Y - layout.RootSize.Y - margin * 2)
-            rootX = side == "Left" and 0 or math.max(0, canvas.X - layout.RootSize.X)
+            rootX = 0
             rootY = margin + travel * ratio
         else
             local travel = math.max(0, canvas.X - layout.RootSize.X - margin * 2)
@@ -2193,13 +2292,12 @@ do
         )
         local distances = {
             Left = point.X,
-            Right = canvas.X - point.X,
             Top = point.Y,
             Bottom = canvas.Y - point.Y
         }
         local side = "Left"
         local nearest = distances.Left
-        for _, candidate in ipairs({"Right", "Top", "Bottom"}) do
+        for _, candidate in ipairs({"Top", "Bottom"}) do
             if distances[candidate] < nearest then
                 side = candidate
                 nearest = distances[candidate]
@@ -2208,7 +2306,7 @@ do
         local layout = getDockLayout(side)
         local margin = tokens.CornerDockTravelMargin
         local ratio
-        if side == "Left" or side == "Right" then
+        if side == "Left" then
             local travel = math.max(1, canvas.Y - layout.RootSize.Y - margin * 2)
             ratio = math.clamp((point.Y - layout.RootSize.Y * 0.5 - margin) / travel, 0, 1)
         else
@@ -2306,7 +2404,7 @@ do
         return record
     end
 
-    applyCornerDock("Right", 1)
+    applyCornerDock("Bottom", 0.08)
 
     UI.ShowCornerButtons = function()
         if not UI.CornerActionRail or not UI.CornerActionRail.Parent then
@@ -2593,6 +2691,9 @@ end
 UI.RefreshStatsWindow = function()
     if UI.MainMenuController and type(UI.MainMenuController.Refresh) == "function" then
         pcall(UI.MainMenuController.Refresh)
+    end
+    if UI.BindService and type(UI.BindService.Refresh) == "function" then
+        pcall(UI.BindService.Refresh)
     end
 end
 local statsElapsed, statsFrames, statsFPS = 0, 0, 0
@@ -5540,7 +5641,7 @@ trackConnection(UserInputService.JumpRequest:Connect(function()
 end))
 
 trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
-    if pendingKeybind then
+    if not UI.BindService and pendingKeybind then
         if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
         local bind = pendingKeybind
         pendingKeybind = nil
@@ -5578,7 +5679,7 @@ trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
     if processed then
         return
     end
-    if input.UserInputType == Enum.UserInputType.Keyboard then
+    if not UI.BindService and input.UserInputType == Enum.UserInputType.Keyboard then
         for id, assignedKey in pairs(State.Keybinds) do
             if assignedKey == input.KeyCode.Name and keybindActions[id] then
                 keybindActions[id]()
@@ -5601,7 +5702,7 @@ trackConnection(UserInputService.InputBegan:Connect(function(input, processed)
             end
         end
     end
-    if input.KeyCode == Enum.KeyCode.RightShift then
+    if UI.LegacyUIEnabled and input.KeyCode == Enum.KeyCode.RightShift then
         if ContentWindow.Visible then
             closeContentWindow()
         else
@@ -6676,20 +6777,24 @@ local waypointBindLayout = Instance.new("UIListLayout")
 waypointBindLayout.FillDirection = Enum.FillDirection.Horizontal
 waypointBindLayout.Padding = UDim.new(0, 10)
 waypointBindLayout.Parent = waypointBindRow
-for _, bindData in ipairs({
+UI.CreateWaypointBindButtons = function(row, definitions)
+    for _, bindData in ipairs(definitions) do
+        local bindId = "Waypoints/Waypoints/" .. bindData[1]
+        local bindButton = button(row, bindData[2] .. ": " .. (State.Keybinds[bindId] or "Bind"), UDim2.new(1 / 3, -7, 0, 32))
+        bindButton.TextSize = 13
+        keybindActions[bindId] = bindData[3]
+        bindButton.Activated:Connect(function()
+            pendingKeybind = {Id = bindId, Button = bindButton, Prefix = bindData[2] .. ": "}
+            bindButton.Text = bindData[2] .. ": ..."
+        end)
+    end
+end
+UI.CreateWaypointBindButtons(waypointBindRow, {
     {"WaypointSave", "Save", saveWaypoint},
     {"WaypointTeleport", "Teleport", teleportWaypoint},
     {"WaypointDelete", "Delete", deleteWaypoint}
-}) do
-    local bindId = "Waypoints/Waypoints/" .. bindData[1]
-    local bindButton = button(waypointBindRow, bindData[2] .. ": " .. (State.Keybinds[bindId] or "Bind"), UDim2.new(1 / 3, -7, 0, 32))
-    bindButton.TextSize = 13
-    keybindActions[bindId] = bindData[3]
-    bindButton.Activated:Connect(function()
-        pendingKeybind = {Id = bindId, Button = bindButton, Prefix = bindData[2] .. ": "}
-        bindButton.Text = bindData[2] .. ": ..."
-    end)
-end
+})
+UI.CreateWaypointBindButtons = nil
 UI.Register("Waypoints/Waypoints/Save Current Position", {Kind = "Action", DisplayLabel = "Save Current Position", Instance = UI.WaypointSave, Activate = saveWaypoint})
 UI.Register("Waypoints/Waypoints/Teleport to Waypoint", {Kind = "Action", DisplayLabel = "Teleport to Waypoint", Instance = UI.WaypointTeleport, Activate = teleportWaypoint})
 UI.Register("Waypoints/Waypoints/Delete Selected Waypoint", {Kind = "Action", DisplayLabel = "Delete Selected Waypoint", Instance = UI.WaypointDelete, Activate = deleteWaypoint})
@@ -6734,12 +6839,33 @@ local function parsePlaceId(value)
     return matched and tonumber(matched) or nil
 end
 
-local MM2_CATALOG_URL = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/mm2.lua"
+UI.MM2CatalogUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/mm2.lua"
 UI.GameCatalogModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/game_catalog.lua"
 UI.MainMenuModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/main_menu.lua"
 UI.PlayerServiceModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/player_service.lua"
 UI.MM2ServiceModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/mm2_service.lua"
+UI.UIRuntimeModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/ui_runtime.lua"
+UI.BindServiceModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/bind_service.lua"
+UI.ConfigServiceModuleUrl = "https://raw.githubusercontent.com/tahs1nkkk/TasuScriptHub/refs/heads/codex/ui-rework/config_service.lua"
 UI.CatalogExecutionLocks = {}
+UI.GamePackages = table.freeze({
+    mm2 = table.freeze({
+        Id = "mm2",
+        Name = "Murder Mystery 2",
+        Scope = "Experience",
+        PlaceIds = table.freeze({142823291}),
+        GameIds = table.freeze({}),
+        Status = "Stable",
+        FilterTags = table.freeze({"ESP", "AIM", "FARM"}),
+        IconKey = "MM2GameIcon",
+        BannerKey = "MM2Banner",
+        ViewSource = UI.MM2CatalogUrl,
+        ServiceSource = UI.MM2ServiceModuleUrl,
+        AutoRunEligible = true,
+        ContractVersion = 1,
+        MinimumHubVersion = "0.1"
+    })
+})
 
 UI.GetRemoteSource = function(url)
     url = tostring(url or "")
@@ -6762,7 +6888,10 @@ do
         UI.MainMenuModuleUrl,
         UI.PlayerServiceModuleUrl,
         UI.MM2ServiceModuleUrl,
-        MM2_CATALOG_URL
+        UI.UIRuntimeModuleUrl,
+        UI.BindServiceModuleUrl,
+        UI.ConfigServiceModuleUrl,
+        UI.MM2CatalogUrl
     }
     local pending = #urls
     for _, url in ipairs(urls) do
@@ -6772,6 +6901,102 @@ do
         end)
     end
     while pending > 0 and not unloaded do task.wait() end
+end
+
+UI.UIRuntimeModule, UI.BindServiceModule, UI.ConfigServiceModule = (function()
+    local function loadModule(url, chunkName, expectedVersion)
+        if not capabilities.LoadString then return nil, "executor loadstring capability is unavailable" end
+        local source, requestError = UI.GetRemoteSource(url)
+        if type(source) ~= "string" or source == "" then return nil, requestError end
+        local chunk, compileError = loadstring(source, "@TasuHub/" .. chunkName)
+        if not chunk then return nil, chunkName .. " compile error: " .. tostring(compileError) end
+        local loaded, module = pcall(chunk)
+        if not loaded then return nil, chunkName .. " runtime error: " .. tostring(module) end
+        if type(module) ~= "table" or module.Version ~= expectedVersion or type(module.Create) ~= "function" then
+            return nil, chunkName .. " contract/version mismatch"
+        end
+        return module
+    end
+    local uiRuntime, uiError = loadModule(UI.UIRuntimeModuleUrl, "ui_runtime.lua", 1)
+    local bindService, bindError = loadModule(UI.BindServiceModuleUrl, "bind_service.lua", 1)
+    local configService, configError = loadModule(UI.ConfigServiceModuleUrl, "config_service.lua", 2)
+    UI.UIRuntimeError, UI.BindServiceError, UI.ConfigServiceError = uiError, bindError, configError
+    return uiRuntime, bindService, configService
+end)()
+
+if UI.UIRuntimeModule then
+    UI.SharedUIRuntime = UI.UIRuntimeModule.Create({
+        Theme = {
+            Base = UI.DesignTokens.Canvas,
+            Layer = UI.DesignTokens.Surface,
+            Signal = UI.DesignTokens.TextPrimary,
+            Success = UI.DesignTokens.Success,
+            Warning = UI.DesignTokens.Warning,
+            Danger = UI.DesignTokens.Danger
+        },
+        Fonts = {Body = UI.Fonts.Description, Heading = UI.Fonts.HeadingHeavy},
+        Animate = animate,
+        TrackConnection = trackConnection
+    })
+end
+
+if UI.BindServiceModule then
+    UI.BindService = UI.BindServiceModule.Create({
+        Parent = InterfaceRoot,
+        Theme = {
+            Base = UI.DesignTokens.Canvas,
+            Layer = UI.DesignTokens.Surface,
+            Signal = UI.DesignTokens.TextPrimary,
+            Success = UI.DesignTokens.Success,
+            Warning = UI.DesignTokens.Warning,
+            Danger = UI.DesignTokens.Danger
+        },
+        Fonts = {Body = UI.Fonts.Description, Heading = UI.Fonts.HeadingHeavy},
+        InputService = UserInputService,
+        RunService = RunService,
+        Animate = animate,
+        PlaySound = UI.PlaySound,
+        ResolveIcon = UI.ResolveBindIconAsset,
+        TrackConnection = trackConnection,
+        MaxBindings = 5,
+        InitiallyVisible = false,
+        OnAssignmentsChanged = function(assignments)
+            table.clear(State.Keybinds)
+            for _, item in ipairs(assignments) do State.Keybinds[item.Id] = item.Key end
+        end
+    })
+    for bindId, action in pairs(keybindActions) do
+        local control = UI.Controls[bindId]
+        local targetId, targetAction, targetControl = bindId, action, control
+        UI.BindService.Register({
+            Id = targetId,
+            Scope = "Global",
+            Kind = targetControl and targetControl.Kind == "Action" and "Action" or "Toggle",
+            IconKey = targetControl and targetControl.BindIconKey or (targetControl and targetControl.Kind == "Action" and "Action" or "Toggle"),
+            Color = UI.DesignTokens.TextPrimary,
+            ActiveColor = UI.DesignTokens.Success,
+            GetActive = targetControl and targetControl.Kind == "Toggle" and function()
+                local ok, value = pcall(targetControl.Get, targetControl)
+                return ok and value == true
+            end or nil,
+            Invoke = function()
+                targetAction()
+                refreshControls()
+                return true
+            end
+        })
+    end
+    local initialAssignments = {}
+    local initialIds = {}
+    for id in pairs(State.Keybinds) do table.insert(initialIds, id) end
+    table.sort(initialIds)
+    for _, id in ipairs(initialIds) do
+        if #initialAssignments >= 5 then break end
+        table.insert(initialAssignments, {Id = id, Key = State.Keybinds[id]})
+    end
+    UI.BindService.ApplyAssignments(initialAssignments)
+    UI.GetKeybind = function(bindId) return UI.BindService.GetKey(bindId) end
+    UI.BeginKeybind = function(bindId, callback) return UI.BindService.BeginCapture(bindId, callback) end
 end
 
 UI.MM2ServiceModule, UI.MM2ServiceError = (function()
@@ -6787,6 +7012,8 @@ UI.MM2ServiceModule, UI.MM2ServiceError = (function()
     end
     return module
 end)()
+UI.GameServiceModules = {mm2 = UI.MM2ServiceModule}
+UI.GameServiceErrors = {mm2 = UI.MM2ServiceError}
 UI.ReportLoading(0.91, UI.MM2ServiceModule
     and "MM2 · feature service preloaded"
     or "MM2 · feature service unavailable")
@@ -6822,11 +7049,14 @@ end
 
 UI.GetGameUIContext = function(actionId)
     actionId = tostring(actionId or "")
-    local placeId = actionId == "mm2" and 142823291 or game.PlaceId
+    local package = UI.GamePackages[actionId]
+    local placeId = package and package.PlaceIds and package.PlaceIds[1] or game.PlaceId
     return {
         Parent = InterfaceRoot,
-        GameName = actionId == "mm2" and "Murder Mystery 2" or actionId,
+        UIRuntime = UI.SharedUIRuntime,
+        GameName = package and package.Name or actionId,
         PlaceId = placeId,
+        DataColors = UI.DesignTokens.DataColors,
         Theme = {
             Base = UI.DesignTokens.Canvas,
             Layer = UI.DesignTokens.Surface,
@@ -6862,10 +7092,27 @@ UI.GetGameUIContext = function(actionId)
         GetViewportSize = getCanvasSize,
         GetAnchorPoint = function() return UI.GetGameActionAnchorPoint(actionId) end,
         GetBannerAsset = function() return UI.ResolveCatalogCoverAsset(placeId) end,
-        ServiceError = UI.MM2ServiceError,
+        RegisterBind = function(descriptor)
+            if not UI.BindService then return false, UI.BindServiceError or "Bind service unavailable" end
+            return UI.BindService.Register(descriptor)
+        end,
+        UnregisterBind = function(bindId)
+            return UI.BindService and UI.BindService.Unregister(bindId) or false
+        end,
+        GetBind = function(bindId)
+            return UI.BindService and UI.BindService.GetKey(bindId) or nil
+        end,
+        BeginBind = function(bindId, callback)
+            return UI.BindService and UI.BindService.BeginCapture(bindId, callback) or false
+        end,
+        RefreshBind = function(bindId)
+            if UI.BindService then UI.BindService.Refresh(bindId) end
+        end,
+        ServiceError = UI.GameServiceErrors[actionId],
         CreateService = function(initialState)
-            if actionId ~= "mm2" or not UI.MM2ServiceModule then return nil end
-            return UI.MM2ServiceModule.Create({
+            local serviceModule = UI.GameServiceModules[actionId]
+            if type(serviceModule) ~= "table" or type(serviceModule.Create) ~= "function" then return nil end
+            return serviceModule.Create({
                 Players = Players,
                 LocalPlayer = LocalPlayer,
                 Workspace = Workspace,
@@ -6877,6 +7124,7 @@ UI.GetGameUIContext = function(actionId)
                     Layer = UI.DesignTokens.Surface,
                     Signal = UI.DesignTokens.TextPrimary
                 },
+                DataColors = UI.DesignTokens.DataColors,
                 ResolveGlobal = resolveGlobal,
                 InitialState = initialState,
                 ClaimOverlay = UI.ClaimGameOverlay,
@@ -6888,7 +7136,7 @@ end
 
 UI.RegisterGameController = function(entry, controller)
     if type(entry) ~= "table" or type(controller) ~= "table" then return nil, "game controller is missing" end
-    local actionId = tostring(entry.BuiltInId or entry.Name or entry.PlaceId or "")
+    local actionId = tostring(entry.BuiltInId or entry.Id or entry.Name or entry.PlaceId or "")
     if actionId == "" or type(controller.Open) ~= "function" then return nil, "game controller contract is invalid" end
     local toggle = controller.Toggle
     if type(toggle) ~= "function" then
@@ -6918,16 +7166,34 @@ UI.RegisterGameController = function(entry, controller)
     return function() return controller.Open() end
 end
 
+UI.GetCatalogEntryId = function(entry)
+    return tostring(type(entry) == "table" and (entry.BuiltInId or entry.Id or entry.Name or entry.PlaceId or entry.GameId) or "")
+end
+
+UI.GetCatalogScopeKey = function(entry)
+    if type(entry) ~= "table" then return nil end
+    if tonumber(entry.PlaceId) then return "place:" .. tostring(math.floor(tonumber(entry.PlaceId))) end
+    if tonumber(entry.GameId) then return "game:" .. tostring(math.floor(tonumber(entry.GameId))) end
+    return nil
+end
+
+UI.CatalogEntryMatchesCurrentGame = function(entry)
+    if type(entry) ~= "table" then return false end
+    if tonumber(entry.PlaceId) then return tonumber(entry.PlaceId) == game.PlaceId end
+    if tonumber(entry.GameId) then return tonumber(entry.GameId) == game.GameId end
+    return entry.Scope == "Global"
+end
+
 UI.ExecuteCatalogEntry = function(entry)
     if type(entry) ~= "table" then
         return {Ok = false, Message = "Invalid catalog entry"}
     end
-    local executionId = tostring(entry.BuiltInId or entry.Name or entry.PlaceId or "catalog-entry")
+    local executionId = tostring(entry.BuiltInId or entry.Id or entry.Name or entry.PlaceId or "catalog-entry")
     if UI.CatalogExecutionLocks[executionId] then
         return {Ok = false, Message = "This script is already running"}
     end
-    if entry.BuiltInId == "mm2" and game.PlaceId ~= entry.PlaceId then
-        return {Ok = false, Message = "This script only runs in Murder Mystery 2"}
+    if not UI.CatalogEntryMatchesCurrentGame(entry) then
+        return {Ok = false, Message = "This package does not support the current experience"}
     end
     if not capabilities.LoadString then
         return {Ok = false, Message = "Executor does not support script compilation"}
@@ -6939,7 +7205,7 @@ UI.ExecuteCatalogEntry = function(entry)
         end
         local remoteSource, requestError = UI.GetRemoteSource(entry.Url)
         if type(remoteSource) ~= "string" or remoteSource == "" then
-            return {Ok = false, Message = requestError or "Script indirilemedi"}
+            return {Ok = false, Message = requestError or "Script could not be downloaded"}
         end
         source = remoteSource
     end
@@ -6955,25 +7221,47 @@ UI.ExecuteCatalogEntry = function(entry)
         return {Ok = false, Message = "Runtime error: " .. tostring(runtimeResult)}
     end
     local controller = type(runtimeResult) == "table" and runtimeResult or nil
-    if not controller and entry.BuiltInId == "mm2" and type(env.TasuHubMM2) == "table" then
-        controller = env.TasuHubMM2
+    if not controller then
+        UI.CatalogExecutionLocks[executionId] = nil
+        return {Ok = false, Message = "Game package did not return a controller"}
     end
-    local activate
-    if controller then
-        local registered, registerError = UI.RegisterGameController(entry, controller)
-        if not registered then
-            UI.CatalogExecutionLocks[executionId] = nil
-            local destroy = controller.Destroy or controller.Unload
-            if type(destroy) == "function" then pcall(destroy) end
-            return {Ok = false, Message = registerError or "Game interface could not be registered"}
-        end
-        activate = registered
+    local activate, registerError = UI.RegisterGameController(entry, controller)
+    if not activate then
+        UI.CatalogExecutionLocks[executionId] = nil
+        local destroy = controller.Destroy or controller.Unload
+        if type(destroy) == "function" then pcall(destroy) end
+        return {Ok = false, Message = registerError or "Game interface could not be registered"}
     end
     return {
         Ok = true,
         Message = tostring(entry.Name or "Script") .. " launched",
         Activate = activate
     }
+end
+
+UI.RunGlobalAutoRun = function()
+    local selectedEntry
+    for _, entry in ipairs(State.Catalog) do
+        if UI.CatalogEntryMatchesCurrentGame(entry) then
+            local scopeKey = UI.GetCatalogScopeKey(entry)
+            if scopeKey and Preferences.AutoRunByGame[scopeKey] == UI.GetCatalogEntryId(entry) then
+                selectedEntry = entry
+                break
+            end
+        end
+    end
+    if not selectedEntry then
+        UI.LastAutoRunResult = {Ok = true, Skipped = true, Message = "No matching Auto-run package"}
+        return UI.LastAutoRunResult
+    end
+    local result = UI.ExecuteCatalogEntry(selectedEntry)
+    UI.LastAutoRunResult = result
+    if result and result.Ok then
+        if type(result.Activate) == "function" then pcall(result.Activate) end
+    else
+        warn("[TasuHub/AutoRun] " .. tostring(result and result.Message or "Package failed to start"))
+    end
+    return result
 end
 
 UI.ResolveCatalogCoverAsset = function(placeId)
@@ -7030,21 +7318,78 @@ UI.ResolveCatalogGameIconAsset = function(placeId)
 end
 
 local function ensureBuiltinCatalogEntries()
+    for packageId, package in pairs(UI.GamePackages) do
+        local found
+        for _, entry in ipairs(State.Catalog) do
+            if entry.BuiltInId == packageId then found = entry; break end
+        end
+        found = found or {BuiltInId = packageId}
+        found.Name = package.Name
+        found.Scope = package.Scope
+        found.PlaceId = package.PlaceIds and package.PlaceIds[1] or nil
+        found.GameId = package.GameIds and package.GameIds[1] or nil
+        found.Url = package.ViewSource
+        found.Status = package.Status
+        found.Features = package.FilterTags
+        found.IconKey = package.IconKey
+        found.BannerKey = package.BannerKey
+        found.AutoRunEligible = package.AutoRunEligible
+        found.ContractVersion = package.ContractVersion
+        found.MinimumHubVersion = package.MinimumHubVersion
+        if not table.find(State.Catalog, found) then table.insert(State.Catalog, 1, found) end
+    end
+end
+UI.SaveCustomCatalog = function()
+    if not capabilities.Files or not capabilities.Folders or not ensureFolder("TasuHub") then return false end
+    local entries = {}
     for _, entry in ipairs(State.Catalog) do
-        if entry.BuiltInId == "mm2" then
-            entry.Name = "Murder Mystery 2"
-            entry.PlaceId = 142823291
-            entry.Url = MM2_CATALOG_URL
-            return
+        if not entry.BuiltInId and not entry.Placeholder then
+            table.insert(entries, {
+                Id = tostring(entry.Id or entry.Name or entry.PlaceId or ""),
+                Name = tostring(entry.Name or "Custom Package"),
+                Scope = entry.Scope == "Global" and "Global" or "Experience",
+                PlaceId = tonumber(entry.PlaceId),
+                GameId = tonumber(entry.GameId),
+                Url = type(entry.Url) == "string" and entry.Url or nil,
+                Source = type(entry.Source) == "string" and entry.Source or nil,
+                AutoRunEligible = entry.AutoRunEligible ~= false
+            })
         end
     end
-    table.insert(State.Catalog, 1, {
-        BuiltInId = "mm2",
-        Name = "Murder Mystery 2",
-        PlaceId = 142823291,
-        Url = MM2_CATALOG_URL
-    })
+    local ok, encoded = pcall(HttpService.JSONEncode, HttpService, {Version = 1, Entries = entries})
+    local writefile = resolveGlobal("writefile")
+    if not ok or type(writefile) ~= "function" then return false end
+    return pcall(writefile, "TasuHub/catalog_v2.json", encoded)
 end
+
+UI.LoadCustomCatalog = function()
+    if not capabilities.Files then return false end
+    local isfile, readfile = resolveGlobal("isfile"), resolveGlobal("readfile")
+    if type(readfile) ~= "function" or (type(isfile) == "function" and not isfile("TasuHub/catalog_v2.json")) then return false end
+    local ok, raw = pcall(readfile, "TasuHub/catalog_v2.json")
+    if not ok or type(raw) ~= "string" then return false end
+    local decodedOk, payload = pcall(HttpService.JSONDecode, HttpService, raw)
+    if not decodedOk or type(payload) ~= "table" or payload.Version ~= 1 or type(payload.Entries) ~= "table" then return false end
+    for index, entry in ipairs(payload.Entries) do
+        if index > 100 then break end
+        if type(entry) == "table" and type(entry.Name) == "string"
+            and ((type(entry.Url) == "string" and entry.Url:match("^https://"))
+                or (type(entry.Source) == "string" and entry.Source ~= "")) then
+            table.insert(State.Catalog, {
+                Id = tostring(entry.Id or entry.Name or entry.PlaceId or index),
+                Name = entry.Name:sub(1, 96),
+                Scope = entry.Scope == "Global" and "Global" or "Experience",
+                PlaceId = tonumber(entry.PlaceId),
+                GameId = tonumber(entry.GameId),
+                Url = entry.Url,
+                Source = entry.Source,
+                AutoRunEligible = entry.AutoRunEligible ~= false
+            })
+        end
+    end
+    return true
+end
+UI.LoadCustomCatalog()
 ensureBuiltinCatalogEntries()
 
 local updateCatalogStatus = function() end
@@ -7227,7 +7572,14 @@ updateCatalogStatus = function()
         edit.Activated:Connect(function() openCatalogEditor(index) end)
         deleteButton.Activated:Connect(function()
             UI.ShowConfirm("Delete Script", "Delete “" .. tostring(entry.Name) .. "”? This cannot be undone.", function()
+                local entryId = UI.GetCatalogEntryId(entry)
                 table.remove(State.Catalog, index)
+                Preferences.Favorites[entryId] = nil
+                for scopeKey, selectedId in pairs(Preferences.AutoRunByGame) do
+                    if selectedId == entryId then Preferences.AutoRunByGame[scopeKey] = nil end
+                end
+                savePreferences()
+                UI.SaveCustomCatalog()
                 updateCatalogStatus()
             end)
         end)
@@ -7259,12 +7611,14 @@ catalogSave.Activated:Connect(function()
         return
     end
     local entry = catalogEditingIndex and State.Catalog[catalogEditingIndex] or {}
+    entry.Id = entry.Id or ("custom:" .. HttpService:GenerateGUID(false))
     entry.Name = catalogName.Text
     entry.PlaceId = placeId
     entry.Url = catalogUrl.Text
     entry.Source = catalogSource.Text
     entry.BannerAsset = nil
     if not catalogEditingIndex then table.insert(State.Catalog, entry) end
+    UI.SaveCustomCatalog()
     closeCatalogEditor()
     updateCatalogStatus()
     task.spawn(fetchBanner, entry)
@@ -7275,112 +7629,166 @@ setupCatalog()
 
 UI.ReportLoading(0.9, "Catalog · script loading system ready")
 
-local function configPayload()
-    local payload = deepCopy(State)
-    payload.Interface = {
-        Title = State.Interface.Title,
-        Accent = {
-            R = math.round(State.Interface.Accent.R * 255),
-            G = math.round(State.Interface.Accent.G * 255),
-            B = math.round(State.Interface.Accent.B * 255)
-        }
-    }
-    for _, entry in ipairs(payload.Catalog) do
-        entry.BannerAsset = nil
-    end
-    return payload
-end
-
-local function merge(target, source)
-    if type(target) ~= "table" or type(source) ~= "table" then return end
-    for key, value in pairs(source) do
-        if type(value) == "table" and type(target[key]) == "table" and key ~= "Catalog" and key ~= "Waypoints" then
-            merge(target[key], value)
-        else
-            target[key] = deepCopy(value)
-        end
-    end
-end
-
 local function saveConfig(name)
-    if not capabilities.Files or not capabilities.Folders then
-        return false, "Filesystem unsupported"
-    end
-    name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    if name == "" then return false, "Config name required" end
-    ensureFolder("configs")
-    local path = "configs/" .. sanitizeName(name) .. ".json"
-    local ok, encoded = pcall(HttpService.JSONEncode, HttpService, configPayload())
-    if not ok then return false, encoded end
-    local writefile = resolveGlobal("writefile")
-    local saved, errorMessage = pcall(writefile, path, encoded)
-    return saved, saved and path or errorMessage
+    if not UI.ConfigService then return false, UI.ConfigServiceError or "Config V2 is unavailable" end
+    return UI.ConfigService.Save(name)
 end
 
 local function loadConfig(name)
-    if not capabilities.Files then
-        return false, "Filesystem unsupported"
+    if not UI.ConfigService then return false, UI.ConfigServiceError or "Config V2 is unavailable" end
+    local ok, message, details = UI.ConfigService.Load(name)
+    if ok then
+        applyWorld()
+        refreshControls()
+        UI.RefreshStatsWindow()
+        UI.RefreshWaypointList()
     end
-    local path = "configs/" .. sanitizeName(name) .. ".json"
-    local isfile = resolveGlobal("isfile")
-    if type(isfile) == "function" and not isfile(path) then
-        return false, "Config not found"
+    return ok, message, details
+end
+
+UI.EncodeConfigValue = function(value, seen)
+    if typeof(value) == "Color3" then
+        return {__type = "Color3", R = value.R, G = value.G, B = value.B}
     end
-    local readfile = resolveGlobal("readfile")
-    local ok, raw = pcall(readfile, path)
-    if not ok then return false, raw end
-    local decodedOk, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
-    if not decodedOk or type(decoded) ~= "table" then return false, decoded end
-    if type(decoded.Interface) == "table" then
-        decoded.Interface.ThemeName = nil
-    end
-    if type(decoded.Interface) == "table" and type(decoded.Interface.Accent) == "table" then
-        local accent = decoded.Interface.Accent
-        decoded.Interface.Accent = Color3.fromRGB(
-            math.clamp(tonumber(accent.R) or 113, 0, 255),
-            math.clamp(tonumber(accent.G) or 180, 0, 255),
-            math.clamp(tonumber(accent.B) or 255, 0, 255)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return nil end
+    seen[value] = true
+    local result = {}
+    for key, child in pairs(value) do result[key] = UI.EncodeConfigValue(child, seen) end
+    seen[value] = nil
+    return result
+end
+
+UI.DecodeConfigValue = function(value)
+    if type(value) ~= "table" then return value end
+    if value.__type == "Color3" then
+        return Color3.new(
+            math.clamp(tonumber(value.R) or 0, 0, 1),
+            math.clamp(tonumber(value.G) or 0, 0, 1),
+            math.clamp(tonumber(value.B) or 0, 0, 1)
         )
     end
-    merge(State, decoded)
-    if State.Aim.Activation ~= "Right Mouse" and State.Aim.Activation ~= "Left Mouse" then
-        State.Aim.Activation = "Right Mouse"
+    local result = {}
+    for key, child in pairs(value) do result[key] = UI.DecodeConfigValue(child) end
+    return result
+end
+
+UI.GetGeneralConfigValues = function()
+    local values = {}
+    for _, control in pairs(UI.Controls) do
+        if control.ControlId and control.Kind ~= "Action" and control.Kind ~= "PlayerDropdown"
+            and control.MainCategory ~= "Configs" and control.MainCategory ~= "Waypoints"
+            and type(control.Get) == "function" then
+            local ok, value = pcall(control.Get, control)
+            if ok and value ~= nil then values[control.ControlId] = UI.EncodeConfigValue(value) end
+        end
     end
-    State.Aim.HoldRightMouse = State.Aim.Activation == "Right Mouse"
-    State.Movement.Godmode = nil
-    State.Movement.FlingPower = nil
-    State.Movement.FlingFlySpeed = nil
-    if type(State.Waypoints) ~= "table" then
-        State.Waypoints = {}
-    elseif State.Waypoints[1] ~= nil then
-        State.Waypoints = {[UI.WaypointGameKey] = State.Waypoints}
+    return values
+end
+
+UI.ApplyGeneralConfigValues = function(values)
+    local controlsById = {}
+    for _, control in pairs(UI.Controls) do
+        if control.ControlId then controlsById[control.ControlId] = control end
     end
-    State.World.FreecamSpeed = math.clamp(tonumber(State.World.FreecamSpeed) or Defaults.World.FreecamSpeed, 0.2, 50)
-    State.Interface.RGBEnabled = nil
-    State.Interface.RGBSpeed = nil
-    State.Interface.RGBSaturation = nil
-    State.Interface.RGBBrightness = nil
-    local decodedRGB = type(decoded.World) == "table" and type(decoded.World.RGB) == "table" and decoded.World.RGB or {}
-    if type(State.World.RGB) ~= "table" then State.World.RGB = {} end
-    for _, scope in ipairs({"ESP", "Aim", "World"}) do
-        State.World.RGB[scope] = deepCopy(Defaults.World.RGB[scope])
-        if type(decodedRGB[scope]) == "table" then merge(State.World.RGB[scope], decodedRGB[scope]) end
+    for controlId, encodedValue in pairs(type(values) == "table" and values or {}) do
+        local control = controlsById[controlId]
+        if control and type(control.Set) == "function" then
+            local ok, accepted, message = pcall(control.Set, control, UI.DecodeConfigValue(encodedValue))
+            if not ok or accepted == false then
+                return false, "Control " .. tostring(controlId) .. " rejected its value: " .. tostring(ok and message or accepted)
+            end
+        end
     end
-    if State.World.LightingMode == "RGB Vision" then
-        State.World.LightingMode = "Default"
-        State.World.RGB.World.Enabled = true
+    return true
+end
+
+UI.GetGameConfigValues = function()
+    local result = {}
+    for packageId, controller in pairs(UI.GameControllers) do
+        if type(controller.GetState) == "function" then
+            local ok, state = pcall(controller.GetState)
+            if ok and type(state) == "table" then result[packageId] = UI.EncodeConfigValue(state) end
+        end
     end
-    ensureBuiltinCatalogEntries()
-    State.Interface.ThemeName = Preferences.ThemeName
-    Theme = State.Interface
-    UI.ApplyTheme(Preferences.ThemeName or "Rework Dark", true)
-    applyWorld()
-    TopTitle.Text = State.Interface.Title or Theme.Title
-    updateCatalogStatus()
-    refreshControls()
-    UI.RefreshStatsWindow()
-    UI.RefreshWaypointList()
-    return true, path
+    return result
+end
+
+UI.ApplyGameConfigValues = function(values)
+    local skipped = {}
+    for packageId, state in pairs(type(values) == "table" and values or {}) do
+        local controller = UI.GameControllers[tostring(packageId)]
+        if controller and type(controller.SetState) == "function" then
+            for key, value in pairs(UI.DecodeConfigValue(state)) do
+                local ok, accepted, message = pcall(controller.SetState, key, value)
+                if not ok or accepted == false then
+                    table.insert(skipped, tostring(packageId) .. "." .. tostring(key) .. ": " .. tostring(ok and message or accepted))
+                end
+            end
+        else
+            table.insert(skipped, tostring(packageId))
+        end
+    end
+    return #skipped == 0, #skipped == 0 and nil or ("Unavailable game packages: " .. table.concat(skipped, ", "))
+end
+
+UI.EnsureConfigAutoRun = function(autoRun)
+    local scopeKey = "place:" .. tostring(game.PlaceId)
+    local selectedId = type(autoRun) == "table" and autoRun[scopeKey] or nil
+    if not selectedId then
+        scopeKey = "game:" .. tostring(game.GameId)
+        selectedId = type(autoRun) == "table" and autoRun[scopeKey] or nil
+    end
+    if not selectedId then return true end
+    if UI.GameControllers[selectedId] then return true end
+    for activeId in pairs(UI.GameControllers) do
+        return false, "Auto-run conflict with active package " .. tostring(activeId)
+    end
+    for _, entry in ipairs(State.Catalog) do
+        if UI.GetCatalogEntryId(entry) == selectedId and UI.CatalogEntryMatchesCurrentGame(entry) then
+            local result = UI.ExecuteCatalogEntry(entry)
+            return result and result.Ok == true, result and result.Message or "Game package could not be loaded"
+        end
+    end
+    return false, "Configured Auto-run package is unavailable for this experience"
+end
+
+if UI.ConfigServiceModule then
+    UI.ConfigService = UI.ConfigServiceModule.Create({
+        Root = "TasuHub/configs/v2",
+        HubVersion = UI.Version,
+        Encode = function(value) return HttpService:JSONEncode(value) end,
+        Decode = function(value) return HttpService:JSONDecode(value) end,
+        EnsureFolder = ensureFolder,
+        WriteFile = resolveGlobal("writefile"),
+        ReadFile = resolveGlobal("readfile"),
+        IsFile = resolveGlobal("isfile"),
+        ListFiles = resolveGlobal("listfiles"),
+        DeleteFile = resolveGlobal("delfile"),
+        GetGeneralValues = UI.GetGeneralConfigValues,
+        ApplyGeneralValues = UI.ApplyGeneralConfigValues,
+        GetGameValues = UI.GetGameConfigValues,
+        ApplyGameValues = UI.ApplyGameConfigValues,
+        GetBindings = function() return UI.BindService and UI.BindService.GetAssignments() or {} end,
+        ApplyBindings = function(assignments)
+            if not UI.BindService then return #assignments == 0, "Bind service unavailable" end
+            local available = {}
+            for _, item in ipairs(assignments) do
+                if UI.BindService.HasTarget(item.Id) then table.insert(available, item) end
+            end
+            return UI.BindService.ApplyAssignments(available)
+        end,
+        GetAutoRunSnapshot = function() return deepCopy(Preferences.AutoRunByGame) end,
+        EnsureAutoRun = UI.EnsureConfigAutoRun,
+        GetWaypoints = function() return UI.EncodeConfigValue(State.Waypoints) end,
+        ApplyWaypoints = function(value)
+            value = UI.DecodeConfigValue(value)
+            if type(value) ~= "table" then return false, "Waypoint state is invalid" end
+            State.Waypoints = value
+            return true
+        end
+    })
 end
 
 UI.ReportLoading(0.92, "Configs · connecting save and restore")
@@ -7402,8 +7810,8 @@ do
         UI.RefreshTheme()
     end)
 end
-local ConfigCard = createCard(ConfigPage, "Manual Config Storage")
-addNote(ConfigCard, "Files are stored in the executor's configs folder. Selecting a file loads it immediately.")
+local ConfigCard = createCard(ConfigPage, "Config V2 Storage")
+addNote(ConfigCard, "Validated configs are stored in TasuHub/configs/v2. Legacy configs remain untouched and hidden.")
 UI.SelectedConfigName = nil
 UI.ConfigStatus = addNote(ConfigCard, "Select a config or save a new one")
 UI.ConfigDropdown = UI.AddDropdown(ConfigCard, "Config File", {}, function()
@@ -7416,20 +7824,12 @@ end, function(value)
 end, false)
 
 UI.ListConfigs = function()
-    ensureFolder("configs")
-    local listfiles = resolveGlobal("listfiles")
-    if type(listfiles) ~= "function" then return {} end
-    local ok, paths = pcall(listfiles, "configs")
-    if not ok or type(paths) ~= "table" then return {} end
-    local names = {}
-    for _, path in ipairs(paths) do
-        local name = tostring(path):match("([^/\\]+)%.json$")
-        if name then table.insert(names, name) end
-    end
-    table.sort(names, function(first, second)
-        return string.lower(first) < string.lower(second)
-    end)
-    return names
+    return UI.ConfigService and UI.ConfigService.List() or {}
+end
+
+UI.DeleteConfig = function(name)
+    if not UI.ConfigService then return false, UI.ConfigServiceError or "Config V2 is unavailable" end
+    return UI.ConfigService.Delete(name)
 end
 
 UI.RefreshConfigList = function()
@@ -7450,6 +7850,15 @@ end)
 addAction(ConfigCard, "Refresh Config List", function()
     UI.RefreshConfigList()
 end)
+addAction(ConfigCard, "Delete Selected Config", function()
+    if not UI.SelectedConfigName then
+        UI.ConfigStatus.Text = "Select a config before deleting"
+        return
+    end
+    local deleted, message = UI.DeleteConfig(UI.SelectedConfigName)
+    UI.ConfigStatus.Text = deleted and "Deleted: " .. UI.SelectedConfigName or "Error: " .. tostring(message)
+    if deleted then UI.SelectedConfigName = nil; UI.RefreshConfigList() end
+end)
 addAction(ConfigCard, "Reset to Defaults", function()
     State.Movement.AntiFling = false
     State.Movement.AntiFlingMoving = false
@@ -7458,6 +7867,7 @@ addAction(ConfigCard, "Reset to Defaults", function()
     clearOrbitMotion()
     selectedPlayer = nil
     State = deepCopy(Defaults)
+    if UI.BindService then UI.BindService.ApplyAssignments({}) end
     State.Interface.ThemeName = Preferences.ThemeName
     State.World.CameraFOV = originalCameraFOV
     Theme = State.Interface
@@ -7619,6 +8029,7 @@ do
         end
         local created, controller = pcall(module.Create, {
             Parent = InterfaceRoot,
+            UIRuntime = UI.SharedUIRuntime,
             Title = "Game Catalog",
             Theme = {
                 Base = UI.DesignTokens.Canvas,
@@ -7687,6 +8098,22 @@ do
                 if id == "" then return false end
                 Preferences.Favorites[id] = enabled == true and true or nil
                 return savePreferences()
+            end,
+            GetAutoRun = function(entry)
+                local scopeKey = UI.GetCatalogScopeKey(entry)
+                local entryId = UI.GetCatalogEntryId(entry)
+                return scopeKey ~= nil and entryId ~= "" and Preferences.AutoRunByGame[scopeKey] == entryId
+            end,
+            SetAutoRun = function(entry, enabled)
+                if type(entry) ~= "table" or entry.Placeholder then return false, "This entry cannot use Auto-run" end
+                local scopeKey = UI.GetCatalogScopeKey(entry)
+                local entryId = UI.GetCatalogEntryId(entry)
+                if not scopeKey or entryId == "" then return false, "The entry has no stable game identity" end
+                if enabled == true then Preferences.AutoRunByGame[scopeKey] = entryId else
+                    if Preferences.AutoRunByGame[scopeKey] == entryId then Preferences.AutoRunByGame[scopeKey] = nil end
+                end
+                local saved = savePreferences()
+                return saved == true, saved == true and nil or "Auto-run preference could not be saved"
             end,
             RunEntry = UI.ExecuteCatalogEntry,
             ResolveCover = UI.ResolveCatalogCoverAsset
@@ -7856,7 +8283,9 @@ UI.MainMenuController, UI.MainMenuError = (function()
         end
         local created, controller = pcall(module.Create, {
             Parent = InterfaceRoot,
+            UIRuntime = UI.SharedUIRuntime,
             Title = "TasuHub",
+            DataColors = UI.DesignTokens.DataColors,
             Theme = {
                 Base = UI.DesignTokens.Canvas,
                 Layer = UI.DesignTokens.Surface,
@@ -8016,10 +8445,18 @@ unload = function()
         pcall(UI.PlayerService.Destroy)
         UI.PlayerService = nil
     end
+    if UI.BindService and type(UI.BindService.Destroy) == "function" then
+        pcall(UI.BindService.Destroy)
+        UI.BindService = nil
+    end
     table.clear(UI.StatsSubscribers)
     if UI.GameCatalogController and type(UI.GameCatalogController.Destroy) == "function" then
         pcall(UI.GameCatalogController.Destroy)
         UI.GameCatalogController = nil
+    end
+    if UI.SharedUIRuntime and type(UI.SharedUIRuntime.Destroy) == "function" then
+        pcall(UI.SharedUIRuntime.Destroy)
+        UI.SharedUIRuntime = nil
     end
     freecamState = nil
     colorCorrection.Enabled = false
@@ -8085,6 +8522,10 @@ env.TasuHub = {
     SetMainIcon = UI.SetMainIcon,
     CategoryIconUrls = UI.CategoryIconUrls,
     MainIconUrls = UI.MainIconUrls,
+    BindIconUrls = UI.BindIconUrls,
+    AssetManifest = UI.AssetManifest,
+    SetBindIcon = UI.SetBindIcon,
+    GamePackages = UI.GamePackages,
     SetActionIcon = UI.SetActionIcon,
     ActionIconUrls = UI.ActionIconUrls,
     SetCornerButtonIcon = UI.SetCornerButtonIcon,
@@ -8127,6 +8568,10 @@ env.TasuHub = {
     end,
     SaveConfig = saveConfig,
     LoadConfig = loadConfig,
+    DeleteConfig = UI.DeleteConfig,
+    ListConfigs = UI.ListConfigs,
+    GetBindings = function() return UI.BindService and UI.BindService.GetAssignments() or {} end,
+    RunGlobalAutoRun = UI.RunGlobalAutoRun,
     Unload = unload
 }
 
@@ -8186,3 +8631,5 @@ Toast.Visible = false
 UI.Ready = true
 if UI.Loader then UI.Loader:Destroy() end
 UI.ShowCornerButtons()
+if UI.BindService then UI.BindService.SetVisible(true) end
+task.defer(UI.RunGlobalAutoRun)

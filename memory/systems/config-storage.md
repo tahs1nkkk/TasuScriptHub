@@ -1,11 +1,21 @@
-# System memory: config storage
+# System memory: Config V2 and global preferences
 
-Current behavior saves and loads executor files when file APIs exist and migrates older fields.
+`config_service.lua` version 2 owns validated settings configs. UI views call its controller and never read/write files directly.
 
-Rework requirements: version every payload; whitelist serializable state; isolate migrations; validate ranges/enums; apply state through controllers; never persist transient instances, selected players, active tweens, or runtime handles.
+## Config V2
 
-Main UI revision 2 exposes compatible config dropdown, name input, save/load, overwrite, delete, and reset descriptors on `Configs`; visible unload now belongs to the Home hold control. List selection uses the shared real dropdown component. Config loading clamps legacy/current `World.FreecamSpeed` values into `0.2–50`, coerces removed `Always` aim activation to `Right Mouse`, clears removed Godmode/fling-power keys, and migrates the former flat waypoint array below the current experience key. The main window does not read executor files or mutate serialized state directly.
+- Path: `TasuHub/configs/v2/<sanitized-name>.json`.
+- Schema/version must be exactly `TasuHub.Config` / `2`; malformed JSON, unsupported schema, non-scalar trees, excessive depth/count, duplicate bind IDs/keys, or more than five binds are rejected before feature state is applied.
+- Payload contains hub/schema version, stable `ControlId → value` general settings, game-package state keyed by package ID, ordered binds, config-local Auto-run selection, and experience-keyed waypoints.
+- Color values use an explicit validated `Color3` scalar record. Instances, runtime handles, tweens, player selections, popup state, cooldown state, theme, favorites, and window positions are excluded.
+- General values are applied through registered control setters. Game values are applied through active controller `SetState`; unavailable game sections produce partial success. Config Auto-run may load the exactly matching current-experience package first, but never mutates global Auto-run preference and never silently replaces a different active package.
+- Legacy configs under `configs/` are retained but are neither listed nor read. No V1 config migration exists.
 
-Executor checks: no file API, first save, overwrite confirmation, malformed JSON, old schema migration, partial config, delete/unload boundaries, and reloading active features.
+## Global durable data
 
-Global UI preferences are intentionally separate from settings configs. `TasuHub/preferences_v1.json` is a version-1 executor file containing only the last theme name and stable catalog favorite IDs. It loads before visible UI composition, ignores incompatible versions/malformed content, and is never deleted on unload. Theme changes and favorite toggles save immediately when file APIs exist. `configPayload` omits `Interface.ThemeName`, config loading ignores legacy embedded theme names, and Reset to Defaults preserves the global preferred theme. This file is extensible for future non-feature preferences but must never contain gameplay settings.
+- `TasuHub/preferences_v2.json` stores only last theme, stable favorite IDs, and one Auto-run entry ID per exact `place:<PlaceId>` or `game:<GameId>` scope.
+- A valid `preferences_v1.json` theme/favorite file is read once when v2 is absent, copied to v2, and never deleted.
+- `TasuHub/catalog_v2.json` separately persists validated custom HTTPS/source catalog records so a selected custom Auto-run target still exists after re-execution.
+- Theme, favorites, and Auto-run save immediately when changed. Normal config load/reset never overwrites global theme/favorites/Auto-run.
+
+Executor checks: save/load/list/delete/reset; no filesystem; malformed JSON; invalid schema; more than five binds; partial game load; current/wrong experience Auto-run; global/config conflict; custom catalog reload; legacy files remaining hidden and untouched.

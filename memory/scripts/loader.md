@@ -6,7 +6,7 @@ Current responsibilities include defaults/state, capability detection, lifecycle
 
 Implemented rework step: the old card/radial loader was replaced with the approved translucent dark loader. `loader.lua` owns the 392 px TasuHub asset pipeline, staged entry, ambient icon/grid motion, 30 runtime-bound checkpoints, English status text, tracked blur, and whole-background downward/fade exit.
 
-Current presentation state: `UI.LegacyUIEnabled` is permanently false during the rebuild. The legacy top bar, content window, search, preview, stats, toast, modal entrypoints, and unload screen cannot become visible. Feature engines, state, flags, lifecycle, and executor APIs remain loaded. After the loader is destroyed, the new `InterfaceRoot` reveals two identical 70 px base buttons in a four-edge dock plus its silent visibility bar. The upper slot toggles the remote catalog controller; the lower slot toggles the remote main-menu controller. Opening one closes the other. Game controllers still prepend matching official-icon buttons.
+Current presentation state: `UI.LegacyUIEnabled` is permanently false during the rebuild. The legacy top bar, content window, search, preview, stats, toast, modal entrypoints, and unload screen cannot become visible. Feature engines, state, flags, lifecycle, and executor APIs remain loaded. After the loader is destroyed, the new `InterfaceRoot` reveals two identical 70 px base buttons in a Left/Top/Bottom-only dock plus its silent visibility bar. Default is Bottom/0.08; Right is reserved for Bind HUD. The upper slot toggles the remote catalog controller; the lower slot toggles the remote main-menu controller. Opening one closes the other. Game controllers still prepend matching official-icon buttons.
 
 `loader.lua` downloads and `loadstring`-compiles `game_catalog.lua` v1, `main_menu.lua` v2, and `player_service.lua` v1. The main context exposes ordered control descriptors, category icon resolution, control services, player snapshots/actions, and stats snapshot subscriptions without exposing `State`, `UI.Controls`, or legacy instances. Player behavior remains in its own module/register frame. Lighting/RGB descriptors are remapped to the new `Lighting` category while stable flags remain unchanged.
 
@@ -38,10 +38,19 @@ Runtime validation follows `../EXECUTOR_TESTING.md`. Visual code follows `../THE
 
 Executor verification for this pass is pending; compilation alone is not runtime acceptance.
 
+## Premium runtime revision 1
+
+- Cold-start source caching now includes `ui_runtime.lua` v1, `bind_service.lua` v1, and `config_service.lua` v2. Built-in bind PNG sources and every audio template join the pre-visible `ContentProvider` pass; loader visuals, motion, sound profile, and timing tokens are unchanged.
+- `AssetManifest` centralizes brand/action/main/category/bind icon maps. `SetBindIcon` invalidates the bind-image cache and refreshes live HUD records.
+- `GamePackages` is the built-in package manifest. MM2 catalog metadata is composed from its scope, place list, view/service sources, assets, filters, Auto-run eligibility, contract, and minimum hub version.
+- Global preferences are version 2; V1 theme/favorites migrate once. Exact-experience Auto-run is delayed until loader destruction and never requests/compiles a mismatched entry. Custom catalog records persist separately in `TasuHub/catalog_v2.json`.
+- Config V2 adapters expose stable control IDs, validated controller values, ordered binds, config-local Auto-run, and waypoints. Legacy `configs/` files remain untouched and hidden.
+- Action rail docking is restricted to Left/Top/Bottom and defaults to Bottom/0.08. Bind HUD is enabled only after loader exit and destroyed before the shared root.
+
 ## Persistence and visual-layer refinement
 
 - `ScreenGui.ZIndexBehavior` is `Global`. ESP GUI primitives remain in the 1–4 band, while catalog/main/rail/game windows retain their 2000+ bands, so cheat visuals cannot cover TasuHub windows.
-- The selected theme and catalog favorites live in the versioned global preference file `TasuHub/preferences_v1.json`. Loader reads it before visible composition and supplies copied favorite state plus a narrow save callback to the catalog. Theme application saves immediately. Normal config payloads omit the theme, legacy config theme fields are ignored, and Reset to Defaults preserves the preferred theme.
+- The selected theme, catalog favorites, and exact-experience Auto-run map live in `TasuHub/preferences_v2.json`. A valid v1 theme/favorite file migrates once without deletion. Normal Config V2 payloads omit global preferences, and Reset to Defaults preserves them.
 - Orbit player/mode descriptor host frames are explicitly assigned to `Misc/Orbit` before cloning, preventing the adapter from dropping their dropdowns as anonymous `Frame/Frame` controls.
 - Freecam look uses the captured Roblox sensitivity with coefficient `0.009`.
 - ESP box ownership uses body-only proxies with one AlwaysOnTop `BoxHandleAdornment` fill and twelve AlwaysOnTop 3D edges. `SelectionBox` and screen-GUI rectangle boxes are removed; projected bounds remain solely for the attached health bar.

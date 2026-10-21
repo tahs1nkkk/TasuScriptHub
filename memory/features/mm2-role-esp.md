@@ -2,7 +2,7 @@
 
 State: MM2 `Enabled`, `MurdererESP`, `SheriffESP`, `InnocentESP`, `AvatarCardESP`, `WeaponCardESP`.
 
-Behavior: resolves replicated role first and held Gun/Knife second. Murderer red, Sheriff blue, and Innocent white chams use constant translucent fill plus a slow pulsing AlwaysOnTop outline. Role color changes tween. Active targets claim the loader overlay registry, suppressing general ESP until release.
+Behavior: resolves replicated role first and held Gun/Knife second. Murderer red, Sheriff blue, and Innocent green chams use centralized `DataColors`, constant translucent fill, and a slow pulsing AlwaysOnTop outline. Role color changes tween. Active targets claim the loader overlay registry, suppressing general ESP until release.
 
 Avatar and weapon cards are independent, default-off stud-scaled Billboard overlays for Murderer/Sheriff only. One card centers; two are symmetric. Avatar uses the Roblox headshot thumbnail; weapon uses a sanitized visual Tool clone in a ViewportFrame and preserves the current skin.
 

@@ -1,45 +1,22 @@
-# System memory: post-loader corner action buttons
+# System memory: TasuHub action rail
 
-Status: second reworked UI system implemented; executor verification pending.
+Status: premium rail revision implemented; executor acceptance pending.
 
-## Approved composition
+## Composition
 
-- `CornerActionRail` belongs directly to the new `InterfaceRoot`; it never enters `LegacyUIRoot` and does not reveal any old window, navigation, search, toast, modal, or feature panel.
-- The rail is a four-edge dock, initially attached near the bottom of the right edge. Its dedicated `ButtonStack` begins with two 70×70 base `ImageButton` controls and prepends one matching control per successfully registered game controller. Every center position is recalculated with a fixed 18 px normal-state gap; there is no `UIListLayout` or automatic spacing path.
-- Both buttons share the exact same appearance: 16 px rounded corners, a `Layer` background at 0.18 transparency, and a 6 px `Base` outline.
-- Each base button uses a centered 48×48 `ImageLabel` with a 0.5/0.5 anchor, 0.5/0.5 position, and `Fit` scaling. The upper base slot uses Roblox decal `137753054375497` and is reserved for the games catalog. The lower base slot uses decal `83533116222028` and is reserved for the general menu. A game-action button uses the same geometry but displays the official square game icon with `Crop` scaling and a 10 px icon corner. Failed custom-asset conversion retains the direct Roblox thumbnail without changing layout.
-- The rail, stack, and buttons use `ClipsDescendants = false`. The stack reserves 76×76 hover geometry plus 8 px on every side for the 6 px outline and two additional safety pixels. No transparent/invisible parent frame may crop or constrain the visible hover expansion.
+- `CornerActionRail` is loader-owned under `InterfaceRoot`; it never reveals legacy presentation.
+- Two base 70×70 buttons launch catalog and main menu. Each loaded game controller prepends one matching official-icon button. All share the existing rounded `Layer` surface, 6 px `Base` outline, hover/press geometry, audio, drag suppression, and clipping-safe padding.
+- The visibility bar stays attached to the active viewport edge, shares the rail theme, remains silent, and rotates its arrow to communicate hide/show direction.
 
-## Motion and audio
+## Dock contract
 
-- The rail remains hidden throughout loader construction, success hold, and downward exit. Only after loader destruction does the complete rail fade from full transparency over 0.34 seconds; button geometry is not changed during reveal.
-- Pointer entry plays the short Roblox `RBLX UI Hover 02` tick (`10066936758`) at volume 0.045 and tweens that button from 70×70 to 76×76 while its icon grows from 48×48 to 52×52 over 0.22 seconds. Pointer leave restores both normal sizes.
-- Mouse/touch press briefly uses a 67×67 button and 46×46 icon; release returns both to the current hover/rest targets. Center anchors, fixed center coordinates, clipping-free containers, and padded bounds make the whole button composition expand symmetrically without automatic repositioning.
-- `UI Click 1` (`113397864512278`), formerly used on hover, now plays only on a valid button activation. Drag-suppressed activations do not play it. The former 0.12-second callback delay is removed: a valid activation invokes its registered lightweight action immediately after starting the click cue, so the catalog tween begins in the same activation call.
-- A rounded visibility bar stays flush to the selected viewport edge. It is 18×64 on left/right and 64×18 on top/bottom, uses the same `Layer`/0.18-transparency surface as the action buttons, and carries a 2 px `Base` outline. On vertical edges its center is shifted 16 px upward from the stack center. Its centered `Signal` arrow points outward while the stack is visible and inward while hidden: right uses `>`/`<`, left uses `</>`, and top/bottom rotate the same glyph into up/down directions. Edge changes update direction immediately; visibility changes tween the arrow rotation over the shared 0.22-second control motion. It has no hover or activation sound and only adjusts surface transparency for hover feedback.
-- Hiding moves `ButtonStack` and its group transparency beyond the selected edge over 0.44 seconds: negative X for left, positive X for right, negative Y for top, and positive Y for bottom. Showing reverses that exact path while the direction bar remains visible.
+- Valid regions are exactly `Left`, `Top`, and `Bottom`. The right edge is reserved for Bind HUD and can never be selected programmatically or by drag.
+- Default is `Bottom` at dock ratio `0.08`, placing the rail near the lower-left area after loader exit.
+- Left uses a vertical stack. Top and Bottom use a horizontal stack. Dynamic game buttons recalculate fixed centers and bounds without `UIListLayout`.
+- Drag chooses the nearest allowed edge only. Moving the pointer to the right side therefore resolves to whichever of Left/Top/Bottom is nearest; it never produces a Right dock.
+- Along-edge ratio is preserved across viewport changes. Hide offset and arrow orientation follow the active allowed edge.
 
-## Edge docking and dragging
+## Lifecycle and acceptance
 
-- A pointer drag beginning on either action button or on the visibility bar becomes a dock drag after 6 px of movement. A completed drag suppresses click/toggle activation for 0.25 seconds.
-- During drag, the pointer's nearest viewport edge selects `Left`, `Right`, `Top`, or `Bottom`. The rail immediately adopts that edge and follows only its legal along-edge axis; it cannot stay in the center.
-- A normalized dock ratio preserves the along-edge position across viewport-size changes. An 8 px travel margin keeps the padded hover bounds and 6 px stroke inside the screen at both edge endpoints.
-- Left/right docks use a vertical button stack with the silent direction bar flush to the screen. Top/bottom docks retain the same fixed vertical stack but place it inward from a horizontal direction bar. The hide direction and arrow state always match the active edge.
-
-## Icon and action registry
-
-- `SetCornerButtonIcon(index, assetId)` accepts slot 1 or 2, assigns `rbxassetid://<id>` immediately, then resolves the numeric Roblox asset through `UI.LoadRobloxThumbnailAsset`, caches it under `TasuHub/Icons/CornerButton<index>.png`, and replaces the source only when its revision still owns the slot. This dual executor path prevents a failed custom-asset conversion from clearing an otherwise usable Roblox source.
-- `SetCornerButtonAction(index, callback)` owns the single optional callback for each slot. `Activated` invokes it immediately; registered UI actions must begin non-blocking controller work and may not perform long synchronous feature work.
-- `RegisterGameAction(actionId, displayName, image, callback)` owns one dynamic button per stable game ID. Re-registration updates the existing record rather than duplicating it. Dynamic buttons remain ahead of the two base slots, share hover/press/audio/drag/hide behavior, and toggle only their registered game controller.
-- Slot 1's intended/current action is `Catalog`; slot 2's intended/current action is `GeneralMenu`. Each toggles its contract-version-1 remote controller from the button's live anchor. Opening either base window first closes the other, so equal-size catalog and main shells cannot overlap. Neither action unloads TasuHub.
-- `SetCornerButtonsHidden(hidden, instant)` is the single visibility path for the button stack. A revision guard prevents an older hide completion from disabling a newer show request.
-- `SetCornerDock(side, ratio)` is the programmatic dock path. `env.TasuHub` exports it with the icon/action/visibility setters, the two button records, and their semantic definitions for executor diagnostics. Feature code must use these setters rather than constructing or restyling a parallel corner button.
-
-## Lifecycle and executor acceptance
-
-- Every button, visibility-bar, global input, and viewport-resize connection is tracked by the global lifecycle owner. The arrow adds no independent connection. The rail and its descendants are destroyed with the tracked main `ScreenGui`; late asset workers verify both revision and instance ownership.
-- Execute only through the canonical executor entrypoint. Confirm no rail appears before loader exit. After loader destruction, confirm exactly two equal 70×70 base buttons appear on the right dock, retain the fixed 18 px normal gap, and never reveal legacy UI. After starting MM2, confirm exactly one matching game-action button is prepended, the entire expanded stack remains in bounds, and no duplicate appears on repeated activation.
-- Confirm each pointer entry emits only the short tick, activation emits the former click cue, and the visibility bar remains silent. Verify its resting surface matches both buttons, the vertical placement is 16 px above center, and hover changes only transparency. Only the hovered button composition may grow to 76×76/52×52; no invisible frame or 6 px outline is clipped, pointer leave returns to 70×70/48×48, and pressing uses 67×67/46×46.
-- Confirm both assigned decals appear and remain visually symmetric. Confirm the upper button toggles exactly one game-catalog window and the lower button toggles exactly one same-size main window; opening one closes the other and neither reveals legacy UI. Confirm the MM2 button shows the official rounded square icon without palette tint and toggles exactly one smaller MM2 window.
-- Drag from buttons and the bar toward all four edges. The rail must choose the nearest edge, never remain in the center or leave the viewport, preserve the along-edge position after resize, update the arrow immediately, and suppress accidental unload/toggle after dragging.
-- Hide/show repeatedly on every edge and during active transitions. The stack must clear the matching edge; the silent bar must remain flush and clickable; the arrow must point outward while open and inward while hidden (`>`/`<` on right, `</>` on left, rotated up/down on top/bottom); and stale completions must not leave the returned stack invisible. Double-execute and unload during icon resolution; no duplicate rail, stale icon, sound, bar/arrow, drag connection, or resize connection may survive.
+- Rail stays hidden through loader exit and reveals only afterward. Every input/resize connection belongs to global lifecycle; dynamic icon tasks verify ownership.
+- Confirm default bottom-left position, horizontal top/bottom layout, vertical left layout, no Right state after aggressive right-side drag or `SetCornerDock("Right")`, fixed hover gaps, silent visibility bar, game-button insertion, resize, double execution, and unload cleanup.

@@ -13,3 +13,5 @@ The view consumes service snapshots and calls `SetState`, `ShootNow`, `PickupGun
 Do not assume remote names or events remain stable. Role resolution and gun/action discovery must fail safely and report unsupported game state. Direct standalone execution without a live shared TasuHub context is intentionally rejected; supported execution is the executor-loaded catalog path.
 
 Runtime validation follows `../EXECUTOR_TESTING.md`; MM2 checks live under `../features/mm2-*`.
+
+Premium revision 1 registers every MM2 toggle plus Shoot Now/Pick Up Gun with the central Bind Manager. Stable IDs use the `mm2.*` namespace, action cooldowns are 0.75/1.0 seconds, icons are semantic manifest keys, and all registrations are removed during controller destroy. Role labels and HUD metadata consume centralized red/blue/green `DataColors`.

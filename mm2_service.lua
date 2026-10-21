@@ -93,6 +93,7 @@ function Module.Create(context)
     local TweenService = context.TweenService
     local overlayParent = assert(context.OverlayParent, "OverlayParent is required")
     local theme = assert(context.Theme, "Theme is required")
+    local roleColors = type(context.DataColors) == "table" and context.DataColors or ROLE_COLORS
     local resolveGlobal = context.ResolveGlobal or function(name)
         local environment = getgenv and getgenv() or _G
         return environment[name] or _G[name]
@@ -315,7 +316,7 @@ function Module.Create(context)
                 local character, humanoid, root = characterInfo(player)
                 local role = roleFromReplicatedState(player)
                 roleSnapshot[player] = role
-                local color = ROLE_COLORS[role]
+                local color = roleColors[role]
                 local visible = State.Enabled and roleEnabled(role) and character and root
                     and humanoid and humanoid.Health > 0 and color ~= nil
                 local record = espRecords[player]
@@ -376,7 +377,7 @@ function Module.Create(context)
         if not gunHighlight then
             gunHighlight = Instance.new("Highlight")
             gunHighlight.Name = "TasuHubMM2GunDrop"
-            gunHighlight.FillColor = ROLE_COLORS.Sheriff
+            gunHighlight.FillColor = roleColors.Sheriff
             gunHighlight.OutlineColor = Color3.fromRGB(190, 225, 255)
             gunHighlight.FillTransparency = 0.55
             gunHighlight.OutlineTransparency = 0.04

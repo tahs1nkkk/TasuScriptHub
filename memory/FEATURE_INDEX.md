@@ -5,6 +5,7 @@ This map prevents state or behavior from being lost during the rebuild.
 | Current state or subsystem | Owning memory |
 | --- | --- |
 | `Interface.*`, theme bindings, shared components, icons, animation | `THEME_RULES.md` |
+| Shared component primitives and lifecycle scopes | `scripts/ui_runtime.md`, `UI_COMPONENT_STATE_SHEET.md` |
 | Executor entrypoint and bootstrap | `scripts/loader.md`, `EXECUTOR_TESTING.md` |
 | Full-screen loading experience and live progress | `systems/loader-screen.md` |
 | Legacy visual suppression and final retirement | `systems/legacy-ui-retirement.md` |
@@ -38,11 +39,11 @@ This map prevents state or behavior from being lost during the rebuild.
 | Freecam and teleport-to-freecam | `features/world-freecam.md` |
 | `Players.Sort`, live directory, player actions | `systems/player-listing.md` |
 | `Stats.*` | `features/stats-overlay.md` |
-| `Keybinds` and bind capture | `systems/keybinds.md` |
+| `Keybinds`, bind capture, cooldowns, and right HUD | `systems/keybinds.md`, `scripts/bind_service.md` |
 | `Catalog`, source/URL execution, controller registration, dynamic game actions, built-in MM2 entry | `systems/script-loading.md`, `systems/corner-action-buttons.md` |
 | Per-experience `Waypoints` category and config state | `features/waypoints.md` |
 | Search registration/ranking/navigation | `systems/search-index.md` |
-| Config serialization, files, migrations | `systems/config-storage.md` |
+| Config V2 serialization, validation, files, preferences, and custom catalog storage | `systems/config-storage.md`, `scripts/config_service.md` |
 | MM2 shared-theme game window and controller lifecycle | `scripts/mm2.md` |
 | MM2 feature engine, state, overlays, shooting and farm lifecycle | `scripts/mm2_service.md` |
 | MM2 role ESP | `features/mm2-role-esp.md` |

@@ -9,6 +9,7 @@ This directory is the persistent source of truth for the executor-only UI rework
 - `ARCHITECTURE.md` — boundaries between bootstrap, feature engines, state, and UI.
 - `UI_REWORK_PLAN.md` — atomic migration plan from the legacy UI.
 - `DEAD_CODE_AUDIT.md` — confirmed dead, compatibility-only, and pending-removal code.
+- `UI_COMPONENT_STATE_SHEET.md` — premium component states and approved mockup geometry.
 
 ## Script memory
 
@@ -18,6 +19,9 @@ This directory is the persistent source of truth for the executor-only UI rework
 - `scripts/player_service.md`
 - `scripts/mm2.md`
 - `scripts/mm2_service.md`
+- `scripts/ui_runtime.md`
+- `scripts/bind_service.md`
+- `scripts/config_service.md`
 
 ## Retained systems to rework
 
@@ -40,4 +44,4 @@ Feature-specific files live under `features/`. Each file records current behavio
 
 ## Current gate
 
-The loader design is user-approved and closed apart from cold-start reliability. Critical sounds, the loader mark, the two base rail icons, and remote runtime sources now resolve before ready-state release; missing assets stay hidden/silent. Game-catalog revision 11 and all game windows allow unrestricted offscreen dragging and recenter only when less than 50% remains visible at reopen. Main-menu revision 2 remains on the lower base action. MM2 revision 4 separates its three-page shared-theme view from `mm2_service.lua`, which owns role chams/glow, overlay priority, cards, shooting, gun pickup/drop, and underground farm lifecycle. Bytecode compilation is complete; executor and visual acceptance are still required before merging to `main`.
+The loader design is user-approved and visually closed. Premium runtime revision 1 adds the shared UI runtime, central five-bind manager/HUD, Config V2, manifest-driven MM2 package metadata, exact-experience Auto-run, `preferences_v2.json`, and durable custom catalog records without changing loader presentation. The action rail is limited to Left/Top/Bottom and defaults near the lower-left area of the bottom edge. Executor and visual acceptance are still required before legacy presentation constructors can be removed or `main` can change.

@@ -21,13 +21,14 @@ end
 local theme, fonts = context.Theme, context.Fonts
 local motion, layout = context.Motion, context.Layout
 local animate, playSound = context.Animate, context.PlaySound or function() end
+local uiRuntime = context.UIRuntime
 local inputService = context.InputService
 local service = context.CreateService(previousState)
 if type(service) ~= "table" or type(service.GetState) ~= "function" then
     error("[TasuHub/MM2] MM2 service creation failed: " .. tostring(context.ServiceError or "unknown error"))
 end
 
-local connections, controlRenderers = {}, {}
+local connections, controlRenderers, registeredBindIds = {}, {}, {}
 local unloaded = false
 local function connect(signal, callback)
     local connection = signal:Connect(callback)
@@ -35,12 +36,16 @@ local function connect(signal, callback)
     return connection
 end
 local function round(object, radius)
+    if uiRuntime and type(uiRuntime.Round) == "function" then return uiRuntime.Round(object, radius) end
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, radius)
     corner.Parent = object
     return corner
 end
 local function outline(object, thickness, transparency, color)
+    if uiRuntime and type(uiRuntime.Outline) == "function" then
+        return uiRuntime.Outline(object, thickness, transparency, color)
+    end
     local stroke = Instance.new("UIStroke")
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Color = color or theme.Base
@@ -338,8 +343,82 @@ local function createControlBase(parent, labelText, order, height)
     return item, itemStroke, label
 end
 
-local function addToggle(parent, labelText, key, order)
-    local item, itemStroke = createControlBase(parent, labelText, order, 58)
+local function snake(value)
+    return string.lower(tostring(value or ""):gsub("(%l)(%u)", "%1_%2"):gsub("[^%w]+", "_"))
+end
+
+local function createBindControl(item, bindId)
+    if type(context.GetBind) ~= "function" or type(context.BeginBind) ~= "function" then return nil end
+    local button = Instance.new("TextButton")
+    button.AnchorPoint = Vector2.new(1, 0.5)
+    button.AutoButtonColor = false
+    button.BackgroundColor3 = theme.Layer
+    button.BackgroundTransparency = 0.08
+    button.BorderSizePixel = 0
+    button.FontFace = fonts.HeadingHeavy
+    button.Position = UDim2.new(1, -59, 0.5, 0)
+    button.Size = UDim2.fromOffset(40, 24)
+    button.Text = tostring(context.GetBind(bindId) or "Bind")
+    button.TextColor3 = theme.Signal
+    button.TextSize = 10
+    button.TextTruncate = Enum.TextTruncate.AtEnd
+    button.ZIndex = 4008
+    button.Parent = item
+    round(button, 7)
+    local scale = Instance.new("UIScale")
+    scale.Scale = 1
+    scale.Parent = button
+    connect(button.Activated, function()
+        playSound("ButtonClick")
+        button.Text = "..."
+        context.BeginBind(bindId, function(result)
+            if unloaded or not button.Parent then return end
+            result = type(result) == "table" and result or {Status = "Success"}
+            if result.Status == "Success" or result.Status == "Cleared" then
+                button.Text = tostring(context.GetBind(bindId) or "Bind")
+                button.TextColor3 = theme.Success
+                animate(scale, {Scale = 1.1}, 0.12, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+                task.delay(0.12, function()
+                    if button.Parent then
+                        animate(scale, {Scale = 1}, 0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+                        animate(button, {TextColor3 = theme.Signal}, 0.18, Enum.EasingStyle.Quint)
+                    end
+                end)
+            elseif result.Status == "Cancelled" then
+                button.Text = tostring(context.GetBind(bindId) or "Bind")
+            else
+                local resting = button.Position
+                button.Text = tostring(result.Key or result.PreviousKey or "Bind")
+                button.TextColor3 = theme.Danger
+                task.spawn(function()
+                    for _, offset in ipairs({-5, 5, -3, 3, 0}) do
+                        if not button.Parent then return end
+                        button.Position = resting + UDim2.fromOffset(offset, 0)
+                        task.wait(0.045)
+                    end
+                    if button.Parent then
+                        button.Position = resting
+                        button.Text = tostring(context.GetBind(bindId) or "Bind")
+                        animate(button, {TextColor3 = theme.Signal}, 0.18, Enum.EasingStyle.Quint)
+                    end
+                end)
+            end
+        end)
+    end)
+    return button
+end
+
+local function registerBind(descriptor)
+    if type(context.RegisterBind) ~= "function" then return false end
+    local ok = context.RegisterBind(descriptor)
+    if ok then table.insert(registeredBindIds, descriptor.Id) end
+    return ok
+end
+
+local function addToggle(parent, labelText, key, order, iconKey, color)
+    local item, itemStroke, label = createControlBase(parent, labelText, order, 58)
+    label.Size = UDim2.new(1, -122, 1, 0)
+    if typeof(color) == "Color3" then label.TextColor3 = color end
     local button = Instance.new("TextButton")
     button.AutoButtonColor = false
     button.BackgroundTransparency = 1
@@ -378,6 +457,7 @@ local function addToggle(parent, labelText, key, order)
             animate(knob, knobProperties, motion.Control, Enum.EasingStyle.Quint)
         end
         itemStroke.Color = enabled and theme.Signal or theme.Base
+        if type(context.RefreshBind) == "function" then context.RefreshBind("mm2." .. snake(key)) end
     end
     connect(button.MouseEnter, function() playSound("ButtonHover"); animate(item, {BackgroundTransparency = 0.04}, motion.Control, Enum.EasingStyle.Quint) end)
     connect(button.MouseLeave, function() animate(item, {BackgroundTransparency = 0.14}, motion.Control, Enum.EasingStyle.Quint) end)
@@ -388,12 +468,29 @@ local function addToggle(parent, labelText, key, order)
         setStatus(message or labelText, ok)
     end)
     controlRenderers[key] = render
+    local bindId = "mm2." .. snake(key)
+    registerBind({
+        Id = bindId,
+        Scope = "Game:mm2",
+        Kind = "Toggle",
+        IconKey = iconKey or "Toggle",
+        Color = color or theme.Signal,
+        ActiveColor = color or theme.Success,
+        GetActive = function() return service.GetState()[key] == true end,
+        Invoke = function()
+            local ok, message = service.SetState(key, not service.GetState()[key])
+            render(false)
+            setStatus(message or labelText, ok)
+            return ok, message
+        end
+    })
+    createBindControl(item, bindId)
     render(true)
 end
 
-local function addAction(parent, labelText, callback, order)
+local function addAction(parent, labelText, callback, order, actionId, iconKey, cooldown)
     local item, itemStroke, label = createControlBase(parent, labelText, order, 58)
-    label.Size = UDim2.new(1, -28, 1, 0)
+    label.Size = UDim2.new(1, -76, 1, 0)
     label.TextXAlignment = Enum.TextXAlignment.Center
     local button = Instance.new("TextButton")
     button.AutoButtonColor = false
@@ -416,6 +513,23 @@ local function addAction(parent, labelText, callback, order)
         local ok, message = callback()
         setStatus(message or (ok and "Action completed" or "Action unavailable"), ok)
     end)
+    local bindId = "mm2." .. tostring(actionId or snake(labelText))
+    registerBind({
+        Id = bindId,
+        Scope = "Game:mm2",
+        Kind = "Action",
+        IconKey = iconKey or "Action",
+        Color = theme.Signal,
+        ActiveColor = theme.Success,
+        Cooldown = cooldown or 0,
+        Invoke = function()
+            local ok, message = callback()
+            setStatus(message or (ok and "Action completed" or "Action unavailable"), ok)
+            return ok, message
+        end
+    })
+    local bindButton = createBindControl(item, bindId)
+    if bindButton then bindButton.Position = UDim2.new(1, -10, 0.5, 0) end
 end
 
 local function addSlider(parent, labelText, key, minimum, maximum, order)
@@ -472,16 +586,16 @@ local function addSlider(parent, labelText, key, minimum, maximum, order)
 end
 
 addToggle(pageGrids.ESP, "Main System", "Enabled", 1)
-addToggle(pageGrids.ESP, "Murderer ESP", "MurdererESP", 2)
-addToggle(pageGrids.ESP, "Sheriff ESP", "SheriffESP", 3)
-addToggle(pageGrids.ESP, "Innocent ESP", "InnocentESP", 4)
+addToggle(pageGrids.ESP, "Murderer ESP", "MurdererESP", 2, "Toggle", context.DataColors and context.DataColors.Murderer)
+addToggle(pageGrids.ESP, "Sheriff ESP", "SheriffESP", 3, "Toggle", context.DataColors and context.DataColors.Sheriff)
+addToggle(pageGrids.ESP, "Innocent ESP", "InnocentESP", 4, "Toggle", context.DataColors and context.DataColors.Innocent)
 addToggle(pageGrids.ESP, "Avatar Card", "AvatarCardESP", 5)
 addToggle(pageGrids.ESP, "Weapon Card", "WeaponCardESP", 6)
 addToggle(pageGrids.ESP, "Gun Drop ESP", "GunDropESP", 7)
-addToggle(pageGrids.AIM, "Auto Fire", "AutoFire", 1)
-addToggle(pageGrids.AIM, "Auto Pickup", "AutoPickup", 2)
-addAction(pageGrids.AIM, "Shoot Now", service.ShootNow, 3)
-addAction(pageGrids.AIM, "Pick Up Gun", service.PickupGun, 4)
+addToggle(pageGrids.AIM, "Auto Fire", "AutoFire", 1, "MM2AutoFire")
+addToggle(pageGrids.AIM, "Auto Pickup", "AutoPickup", 2, "MM2AutoPickup")
+addAction(pageGrids.AIM, "Shoot Now", service.ShootNow, 3, "shoot_now", "MM2ShootNow", 0.75)
+addAction(pageGrids.AIM, "Pick Up Gun", service.PickupGun, 4, "pickup_gun", "MM2PickupGun", 1)
 addToggle(pageGrids.FARM, "Auto Farm", "AutoFarm", 1)
 addSlider(pageGrids.FARM, "Farm Speed", "FarmSpeed", 20, 90, 2)
 addSlider(pageGrids.FARM, "Underground Offset", "UndergroundOffset", 7, 30, 3)
@@ -615,6 +729,9 @@ end)
 local unsubscribe = service.Subscribe(function(_, eventName, message, success)
     if eventName ~= "Snapshot" then setStatus(message, success) end
     for _, render in pairs(controlRenderers) do render(false) end
+    if type(context.RefreshBind) == "function" then
+        for _, bindId in ipairs(registeredBindIds) do context.RefreshBind(bindId) end
+    end
 end)
 task.spawn(function()
     if type(context.GetBannerAsset) ~= "function" then return end
@@ -630,6 +747,10 @@ local function unload()
     unloaded = true
     transitionRevision, pageRevision = transitionRevision + 1, pageRevision + 1
     if unsubscribe then pcall(unsubscribe); unsubscribe = nil end
+    if type(context.UnregisterBind) == "function" then
+        for _, bindId in ipairs(registeredBindIds) do pcall(context.UnregisterBind, bindId) end
+    end
+    table.clear(registeredBindIds)
     pcall(service.Destroy)
     for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
     table.clear(connections)
