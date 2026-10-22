@@ -1,4 +1,4 @@
-local Module = {Version = 1}
+local Module = {Version = 2}
 
 local ROLE_COLORS = table.freeze({
     Murderer = Color3.fromRGB(244, 72, 83),
@@ -102,6 +102,8 @@ function Module.Create(context)
     local releaseOverlay = context.ReleaseOverlay or function() end
 
     local initial = type(context.InitialState) == "table" and context.InitialState or {}
+    local initialUndergroundOffset = tonumber(initial.UndergroundOffset)
+    if initialUndergroundOffset == 12 then initialUndergroundOffset = 5 end
     local State = {
         Enabled = initial.Enabled == true,
         MurdererESP = initial.MurdererESP ~= false and initial.PlayerESP ~= false,
@@ -114,7 +116,7 @@ function Module.Create(context)
         AutoFire = initial.AutoFire == true,
         AutoFarm = initial.AutoFarm == true,
         FarmSpeed = math.clamp(tonumber(initial.FarmSpeed) or 55, 20, 90),
-        UndergroundOffset = math.clamp(tonumber(initial.UndergroundOffset) or 12, 7, 30)
+        UndergroundOffset = math.clamp(initialUndergroundOffset or 5, 5, 30)
     }
     local connections, subscribers, espRecords = {}, {}, {}
     local roleSnapshot, destroyed = {}, false
@@ -442,15 +444,16 @@ function Module.Create(context)
 
     local function findShootRemote(gun)
         if shotHook.ObservedRemote and shotHook.ObservedRemote.Parent then return shotHook.ObservedRemote end
-        if not gun then return nil end
-        local direct = gun:FindFirstChild("ShootGun", true)
-        if direct and direct:IsA("RemoteFunction") then shotHook.ObservedRemote = direct; return direct end
-        for _, object in ipairs(gun:GetDescendants()) do
-            if object:IsA("RemoteFunction") then
-                local lowered = string.lower(object.Name)
-                if string.find(lowered, "shoot", 1, true) or string.find(lowered, "fire", 1, true) then
-                    shotHook.ObservedRemote = object
-                    return object
+        if gun then
+            local direct = gun:FindFirstChild("ShootGun", true)
+            if direct and direct:IsA("RemoteFunction") then shotHook.ObservedRemote = direct; return direct end
+            for _, object in ipairs(gun:GetDescendants()) do
+                if object:IsA("RemoteFunction") then
+                    local lowered = string.lower(object.Name)
+                    if string.find(lowered, "shoot", 1, true) or string.find(lowered, "fire", 1, true) then
+                        shotHook.ObservedRemote = object
+                        return object
+                    end
                 end
             end
         end
@@ -888,7 +891,7 @@ function Module.Create(context)
         if key == "FarmSpeed" then
             State[key] = math.clamp(tonumber(value) or State[key], 20, 90)
         elseif key == "UndergroundOffset" then
-            State[key] = math.clamp(tonumber(value) or State[key], 7, 30)
+            State[key] = math.clamp(tonumber(value) or State[key], 5, 30)
         else
             State[key] = value == true
         end
@@ -920,6 +923,8 @@ function Module.Create(context)
         farmCache.LastBagScan = 0
         readBagState()
         local report = {
+            RoundPhase = container and "Active" or "LobbyOrPreparing",
+            LocalRole = roleFromReplicatedState(LocalPlayer),
             Gun = instancePath(gun),
             ShootRemote = instancePath(findShootRemote(gun)),
             ShootHookAvailable = installShootHook(),
@@ -931,10 +936,15 @@ function Module.Create(context)
             DecompiledShootReferences = {}
         }
         local decompileFunction = resolveGlobal("decompile")
-        if gun and type(decompileFunction) == "function" then
+        if type(decompileFunction) == "function" then
             local attempts = 0
-            for _, scope in ipairs({gun, LocalPlayer.Character, LocalPlayer:FindFirstChild("PlayerScripts")}) do
-                for _, object in ipairs(scope and scope:GetDescendants() or {}) do
+            local scopes = {}
+            if gun then table.insert(scopes, gun) end
+            if LocalPlayer.Character then table.insert(scopes, LocalPlayer.Character) end
+            local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+            if playerScripts then table.insert(scopes, playerScripts) end
+            for _, scope in ipairs(scopes) do
+                for _, object in ipairs(scope:GetDescendants()) do
                     if attempts >= 12 or #report.DecompiledShootReferences >= 4 then break end
                     if object:IsA("LocalScript") or object:IsA("ModuleScript") then
                         attempts = attempts + 1

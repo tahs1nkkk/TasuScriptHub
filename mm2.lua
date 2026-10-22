@@ -598,7 +598,7 @@ addAction(pageGrids.AIM, "Shoot Now", service.ShootNow, 3, "shoot_now", "MM2Shoo
 addAction(pageGrids.AIM, "Pick Up Gun", service.PickupGun, 4, "pickup_gun", "MM2PickupGun", 1)
 addToggle(pageGrids.FARM, "Auto Farm", "AutoFarm", 1)
 addSlider(pageGrids.FARM, "Farm Speed", "FarmSpeed", 20, 90, 2)
-addSlider(pageGrids.FARM, "Underground Offset", "UndergroundOffset", 7, 30, 3)
+addSlider(pageGrids.FARM, "Underground Offset", "UndergroundOffset", 5, 30, 3)
 
 local currentPage, pageRevision = "ESP", 0
 local function selectPage(pageId)

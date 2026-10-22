@@ -54,6 +54,8 @@ Executor-verified behavior baseline: `c23ef7c`. The isolated rework branch now c
 
 ## Confirmed removals
 
+- MM2 service revision 2: the superseded 12-stud default/7-stud minimum, Gun-required shared-remote lookup gate, and Gun-only decompiler scope are removed. Their live replacements are the 5-stud default/minimum with one-time old-default migration, no-Gun shared remote discovery, and bounded Gun/character/PlayerScripts inspection. No second farm controller, second input path, Studio shim, or unowned hook was introduced; executor acceptance remains pending.
+
 - Workspace-scale/MM2 automation correction: no duplicate per-window size workaround, second shooting loop, second farm worker, per-coin Heartbeat, or Studio compatibility branch was added. The catalog's shell-only responsive resize is superseded by one shared whole-tree scale; MM2's workspace-wide collectible scan and repeated PlayerGui scan are superseded by cached container/bag paths. The prior guessed direct `ShootGun` call remains a clearly labeled compatibility fallback and the primary path is the game-owned Tool/namecall flow. `InspectRuntime` is exported through both service and MM2 controller and therefore is not dead diagnostic code. Bytecode and reference results are recorded with the implementation commit; executor acceptance remains pending.
 
 - Loader rework: removed the radial segment spinner and legacy loader card implementation; replaced by the shared vector icon and horizontal progress system.
