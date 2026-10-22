@@ -12,7 +12,7 @@ Comfort-scale correction: the 620×420 design canvas now consumes the shared who
 
 The view consumes service snapshots and calls `SetState`, `ShootNow`, `PickupGun`, `StartFarm`, and `StopFarm`; footer feedback comes only from the service subscription. Re-execution snapshots the prior controller before unload so legacy `PlayerESP=true` migrates to Murderer/Sheriff enabled and Innocent disabled.
 
-The FARM page exposes `Underground Offset` over the service-owned `5–30 studs` range; `5` is the canonical default.
+The FARM page exposes Auto Farm and Farm Speed only. Revision 3 removes the misleading Underground Offset slider because the service now owns an invariant 7-stud underground path.
 
 Do not assume remote names or events remain stable. Role resolution and gun/action discovery must fail safely and report unsupported game state. Direct standalone execution without a live shared TasuHub context is intentionally rejected; supported execution is the executor-loaded catalog path.
 

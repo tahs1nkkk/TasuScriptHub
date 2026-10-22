@@ -1,4 +1,4 @@
-local Module = {Version = 2}
+local Module = {Version = 3}
 
 local ROLE_COLORS = table.freeze({
     Murderer = Color3.fromRGB(244, 72, 83),
@@ -70,6 +70,12 @@ end
 local function sanitizeToolClone(tool)
     local clone = tool and tool:Clone()
     if not clone then return nil end
+    if clone:IsA("BasePart") then
+        clone.Anchored = true
+        clone.CanCollide = false
+        clone.CanTouch = false
+        clone.CanQuery = false
+    end
     for _, object in ipairs(clone:GetDescendants()) do
         if object:IsA("Script") or object:IsA("LocalScript") or object:IsA("ModuleScript")
             or object:IsA("RemoteEvent") or object:IsA("RemoteFunction") then
@@ -90,6 +96,7 @@ function Module.Create(context)
     local LocalPlayer = assert(context.LocalPlayer, "LocalPlayer is required")
     local Workspace = assert(context.Workspace, "Workspace is required")
     local RunService = assert(context.RunService, "RunService is required")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local TweenService = context.TweenService
     local overlayParent = assert(context.OverlayParent, "OverlayParent is required")
     local theme = assert(context.Theme, "Theme is required")
@@ -102,8 +109,6 @@ function Module.Create(context)
     local releaseOverlay = context.ReleaseOverlay or function() end
 
     local initial = type(context.InitialState) == "table" and context.InitialState or {}
-    local initialUndergroundOffset = tonumber(initial.UndergroundOffset)
-    if initialUndergroundOffset == 12 then initialUndergroundOffset = 5 end
     local State = {
         Enabled = initial.Enabled == true,
         MurdererESP = initial.MurdererESP ~= false and initial.PlayerESP ~= false,
@@ -116,20 +121,23 @@ function Module.Create(context)
         AutoFire = initial.AutoFire == true,
         AutoFarm = initial.AutoFarm == true,
         FarmSpeed = math.clamp(tonumber(initial.FarmSpeed) or 55, 20, 90),
-        UndergroundOffset = math.clamp(initialUndergroundOffset or 5, 5, 30)
+        UndergroundOffset = 7
     }
     local connections, subscribers, espRecords = {}, {}, {}
     local roleSnapshot, destroyed = {}, false
-    local gunHighlight, heartbeatClock, lastShotAt = nil, 0, 0
+    local gunHighlight, heartbeatClock, espClock, lastShotAt = nil, 0, 0, 0
+    local cachedGunDrop, lastGunDropScan = nil, 0
     local farmRevision, farmState = 0, "Stopped"
     local farmSnapshot, antiIdleConnection = nil, nil
     local avatarCache = {}
+    local defaultWeaponCache = {}
     local farmCache = {
         Map = nil,
         Container = nil,
         LastMapScan = 0,
         BagLabel = nil,
         FullBagIndicator = nil,
+        BagCapacity = 50,
         LastBagScan = 0,
         FailedUntil = setmetatable({}, {__mode = "k"})
     }
@@ -211,7 +219,7 @@ function Module.Create(context)
         cards.AlwaysOnTop = true
         cards.LightInfluence = 0
         cards.MaxDistance = 2500
-        cards.Size = UDim2.fromScale(9.8, 4.8)
+        cards.Size = UDim2.fromScale(5.88, 2.88)
         cards.Enabled = false
         cards.Parent = overlayParent
 
@@ -219,8 +227,8 @@ function Module.Create(context)
         local avatar = Instance.new("ImageLabel")
         avatar.Name = "Avatar"
         avatar.BackgroundTransparency = 1
-        avatar.Position = UDim2.fromOffset(4, 4)
-        avatar.Size = UDim2.new(1, -8, 1, -8)
+        avatar.Position = UDim2.fromOffset(2, 2)
+        avatar.Size = UDim2.new(1, -4, 1, -4)
         avatar.ScaleType = Enum.ScaleType.Crop
         avatar.ZIndex = 9
         avatar.Parent = avatarCard
@@ -235,8 +243,8 @@ function Module.Create(context)
         viewport.BackgroundTransparency = 1
         viewport.LightColor = theme.Signal
         viewport.LightDirection = Vector3.new(-1, -1, -1)
-        viewport.Position = UDim2.fromOffset(4, 4)
-        viewport.Size = UDim2.new(1, -8, 1, -8)
+        viewport.Position = UDim2.fromOffset(2, 2)
+        viewport.Size = UDim2.new(1, -4, 1, -4)
         viewport.ZIndex = 9
         viewport.Parent = weaponCard
         local world = Instance.new("WorldModel")
@@ -289,20 +297,44 @@ function Module.Create(context)
         end)
     end
 
-    local function renderWeapon(record, tool)
-        if record.Weapon == tool then return end
-        record.Weapon = tool
+    local function findDefaultWeapon(role)
+        local cached = defaultWeaponCache[role]
+        if cached ~= nil then return cached ~= false and cached or nil end
+        local weaponName = role == "Murderer" and "Knife" or "Gun"
+        for _, name in ipairs({"Default" .. weaponName, weaponName}) do
+            for _, candidate in ipairs(ReplicatedStorage:GetDescendants()) do
+                if candidate.Name == name
+                    and (candidate:IsA("Tool") or candidate:IsA("Model") or candidate:IsA("BasePart"))
+                    and (candidate:IsA("BasePart") or candidate:FindFirstChildWhichIsA("BasePart", true)) then
+                    defaultWeaponCache[role] = candidate
+                    return candidate
+                end
+            end
+        end
+        defaultWeaponCache[role] = false
+        return nil
+    end
+
+    local function renderWeapon(record, tool, role)
+        local source = tool or findDefaultWeapon(role)
+        local key = source or role
+        if record.Weapon == key then return end
+        record.Weapon = key
         clearContainer(record.WeaponWorld)
-        if not tool then return end
-        local clone = sanitizeToolClone(tool)
+        if not source then return end
+        local clone = sanitizeToolClone(source)
         if not clone then return end
         clone.Parent = record.WeaponWorld
-        local handle = clone:FindFirstChild("Handle", true) or clone:FindFirstChildWhichIsA("BasePart", true)
+        local handle = clone:IsA("BasePart") and clone
+            or clone:FindFirstChild("Handle", true)
+            or clone:FindFirstChildWhichIsA("BasePart", true)
         if not handle then clone:Destroy(); return end
         local origin = handle.CFrame
+        local turnRight = CFrame.Angles(0, math.rad(90), 0)
         for _, part in ipairs(clone:GetDescendants()) do
-            if part:IsA("BasePart") then part.CFrame = origin:ToObjectSpace(part.CFrame) end
+            if part:IsA("BasePart") then part.CFrame = turnRight * origin:ToObjectSpace(part.CFrame) end
         end
+        if clone:IsA("BasePart") then clone.CFrame = turnRight end
         local size = handle.Size.Magnitude
         record.WeaponCamera.CFrame = CFrame.lookAt(Vector3.new(0, size * 0.35, math.max(3, size * 2.2)), Vector3.zero)
     end
@@ -363,7 +395,7 @@ function Module.Create(context)
                     record.Cards.StudsOffsetWorldSpace = Vector3.new(0, getAdorneeHeight(character) * 0.5 + 1.25, 0)
                     arrangeCards(record, showAvatar, showWeapon)
                     if showAvatar then requestAvatar(player, record) end
-                    if showWeapon then renderWeapon(record, findTool(player, role == "Murderer" and "Knife" or "Gun")) end
+                    if showWeapon then renderWeapon(record, findTool(player, role == "Murderer" and "Knife" or "Gun"), role) end
                 elseif record then
                     releaseOverlay(player, "mm2")
                     record.Highlight.Enabled = false
@@ -378,14 +410,22 @@ function Module.Create(context)
         end
     end
 
-    local function findGunDrop()
+    local function findGunDrop(force)
+        if cachedGunDrop and cachedGunDrop.Parent and cachedGunDrop:IsDescendantOf(Workspace) then return cachedGunDrop end
+        if not force and os.clock() - lastGunDropScan < 0.75 then return nil end
+        lastGunDropScan = os.clock()
         for _, object in ipairs(Workspace:GetDescendants()) do
-            if object.Name == "GunDrop" then return object end
+            if object.Name == "GunDrop" then cachedGunDrop = object; return object end
         end
+        cachedGunDrop = nil
         return nil
     end
 
     local function updateGunDrop()
+        if not State.Enabled or (not State.GunDropESP and not State.AutoPickup) then
+            if gunHighlight then gunHighlight.Adornee = nil; gunHighlight.Enabled = false end
+            return nil
+        end
         local drop = findGunDrop()
         if not gunHighlight then
             gunHighlight = Instance.new("Highlight")
@@ -403,7 +443,7 @@ function Module.Create(context)
     end
 
     local function requestPickup()
-        local gunDrop = findGunDrop()
+        local gunDrop = findGunDrop(true)
         local _, _, root = characterInfo(LocalPlayer)
         if not gunDrop or not root then return false, "Gun drop is unavailable" end
         local prompt = gunDrop:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -566,6 +606,8 @@ function Module.Create(context)
     end
 
     local function collectiblePart(object)
+        local transmitter = object:FindFirstChildWhichIsA("TouchTransmitter", true)
+        if transmitter and transmitter.Parent and transmitter.Parent:IsA("BasePart") then return transmitter.Parent end
         if object:IsA("BasePart") then return object end
         return object:FindFirstChildWhichIsA("BasePart", true)
     end
@@ -622,13 +664,16 @@ function Module.Create(context)
     local function scanBagGui()
         local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
         if not playerGui then return end
+        local bagContainer = findDescendantPath(playerGui, {"MainGUI", "Game", "CoinBags", "Container"})
         farmCache.BagLabel = findDescendantPath(playerGui, {
             "MainGUI", "Game", "CoinBags", "Container", "Candy", "CurrencyFrame", "Icon", "Coins"
         })
         farmCache.FullBagIndicator = nil
-        if farmCache.BagLabel and (farmCache.BagLabel:IsA("TextLabel") or farmCache.BagLabel:IsA("TextButton")) then return end
-        farmCache.BagLabel = nil
-        for _, object in ipairs(playerGui:GetDescendants()) do
+        farmCache.BagCapacity = 50
+        if not farmCache.BagLabel or (not farmCache.BagLabel:IsA("TextLabel") and not farmCache.BagLabel:IsA("TextButton")) then
+            farmCache.BagLabel = nil
+        end
+        for _, object in ipairs((bagContainer or playerGui):GetDescendants()) do
             local lowered = string.lower(object.Name)
             if not farmCache.FullBagIndicator and object:IsA("GuiObject")
                 and string.find(lowered, "fullbag", 1, true) then farmCache.FullBagIndicator = object end
@@ -636,7 +681,25 @@ function Module.Create(context)
                 string.find(lowered, "coin", 1, true) or string.find(lowered, "candy", 1, true)
                 or string.find(lowered, "token", 1, true) or string.find(lowered, "bag", 1, true)
             ) and string.match(object.Text or "", "%d+") then farmCache.BagLabel = object end
+            if object:IsA("TextLabel") or object:IsA("TextButton") then
+                local _, capacity = string.match(object.Text or "", "(%d+)%s*/%s*(%d+)")
+                if capacity then farmCache.BagCapacity = tonumber(capacity) or farmCache.BagCapacity end
+            elseif (object:IsA("IntValue") or object:IsA("NumberValue"))
+                and (string.find(lowered, "capacity", 1, true) or string.find(lowered, "maxcoin", 1, true)
+                    or string.find(lowered, "maxcandy", 1, true)) then
+                farmCache.BagCapacity = tonumber(object.Value) or farmCache.BagCapacity
+            end
         end
+    end
+
+    local function guiIsVisible(object)
+        local current = object
+        while current do
+            if current:IsA("GuiObject") and not current.Visible then return false end
+            if current:IsA("ScreenGui") and not current.Enabled then return false end
+            current = current.Parent
+        end
+        return true
     end
 
     local function readBagState()
@@ -645,7 +708,7 @@ function Module.Create(context)
             farmCache.LastBagScan = os.clock()
             scanBagGui()
         end
-        if farmCache.FullBagIndicator and farmCache.FullBagIndicator.Parent and farmCache.FullBagIndicator.Visible then
+        if farmCache.FullBagIndicator and farmCache.FullBagIndicator.Parent and guiIsVisible(farmCache.FullBagIndicator) then
             return true, nil
         end
         local label = farmCache.BagLabel
@@ -653,13 +716,14 @@ function Module.Create(context)
             local text = label.Text or ""
             local current, capacity = string.match(text, "(%d+)%s*/%s*(%d+)")
             current, capacity = tonumber(current or string.match(text, "(%d+)")), tonumber(capacity)
-            if current then return current >= (capacity or 40), current end
+            if capacity then farmCache.BagCapacity = capacity end
+            if current then return current >= (capacity or farmCache.BagCapacity or 50), current end
         end
         return false, nil
     end
 
     local function setFarmState(value, message)
-        if farmState == value and not message then return end
+        if farmState == value then return end
         farmState = value
         emit("FarmState", message or value, true)
     end
@@ -755,17 +819,20 @@ function Module.Create(context)
         local _, beforeCount = readBagState()
         local ok = pcall(function()
             touch(root, entry.Part, 0)
-            task.wait(0.04)
+            task.wait(0.02)
+            touch(root, entry.Part, 1)
+            task.wait(0.02)
+            touch(root, entry.Part, 0)
             touch(root, entry.Part, 1)
         end)
         if not ok then return false end
-        local deadline = os.clock() + 0.45
+        local deadline = os.clock() + 0.2
         repeat
             if not entry.Object.Parent or entry.Object.Parent ~= beforeParent or not entry.Part.Parent
                 or entry.Part.Transparency >= 0.95 then return true end
             local _, currentCount = readBagState()
             if beforeCount and currentCount and currentCount > beforeCount then return true end
-            task.wait(0.04)
+            task.wait(0.025)
         until os.clock() >= deadline
         return false
     end
@@ -782,29 +849,36 @@ function Module.Create(context)
         return best
     end
 
-    local function finishRound(revision)
-        local role = roleFromReplicatedState(LocalPlayer)
-        if role == "Sheriff" then
-            requestShot(false)
-        elseif role == "Murderer" then
-            local knife = findTool(LocalPlayer, "Knife")
-            equipTool(knife)
-            local stab = knife and knife:FindFirstChild("Stab", true)
-            local touch = resolveGlobal("firetouchinterest")
-            for _, player in ipairs(Players:GetPlayers()) do
-                if revision ~= farmRevision or not State.AutoFarm then break end
-                if player ~= LocalPlayer then
-                    local _, humanoid, targetRoot = characterInfo(player)
-                    if humanoid and humanoid.Health > 0 and targetRoot and moveUndergroundTo(revision, targetRoot.Position) then
-                        if stab and stab:IsA("RemoteEvent") then pcall(function() stab:FireServer() end) end
-                        local _, _, localRoot = characterInfo(LocalPlayer)
-                        if type(touch) == "function" and localRoot then
-                            pcall(function() touch(localRoot, targetRoot, 0); touch(localRoot, targetRoot, 1) end)
-                        end
-                    end
+    local function resetAndWaitForNextRound(revision)
+        local previousMap = farmCache.Map
+        restoreFarmCharacter()
+        local character, humanoid = characterInfo(LocalPlayer)
+        if humanoid and humanoid.Health > 0 then
+            pcall(function() humanoid.Health = 0 end)
+        end
+        if character and character.Parent then pcall(function() character:BreakJoints() end) end
+        farmCache.Map, farmCache.Container = nil, nil
+        farmCache.BagLabel, farmCache.FullBagIndicator = nil, nil
+        farmCache.LastMapScan, farmCache.LastBagScan = 0, 0
+        table.clear(farmCache.FailedUntil)
+        setFarmState("LobbyIdle", "Bag full; waiting in lobby")
+        local sawRoundGap = previousMap == nil
+        while not destroyed and revision == farmRevision and State.AutoFarm do
+            local map = findActiveMap(true)
+            local entries = discoverCollectibles()
+            if not map or map ~= previousMap or #entries == 0 then sawRoundGap = true end
+            if sawRoundGap and map and map ~= previousMap and #entries > 0 then
+                farmCache.BagLabel, farmCache.FullBagIndicator = nil, nil
+                farmCache.LastBagScan = 0
+                local full = readBagState()
+                if not full then
+                    setFarmState("WaitForRound", "New round detected")
+                    return true
                 end
             end
+            task.wait(0.5)
         end
+        return false
     end
 
     local function runFarm(revision)
@@ -815,29 +889,25 @@ function Module.Create(context)
                 setFarmState("WaitForRound", "Waiting for character")
                 task.wait(0.5)
             else
-                local full = readBagState()
-                if full then
-                    setFarmState("BagFull", "Bag is full")
-                    setFarmState("FinishRound", "Finishing round")
-                    finishRound(revision)
-                    task.wait(1)
+                setFarmState("DiscoverMap", "Finding collectibles")
+                local entries = discoverCollectibles()
+                if #entries == 0 then
+                    setFarmState("LobbyIdle", "Waiting in lobby")
+                    findActiveMap(true)
+                    task.wait(0.5)
                 else
-                    setFarmState("DiscoverMap", "Finding collectibles")
-                    local entries = discoverCollectibles()
-                    if #entries == 0 then
-                        setFarmState("LobbyIdle", "Waiting in lobby")
-                        findActiveMap(true)
-                        task.wait(0.75)
+                    local full = readBagState()
+                    if full then
+                        setFarmState("BagFull", "Bag is full")
+                        if not resetAndWaitForNextRound(revision) then break end
+                        failures = 0
                     else
                         setFarmState("Collect", "Collecting coins and candy")
                         local target = closestCollectible(entries, root.Position)
                         if target and moveUndergroundTo(revision, target.Part.Position) then
-                            local collected = false
-                            for _ = 1, 2 do
-                                if touchCollectible(target) then collected = true; break end
-                            end
+                            local collected = touchCollectible(target)
                             failures = collected and 0 or failures + 1
-                            if not collected then farmCache.FailedUntil[target.Object] = os.clock() + 3 end
+                            if not collected then farmCache.FailedUntil[target.Object] = os.clock() + 0.8 end
                             if failures >= 5 then
                                 failures = 0
                                 farmCache.Map, farmCache.Container = nil, nil
@@ -891,7 +961,7 @@ function Module.Create(context)
         if key == "FarmSpeed" then
             State[key] = math.clamp(tonumber(value) or State[key], 20, 90)
         elseif key == "UndergroundOffset" then
-            State[key] = math.clamp(tonumber(value) or State[key], 5, 30)
+            State[key] = 7
         else
             State[key] = value == true
         end
@@ -933,6 +1003,8 @@ function Module.Create(context)
             CollectibleCount = #discoverCollectibles(),
             BagLabel = instancePath(farmCache.BagLabel),
             BagText = farmCache.BagLabel and farmCache.BagLabel.Text or "Unavailable",
+            BagCapacity = farmCache.BagCapacity,
+            UndergroundOffset = State.UndergroundOffset,
             DecompiledShootReferences = {}
         }
         local decompileFunction = resolveGlobal("decompile")
@@ -968,8 +1040,12 @@ function Module.Create(context)
 
     connect(RunService.Heartbeat, function(deltaTime)
         heartbeatClock = heartbeatClock + deltaTime
-        local pulse = (math.sin(os.clock() * math.pi * 0.8) + 1) * 0.5
-        updateRoleESP(pulse)
+        espClock = espClock + deltaTime
+        if espClock >= 0.05 then
+            espClock = 0
+            local pulse = (math.sin(os.clock() * math.pi * 0.8) + 1) * 0.5
+            updateRoleESP(pulse)
+        end
         if heartbeatClock < 0.15 then return end
         heartbeatClock = 0
         local drop = updateGunDrop()

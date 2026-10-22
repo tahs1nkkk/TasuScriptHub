@@ -560,6 +560,7 @@ local UI = {
         LoaderDotLoopDuration = 5.2,
         LoaderDotEdgeFadeSpan = 0.08,
         LoaderGridStartY = 0.44,
+        LoaderGridOffsetY = 30,
         LoaderIconSize = 392,
         LoaderIconLoadAttempts = 20,
         LoaderIconRetryDelay = 0.5,
@@ -1434,6 +1435,7 @@ do
     UI.Loader.GroupTransparency = 0
     UI.Loader.Position = UDim2.fromScale(0, 0)
     UI.Loader.Size = UDim2.fromScale(1, 1)
+    UI.Loader.Visible = false
     UI.Loader.ZIndex = 1000
     UI.Loader.Parent = InterfaceRoot
 
@@ -1448,7 +1450,7 @@ do
     UI.LoaderGrid.BorderSizePixel = 0
     UI.LoaderGrid.ClipsDescendants = true
     UI.LoaderGrid.GroupTransparency = 1
-    UI.LoaderGrid.Position = UDim2.fromScale(0, tokens.LoaderGridStartY)
+    UI.LoaderGrid.Position = UDim2.new(0, 0, tokens.LoaderGridStartY, tokens.LoaderGridOffsetY)
     UI.LoaderGrid.Size = UDim2.fromScale(1, 1 - tokens.LoaderGridStartY)
     UI.LoaderGrid.ZIndex = 1000
     UI.LoaderGrid.Parent = UI.Loader
@@ -1751,13 +1753,14 @@ do
         "rbxassetid://" .. tostring(UI.CornerButtonDefinitions[1].AssetId),
         "rbxassetid://" .. tostring(UI.CornerButtonDefinitions[2].AssetId)
     })
-    UI.PlaySound("FadeIn")
-    animate(UI.LoaderVersion, {TextTransparency = 0.58}, tokens.MotionLoader, Enum.EasingStyle.Quint)
-    animate(UI.LoaderBlur, {Size = tokens.LoaderBlurSize}, tokens.MotionLoader, Enum.EasingStyle.Quint)
-    animate(UI.LoaderGrid, {GroupTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    UI.Loader.Visible = true
     local loaderEntryTween = animate(UI.Loader, {
         BackgroundTransparency = tokens.LoaderBackgroundTransparency
     }, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    animate(UI.LoaderVersion, {TextTransparency = 0.58}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    animate(UI.LoaderBlur, {Size = tokens.LoaderBlurSize}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    animate(UI.LoaderGrid, {GroupTransparency = 0}, tokens.MotionLoader, Enum.EasingStyle.Quint)
+    UI.PlaySound("FadeIn")
     loaderEntryTween.Completed:Wait()
     revealLoaderItem(
         UI.LoaderIcon,
